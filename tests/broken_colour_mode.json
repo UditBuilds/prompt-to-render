@@ -1,0 +1,7 @@
+{
+  "description": "Deliberately broken: colour_mode must be accurate or realistic",
+  "box": {
+    "colour": "#E8A3B5"
+  },
+  "colour_mode": "vivid"
+}

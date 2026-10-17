@@ -9,6 +9,7 @@
     "bevel_cm": 0.12
   },
   "background_colour": "#F5DCE1",
+  "colour_mode": "accurate",
   "camera": "three_quarter",
   "lighting": "studio_soft",
   "resolution": [1080, 1080],

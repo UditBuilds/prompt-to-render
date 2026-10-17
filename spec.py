@@ -15,6 +15,9 @@ import re
 
 CAMERA_PRESETS = ("front", "three_quarter", "top_down")
 LIGHTING_PRESETS = ("studio_soft",)
+# accurate:  the box colour matches the spec hex as closely as possible.
+# realistic: filmic AgX look; nicer highlights, but colours shift a little.
+COLOUR_MODES = ("accurate", "realistic")
 
 # Every field is optional in a spec file. Anything left out uses these values.
 DEFAULTS = {
@@ -28,6 +31,7 @@ DEFAULTS = {
         "bevel_cm": 0.15,  # radius of the rounded edges (0 = sharp)
     },
     "background_colour": "#EDEDED",
+    "colour_mode": "accurate",
     "camera": "three_quarter",
     "lighting": "studio_soft",
     "resolution": [1080, 1080],  # [width, height] in pixels
@@ -112,6 +116,7 @@ def validate_spec(raw):
                 )
 
     _check_colour(spec["background_colour"], "background_colour", problems)
+    _check_choice(spec["colour_mode"], "colour_mode", COLOUR_MODES, problems)
     _check_choice(spec["camera"], "camera", CAMERA_PRESETS, problems)
     _check_choice(spec["lighting"], "lighting", LIGHTING_PRESETS, problems)
 

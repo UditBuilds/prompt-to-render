@@ -104,7 +104,7 @@ def main():
     print(f"Rendering {args.spec} with {blender}")
     start = time.perf_counter()
     log_lines = []
-    device = render_time = None
+    device = render_time = colour_check = None
     cycles_report = []
 
     process = subprocess.Popen(
@@ -115,20 +115,26 @@ def main():
         line = line.rstrip()
         log_lines.append(line)
         cycles_match = CYCLES_DEVICE_LINE.search(line)
+        cycles_line = f"{cycles_match.group(1)}: {cycles_match.group(2)}" if cycles_match else None
+        # Accurate mode renders twice (light meter, then the image), so Cycles
+        # reports the device twice. Show each line once.
+        new_cycles_line = cycles_line is not None and cycles_line not in cycles_report
 
         if args.verbose:
             print(line)
         elif line.startswith("[render]"):
             print(line)
-        elif cycles_match:
-            print(f"[cycles] {cycles_match.group(1)}: {cycles_match.group(2)}")
+        elif new_cycles_line:
+            print(f"[cycles] {cycles_line}")
 
-        if cycles_match:
-            cycles_report.append(f"{cycles_match.group(1)}: {cycles_match.group(2)}")
+        if new_cycles_line:
+            cycles_report.append(cycles_line)
         if line.startswith("[render] device:"):
             device = line.split(":", 1)[1].strip()
         elif line.startswith("[render] render time:"):
             render_time = line.split(":", 1)[1].strip()
+        elif line.startswith("[render] colour check:"):
+            colour_check = line.split(":", 1)[1].strip()
     process.wait()
     total_seconds = time.perf_counter() - start
 
@@ -149,6 +155,7 @@ def main():
     for report in cycles_report:
         print(f"  Cycles:       {report}")
     print(f"  Render time:  {render_time} (total incl. Blender start-up: {total_seconds:.1f} s)")
+    print(f"  Colour check: {colour_check}")
     print(f"  Saved:        {os.path.relpath(output_path, PROJECT_DIR)}")
     if device and device.startswith("CPU"):
         print()

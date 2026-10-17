@@ -24,9 +24,12 @@ import time
 
 import bmesh
 import bpy
+import numpy as np
+from bpy_extras.object_utils import world_to_camera_view
 from mathutils import Matrix, Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from check_colour import delta_e76, describe_delta_e, measure_patch  # noqa: E402
 from spec import SpecError, hex_to_linear_rgb, load_spec  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -37,10 +40,25 @@ from spec import SpecError, hex_to_linear_rgb, load_spec  # noqa: E402
 
 # azimuth: degrees around the box (0 = straight in front, + = towards the right)
 # elevation: degrees above the floor (90 = looking straight down)
+# hero_face: the box face the key light hits; used by the light meter and the
+#            colour check.
+# light_overrides: per-camera changes to the lighting preset (see below).
 CAMERA_PRESETS = {
-    "front":         {"azimuth": 0,  "elevation": 8,  "lens_mm": 85},
-    "three_quarter": {"azimuth": 35, "elevation": 22, "lens_mm": 85},
-    "top_down":      {"azimuth": 0,  "elevation": 90, "lens_mm": 85},
+    "front":         {"azimuth": 0,  "elevation": 8,  "lens_mm": 85, "hero_face": "front"},
+    "three_quarter": {"azimuth": 35, "elevation": 22, "lens_mm": 85, "hero_face": "front"},
+    "top_down":      {
+        "azimuth": 0, "elevation": 90, "lens_mm": 85, "hero_face": "top",
+        # Seen from straight above, a rim light only adds a second shadow that
+        # crosses the key's shadow, and the backdrop light's edge would fall
+        # inside the frame. Instead: a higher, bigger (softer) key and a fill
+        # from overhead that lifts the shadow.
+        "light_overrides": {
+            "Key":      {"elevation": 70, "size": 1.5},
+            "Fill":     {"elevation": 88, "size": 2.0, "strength": 0.8},
+            "Rim":      {"strength": 0},
+            "Backdrop": {"strength": 0},
+        },
+    },
 }
 
 # The box fills this fraction of the frame along its tightest axis.
@@ -50,7 +68,7 @@ FRAME_FILL = 0.62
 # same look. azimuth is an offset from the camera's azimuth.
 #   distance: multiple of the box radius
 #   size:     softbox size as a fraction of its distance (bigger = softer)
-#   strength: brightness at the box, relative to BASE_IRRADIANCE
+#   strength: brightness at the box, relative to BASE_IRRADIANCE (0 = off)
 LIGHTING_PRESETS = {
     "studio_soft": [
         # Key: main light, front-left and above. Sets the shadow direction.
@@ -58,9 +76,14 @@ LIGHTING_PRESETS = {
         # Fill: low and straight in front, softens the shadows. On glossy boxes
         # it also shows up as a softbox reflection on the front face.
         {"name": "Fill", "azimuth": 0,   "elevation": 0,  "distance": 7, "size": 0.6, "strength": 0.2},
-        # Rim: behind the box, on the opposite side to the key. Lights the top
-        # and back edges so the box separates from the backdrop.
+        # Rim: behind the box, on the opposite side to the key, high up. Lights
+        # the top and back edges so the box separates from the backdrop.
         {"name": "Rim",  "azimuth": 200, "elevation": 50, "distance": 5, "size": 0.5, "strength": 1.0},
+        # Backdrop: a big softbox behind the box, aimed away from it at the
+        # sweep. Lights the far backdrop evenly so it doesn't fall off into
+        # dark corners. Being aimed away, it barely touches the box itself.
+        {"name": "Backdrop", "azimuth": 180, "elevation": 50, "distance": 3, "size": 1.5,
+         "strength": 1.5, "aim_behind": 8},
     ],
 }
 
@@ -69,7 +92,7 @@ LIGHTING_PRESETS = {
 BASE_IRRADIANCE = 3.5
 
 # The environment around the set: the background colour, dimmed.
-WORLD_STRENGTH = 0.2
+WORLD_STRENGTH = 0.3
 
 BACKDROP_ROUGHNESS = 0.7
 # Behind the box the floor curves up into a wall (multiples of the box radius).
@@ -77,9 +100,21 @@ BACKDROP_CURVE_START = 3
 BACKDROP_CURVE_RADIUS = 6
 BEVEL_SEGMENTS = 6
 
-# AgX "look" (contrast curve) applied on top of the AgX view transform.
-# A little extra contrast keeps pastel colours from looking washed out.
-AGX_LOOK = "AgX - Medium High Contrast"
+# How each colour_mode turns rendered light into image colours.
+COLOUR_MODES = {
+    # Khronos PBR Neutral is made for product shots: colours below ~80%
+    # brightness come out unchanged, and only brighter highlights are gently
+    # compressed (instead of clipping to flat white). Exposure is set by the
+    # light meter, see meter_exposure().
+    "accurate":  {"view_transform": "Khronos PBR Neutral", "look": "None"},
+    # AgX with extra contrast: a filmic look, but it shifts colours (pastels
+    # come out paler than their hex).
+    "realistic": {"view_transform": "AgX", "look": "AgX - Medium High Contrast"},
+}
+
+# The light meter's patch covers this fraction of the hero face's shorter side.
+PATCH_FRACTION = 0.2
+METER_SAMPLES = 64
 
 
 def log(message):
@@ -139,22 +174,25 @@ def setup_render(scene, spec, output_path):
     scene.cycles.use_adaptive_sampling = True
     scene.cycles.use_denoising = True
     scene.cycles.denoising_input_passes = "RGB_ALBEDO_NORMAL"
-
-    scene.render.resolution_x, scene.render.resolution_y = spec["resolution"]
-    scene.render.resolution_percentage = 100
     scene.render.film_transparent = False
 
+    mode = COLOUR_MODES[spec["colour_mode"]]
     scene.display_settings.display_device = "sRGB"
-    scene.view_settings.view_transform = "AgX"
-    scene.view_settings.look = AGX_LOOK
-    scene.view_settings.exposure = 0.0
+    scene.view_settings.view_transform = mode["view_transform"]
+    scene.view_settings.look = mode["look"]
+    scene.view_settings.exposure = 0.0  # accurate mode: replaced by the light meter
     scene.view_settings.gamma = 1.0
 
-    scene.render.image_settings.file_format = "PNG"
-    scene.render.image_settings.color_mode = "RGB"
-    scene.render.image_settings.color_depth = "8"
-    scene.render.filepath = output_path
+    set_png_output(scene, output_path)
     return device
+
+
+def set_png_output(scene, output_path):
+    settings = scene.render.image_settings
+    settings.file_format = "PNG"
+    settings.color_mode = "RGB"
+    settings.color_depth = "8"
+    scene.render.filepath = output_path
 
 
 # ---------------------------------------------------------------------------
@@ -218,11 +256,12 @@ def build_box(scene, box):
     return obj
 
 
-def build_backdrop(scene, hex_colour, radius):
+def build_backdrop(scene, hex_colour, radius, camera_azimuth):
     """A seamless studio sweep: floor that curves smoothly up into a back wall.
 
     Built as a profile (side view) that is extruded left-to-right. The curve
     meets the floor and the wall tangentially, so there is no horizon line.
+    Like in a real studio, the sweep is turned to face the camera.
     """
     floor_front = -30 * radius   # floor reaches far past the camera
     curve_start = BACKDROP_CURVE_START * radius  # where the floor starts bending upwards
@@ -252,7 +291,9 @@ def build_backdrop(scene, hex_colour, radius):
         poly.use_smooth = True
 
     mesh.materials.append(new_principled_material("BackdropMaterial", hex_colour, BACKDROP_ROUGHNESS))
-    return add_object(scene, "Backdrop", mesh)
+    obj = add_object(scene, "Backdrop", mesh)
+    obj.rotation_euler.z = math.radians(camera_azimuth)
+    return obj
 
 
 def build_world(scene, hex_colour):
@@ -272,24 +313,37 @@ def direction_from_angles(azimuth_deg, elevation_deg):
     return Vector((math.sin(az) * math.cos(el), -math.cos(az) * math.cos(el), math.sin(el)))
 
 
-def build_lights(scene, target, radius, preset_name, camera_azimuth):
-    """Three soft area lights (key, fill, rim) aimed at the box."""
+def build_lights(scene, target, radius, preset_name, camera_preset):
+    """Soft area lights (key, fill, rim) aimed at the box."""
+    overrides = camera_preset.get("light_overrides", {})
     for setup in LIGHTING_PRESETS[preset_name]:
+        setup = {**setup, **overrides.get(setup["name"], {})}
+        if setup["strength"] <= 0:
+            continue
         distance = setup["distance"] * radius
         position = target + distance * direction_from_angles(
-            camera_azimuth + setup["azimuth"], setup["elevation"])
+            camera_preset["azimuth"] + setup["azimuth"], setup["elevation"])
+
+        # Most lights aim at the box. A light with "aim_behind" aims at the
+        # backdrop instead: at the floor, that many box-radii behind the box
+        # (as seen from the camera).
+        if "aim_behind" in setup:
+            away_from_camera = direction_from_angles(camera_preset["azimuth"] + 180, 0)
+            aim = Vector((target.x, target.y, 0)) + setup["aim_behind"] * radius * away_from_camera
+        else:
+            aim = target
 
         light = bpy.data.lights.new(setup["name"], "AREA")
         light.shape = "RECTANGLE"
         light.size = setup["size"] * distance
         light.size_y = light.size * 0.75
         # Power falls off with distance^2, so scale it up to compensate.
-        light.energy = setup["strength"] * BASE_IRRADIANCE * math.pi * distance ** 2
+        light.energy = setup["strength"] * BASE_IRRADIANCE * math.pi * (aim - position).length ** 2
 
         obj = add_object(scene, setup["name"], light)
         obj.location = position
-        # Area lights shine along their local -Z axis: point that at the box.
-        obj.rotation_euler = (target - position).to_track_quat("-Z", "Y").to_euler()
+        # Area lights shine along their local -Z axis: point that at the aim.
+        obj.rotation_euler = (aim - position).to_track_quat("-Z", "Y").to_euler()
         # The softbox itself is never seen by the camera, only its light and
         # its reflection in glossy surfaces.
         obj.visible_camera = False
@@ -298,6 +352,9 @@ def build_lights(scene, target, radius, preset_name, camera_azimuth):
 def build_camera(scene, box_obj, preset_name, resolution):
     """Place the camera for a preset and auto-frame it tightly on the box."""
     preset = CAMERA_PRESETS[preset_name]
+    scene.render.resolution_x, scene.render.resolution_y = resolution
+    scene.render.resolution_percentage = 100
+
     cam_data = bpy.data.cameras.new("Camera")
     cam_data.lens = preset["lens_mm"]
     cam_data.sensor_width = 36
@@ -362,18 +419,126 @@ def build_camera(scene, box_obj, preset_name, resolution):
 
     cam_data.clip_start = distance * 0.01
     cam_data.clip_end = distance * 100
-    return cam, target, radius, preset["azimuth"]
+    return cam, target, radius
 
 
 def build_scene(spec):
     """Build the whole set from the spec. Returns the scene, ready to render."""
     scene = clear_scene()
     box = build_box(scene, spec["box"])
-    _, target, radius, camera_azimuth = build_camera(scene, box, spec["camera"], spec["resolution"])
-    build_backdrop(scene, spec["background_colour"], radius)
+    _, target, radius = build_camera(scene, box, spec["camera"], spec["resolution"])
+    build_backdrop(scene, spec["background_colour"], radius, CAMERA_PRESETS[spec["camera"]]["azimuth"])
     build_world(scene, spec["background_colour"])
-    build_lights(scene, target, radius, spec["lighting"], camera_azimuth)
+    build_lights(scene, target, radius, spec["lighting"], CAMERA_PRESETS[spec["camera"]])
     return scene
+
+
+# ---------------------------------------------------------------------------
+# Colour accuracy: hero patch and light meter
+# ---------------------------------------------------------------------------
+
+def hero_patch(scene, spec):
+    """Where the centre of the box's main lit face lands in the image.
+
+    Returns (min_x, max_x, min_y, max_y) in 0-1 image coordinates, origin at
+    the bottom-left. The patch is a square on the face, PATCH_FRACTION of the
+    face's shorter side.
+    """
+    box = spec["box"]
+    w, h, d = box["width_cm"] / 100, box["height_cm"] / 100, box["depth_cm"] / 100
+    if CAMERA_PRESETS[spec["camera"]]["hero_face"] == "top":
+        centre, u, v, face_sides = Vector((0, 0, h)), Vector((1, 0, 0)), Vector((0, 1, 0)), (w, d)
+    else:  # front face
+        centre, u, v, face_sides = Vector((0, -d / 2, h / 2)), Vector((1, 0, 0)), Vector((0, 0, 1)), (w, h)
+
+    half = PATCH_FRACTION * min(face_sides) / 2
+    points = [world_to_camera_view(scene, scene.camera, centre + su * half * u + sv * half * v)
+              for su in (-1, 1) for sv in (-1, 1)]
+    return (min(p.x for p in points), max(p.x for p in points),
+            min(p.y for p in points), max(p.y for p in points))
+
+
+def white_card_material():
+    """Pure white, perfectly matte material (no shine) for the light meter."""
+    mat = bpy.data.materials.new("LightMeterCard")
+    if mat.node_tree is None:
+        mat.use_nodes = True
+    nodes = mat.node_tree.nodes
+    for node in list(nodes):
+        if node.type != "OUTPUT_MATERIAL":
+            nodes.remove(node)
+    diffuse = nodes.new("ShaderNodeBsdfDiffuse")
+    diffuse.inputs["Color"].default_value = (1, 1, 1, 1)
+    output = next(n for n in nodes if n.type == "OUTPUT_MATERIAL")
+    mat.node_tree.links.new(diffuse.outputs["BSDF"], output.inputs["Surface"])
+    return mat
+
+
+def meter_exposure(scene, spec):
+    """Accurate mode's light meter. Sets the exposure; returns it in stops.
+
+    Like a photographer holding a white card where the product is: the box is
+    briefly made pure matte white, and only a small patch at the centre of its
+    main lit face is rendered, to a linear EXR file. The brightness of a white
+    matte card measures how much light falls on it. Exposure is then set so
+    that this brightness maps to exactly 1.0, which makes a matte box show
+    (very nearly) its own colour. The card also sets the white balance.
+    """
+    render = scene.render
+    box = bpy.data.objects["Box"]
+    real_material = box.data.materials[0]
+    saved = {name: getattr(render, name) for name in (
+        "use_border", "use_crop_to_border", "border_min_x", "border_max_x",
+        "border_min_y", "border_max_y", "filepath")}
+    saved_samples = scene.cycles.samples
+    meter_path = render.filepath + ".meter.exr"
+
+    box.data.materials[0] = white_card_material()
+    render.use_border = render.use_crop_to_border = True
+    (render.border_min_x, render.border_max_x,
+     render.border_min_y, render.border_max_y) = hero_patch(scene, spec)
+    render.image_settings.file_format = "OPEN_EXR"  # linear: the true amount of light
+    render.image_settings.color_depth = "32"
+    render.filepath = meter_path
+    scene.cycles.samples = METER_SAMPLES
+    try:
+        bpy.ops.render.render(write_still=True)
+        card = bpy.data.images.load(meter_path)
+        pixels = np.array(card.pixels[:]).reshape(-1, card.channels)[:, :3]
+        bpy.data.images.remove(card)
+    finally:
+        if os.path.exists(meter_path):
+            os.remove(meter_path)
+        for name, value in saved.items():
+            setattr(render, name, value)
+        scene.cycles.samples = saved_samples
+        set_png_output(scene, saved["filepath"])
+        box.data.materials[0] = real_material
+
+    card = pixels.mean(axis=0)
+    brightness = 0.2126 * card[0] + 0.7152 * card[1] + 0.0722 * card[2]
+    if brightness <= 1e-6 or min(card) <= 1e-6:
+        log("WARNING: light meter saw no light on the box; exposure left at 0")
+        return 0.0
+
+    # White balance: light bouncing off a coloured backdrop tints the box (a
+    # pink floor makes everything near it pinker). Tint every light source by
+    # the opposite amount so the white card reads neutral again. This is
+    # exactly what a camera's white balance does.
+    balance = brightness / card
+    strongest = balance.max()
+    balance = balance / strongest  # keep every colour value <= 1
+    for light in bpy.data.lights:
+        light.color = tuple(balance)
+    background = next(n for n in scene.world.node_tree.nodes if n.type == "BACKGROUND")
+    world_colour = np.array(background.inputs["Color"].default_value[:3])
+    background.inputs["Color"].default_value = (*(world_colour * balance), 1.0)
+
+    # After white balance the card reads brightness / strongest in every
+    # channel. Expose so that becomes exactly 1.0.
+    stops = max(-4.0, min(4.0, math.log2(strongest / brightness)))
+    scene.view_settings.exposure = stops
+    return stops
 
 
 # ---------------------------------------------------------------------------
@@ -405,15 +570,25 @@ def main():
     scene = build_scene(spec)
     device = setup_render(scene, spec, output_path)
     log(f"device: {device}")
-    log(f"camera: {spec['camera']}, lighting: {spec['lighting']}, "
+    log(f"camera: {spec['camera']}, lighting: {spec['lighting']}, colour mode: {spec['colour_mode']}, "
         f"{spec['resolution'][0]}x{spec['resolution'][1]}, {spec['samples']} samples")
+
+    if spec["colour_mode"] == "accurate":
+        start = time.perf_counter()
+        stops = meter_exposure(scene, spec)
+        log(f"light meter: exposure {stops:+.2f} stops ({time.perf_counter() - start:.1f} s)")
 
     start = time.perf_counter()
     bpy.ops.render.render(write_still=True)
     seconds = time.perf_counter() - start
-
     log(f"render time: {seconds:.1f} s")
     log(f"saved: {output_path}")
+
+    measured, _ = measure_patch(output_path, hero_patch(scene, spec))
+    target = spec["box"]["colour"].upper()
+    delta_e = delta_e76(target, measured)
+    log(f"colour check: spec {target}, measured {measured}, "
+        f"Delta E {delta_e:.1f} ({describe_delta_e(delta_e)})")
 
 
 if __name__ == "__main__":
