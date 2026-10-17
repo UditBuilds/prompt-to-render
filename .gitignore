@@ -1,0 +1,9 @@
+# Rendered images
+renders/
+
+# Python
+__pycache__/
+*.pyc
+
+# Blender backups
+*.blend1

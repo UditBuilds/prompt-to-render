@@ -1,0 +1,7 @@
+{
+  "description": "Deliberately broken: the box colour is not a hex code",
+  "box": {
+    "colour": "pinkish"
+  },
+  "camera": "three_quarter"
+}

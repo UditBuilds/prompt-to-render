@@ -1,0 +1,16 @@
+{
+  "description": "Tall pink matte serum carton on a blush backdrop, three-quarter view",
+  "box": {
+    "width_cm": 5,
+    "height_cm": 14,
+    "depth_cm": 5,
+    "colour": "#E8A3B5",
+    "roughness": 0.75,
+    "bevel_cm": 0.12
+  },
+  "background_colour": "#F5DCE1",
+  "camera": "three_quarter",
+  "lighting": "studio_soft",
+  "resolution": [1080, 1080],
+  "samples": 128
+}

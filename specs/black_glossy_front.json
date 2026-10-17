@@ -1,0 +1,16 @@
+{
+  "description": "Black glossy perfume box on a warm grey backdrop, straight-on front view",
+  "box": {
+    "width_cm": 9,
+    "height_cm": 11,
+    "depth_cm": 4,
+    "colour": "#111111",
+    "roughness": 0.12,
+    "bevel_cm": 0.2
+  },
+  "background_colour": "#E6E2DC",
+  "camera": "front",
+  "lighting": "studio_soft",
+  "resolution": [1080, 1080],
+  "samples": 128
+}

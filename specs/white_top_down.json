@@ -1,0 +1,16 @@
+{
+  "description": "Flat white matte cream carton on a soft sage backdrop, seen from directly above",
+  "box": {
+    "width_cm": 10,
+    "height_cm": 4,
+    "depth_cm": 10,
+    "colour": "#F4F3EF",
+    "roughness": 0.7,
+    "bevel_cm": 0.2
+  },
+  "background_colour": "#A9C0B3",
+  "camera": "top_down",
+  "lighting": "studio_soft",
+  "resolution": [1080, 1080],
+  "samples": 128
+}
