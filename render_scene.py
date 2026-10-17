@@ -103,9 +103,10 @@ BEVEL_SEGMENTS = 6
 # How each colour_mode turns rendered light into image colours.
 COLOUR_MODES = {
     # Khronos PBR Neutral is made for product shots: colours below ~80%
-    # brightness come out unchanged, and only brighter highlights are gently
-    # compressed (instead of clipping to flat white). Exposure is set by the
-    # light meter, see meter_exposure().
+    # brightness come out nearly unchanged (it subtracts a little to cancel
+    # surface sheen), and only brighter highlights are gently compressed
+    # instead of clipping to flat white. Exposure is set by the light meter,
+    # see meter_exposure().
     "accurate":  {"view_transform": "Khronos PBR Neutral", "look": "None"},
     # AgX with extra contrast: a filmic look, but it shifts colours (pastels
     # come out paler than their hex).
