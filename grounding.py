@@ -21,7 +21,9 @@ evals/dev_cases.json).
 Matching is case-insensitive and by whole words, longest phrase first, across
 all tables at once, and each word of the sentence is used once: "rose gold"
 is rose gold (not gold), and "face cream" is a product (not the colour
-cream). A word that matches nothing is simply left to the model.
+cream). A style word inside a backdrop phrase ("on a playful pink backdrop")
+describes the backdrop, not the box, so it is left out. A word that matches
+nothing is simply left to the model.
 
 Standard library only.
 """
@@ -100,6 +102,17 @@ def _span(pair):
     return f"{pair[0]:g}-{pair[1]:g}"
 
 
+def _describes_backdrop(text, start):
+    """True if the word at `start` is part of a backdrop phrase.
+
+    Looks at the rest of the clause: "playful pink backdrop" is about the
+    backdrop, "luxury red box on a pale backdrop" is about the box.
+    """
+    clause = re.split(r"[,;]", text[start:], maxsplit=1)[0]
+    backdrop = re.search(r"\b(?:backdrop|background)\b", clause)
+    return bool(backdrop) and not re.search(r"\b(?:box|carton|case|package)\b", clause[:backdrop.start()])
+
+
 def _describe_shift(row):
     parts = []
     for key, less, more in (("lightness", "darker", "lighter"), ("saturation", "less saturated", "more saturated")):
@@ -169,6 +182,8 @@ def lookup(sentence, tables=None):
 
     rows = []
     for (table, name), (position, phrase) in sorted(found.items(), key=lambda item: item[1][0]):
+        if table == "styles" and _describes_backdrop(text, position):
+            continue
         limit = TABLES[table][2]
         if sum(r["table"] == table for r in rows) < limit:
             row = {k: v for k, v in tables[table][name].items() if k != "aliases"}

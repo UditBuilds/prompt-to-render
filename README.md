@@ -205,7 +205,7 @@ A model that isn't installed gets `The model qwen9:404b isn't installed in Ollam
 | `data/product_sizes.json` | 17 products (lipstick, perfume, serum, gift box, eyeshadow palette, lash box, candle, ...) | typical box size and ranges in cm |
 | `data/style_words.json` | 5 styles (luxury, minimal, playful, natural, bold, with synonyms) | a colour shift (lightness, saturation) and a finish |
 
-`grounding.py` matches the sentence against every name and alias: whole words, case-insensitive, longest phrase first, each word used once ("rose gold" isn't also gold; "face cream" is a product, not the colour cream). Only the matching rows are added after the sentence in the user message, at most 4 colours, 2 products and 2 styles, so the system prompt stays the same for every sentence. A word that isn't in the tables is left to the model; a sentence with no match ("a nice box") gets nothing added. Basic colour words (red, blue, green, ...) are deliberately not in the colour table: the model handles them well, and a fixed hex would flatten style words.
+`grounding.py` matches the sentence against every name and alias: whole words, case-insensitive, longest phrase first, each word used once ("rose gold" isn't also gold; "face cream" is a product, not the colour cream). Only the matching rows are added after the sentence in the user message, at most 4 colours, 2 products and 2 styles, so the system prompt stays the same for every sentence. A style word inside a backdrop phrase ("on a playful pink backdrop") describes the backdrop, not the box, so it is left out, and very common words (clean, simple, fun, kids) are not style aliases. A word that isn't in the tables is left to the model; a sentence with no match ("a nice box") gets nothing added. Basic colour words (red, blue, green, ...) are deliberately not in the colour table: the model handles them well, and a fixed hex would flatten style words.
 
 For "luxury matte red lipstick box, three-quarter view", the model receives:
 
@@ -275,6 +275,7 @@ The same 30 frozen eval sentences, 3 runs each, `qwen3:8b`, temperature 0.2 (bui
 - Where an eval colour is in the table, the check mostly measures **whether the model copies the row**: the table hexes and the eval's reference colours come from the same public sources (e.g. Wikipedia's emerald `#50C878`). The same goes for sizes: the lipstick and gift-box size checks pass because the model used the table's typical size. That's the point of grounding, but it means a 100% here says the retrieval and copying work, not that the model got better at colour.
 - The two style pairs (`luxury_red`, `playful_blue`) and the luxury lipstick measure **the code's** style shift. Both pairs already passed in the baseline; `doc_lipstick`'s "luxury is darker than plain" check didn't.
 - Runs are close to deterministic (13 of 30 grounded cases gave the same spec in all 3 runs), so a case going 0/3 → 3/3 is usually one changed decision, not three.
+- **A regression found after the eval, and fixed.** Because code applies the style shift, the first version recoloured the box whenever a style alias appeared anywhere: "a red box on a clean white backdrop" came out dusty pink (`#FF0000` → `#C17E7E`), "a black box on a playful pink backdrop" came out grey-brown. No eval sentence contains such a phrase, so the eval didn't catch it. It was fixed in a separate commit (generic aliases removed; style words in a backdrop phrase skipped). None of the 30 eval sentences retrieve different rows or a different block after the fix (checked), so the results above still hold for the shipped code.
 - The table design and the prompt edits were settled on 15 separate dev sentences (`evals/dev_cases.json`), never on the eval sentences. The eval cases and colour definitions were committed before the tables existed, and the baseline results before the tables were written (see the git history).
 
 ### The renders, before and after
@@ -366,11 +367,11 @@ v1's 15-case results are kept in `evals/results/` (`20261018_132659`, `20261018_
 python -m unittest discover tests
 ```
 
-Offline, no Ollama or Blender needed (48 tests):
+Offline, no Ollama or Blender needed (50 tests):
 
 - `test_schema.py`: the generated JSON schema and the validator agree on every field (range edges, choices, colour pattern), the bevel rule, and the LLM's schema is exactly the spec schema.
 - `test_spec_writer.py`: the repair loop with a scripted fake model, parsing of the model's reply (including the non-box shape rule and the model's own unsupported list), and that table rows reach every attempt, also through `--break-first-reply`.
-- `test_grounding.py`: the table lookup (longest phrase first, whole words, a product word isn't also a colour, row caps), the style shift, and that the tables are well formed.
+- `test_grounding.py`: the table lookup (longest phrase first, whole words, a product word isn't also a colour, style words for the backdrop left out, row caps), the style shift, and that the tables are well formed.
 - `test_eval_checks.py`: the eval checks themselves; every colour definition's references fall inside its range, and known-wrong colours (mint for sage, CSS green for emerald) fall outside.
 
 ---

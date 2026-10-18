@@ -35,6 +35,16 @@ class Lookup(unittest.TestCase):
         self.assertEqual(names("an off-white eco-friendly soap box"),
                          [("colours", "eggshell"), ("styles", "natural"), ("products", "soap")])
 
+    def test_style_words_for_the_backdrop_are_left_out(self):
+        self.assertEqual(names("a black box on a playful pink backdrop"), [])
+        self.assertEqual(names("a red box on a clean white backdrop"), [])
+        self.assertEqual(names("a luxury red box on a pale blush backdrop"),
+                         [("styles", "luxury"), ("colours", "blush")])
+
+    def test_common_words_are_not_style_words(self):
+        self.assertEqual(names("a simple box"), [])
+        self.assertEqual(names("a fun kids box"), [])
+
     def test_nothing_matched_means_no_block(self):
         found = lookup("a nice box")
         self.assertFalse(found)
