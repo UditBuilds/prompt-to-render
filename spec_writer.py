@@ -13,6 +13,7 @@ Used by prompt.py and by the evals, so both run the same loop.
 
 import json
 
+from grounding import Grounding, lookup, style_box_colour
 from spec import SpecError, validate_spec
 
 MAX_ATTEMPTS = 2
@@ -43,8 +44,10 @@ class Attempt:
 
 class SpecResult:
     def __init__(self, attempts, spec=None, unsupported=None, model_unsupported=None,
-                 is_box=None, shape=None, shape_added=False):
+                 is_box=None, shape=None, shape_added=False, grounding=None, style_changes=None):
         self.attempts = attempts
+        self.grounding = grounding or Grounding([])  # the table rows the model was given
+        self.style_changes = style_changes or []   # style-word colour shifts applied by code
         self.spec = spec                    # full validated spec, or None
         self.unsupported = unsupported or []  # what the user is told was ignored
         self.model_unsupported = model_unsupported or []  # the model's own list, before the code added anything
@@ -136,19 +139,23 @@ def parse_reply(text):
             "shape": shape, "shape_added": shape_added}
 
 
-def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None):
+def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, grounding=True):
     """Run the LLM + validation loop. Returns a SpecResult (check .ok).
+
+    With grounding on, the rows of the data/ tables that match the
+    sentence's words are added to the request (see grounding.py).
 
     report(event, attempt) is called with "start" before each LLM call and
     "done" after it, so the caller can show progress. Backend errors
     (BackendUnavailable, RuntimeError) are not caught here.
     """
+    found = lookup(sentence) if grounding else Grounding([])
     attempts = []
     previous_output = previous_errors = None
     for number in range(1, max_attempts + 1):
         if report:
             report("start", Attempt(number, None, previous_errors or []))
-        reply = backend.generate_spec(sentence, previous_errors, previous_output)
+        reply = backend.generate_spec(sentence, previous_errors, previous_output, found.text or None)
         try:
             parsed = parse_reply(reply.text)
             errors = []
@@ -159,6 +166,8 @@ def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None):
         if report:
             report("done", attempt)
         if not errors:
-            return SpecResult(attempts, **parsed)
+            # Style words shift the box colour the model picked (see grounding.py).
+            changes = style_box_colour(sentence, parsed["spec"], found)
+            return SpecResult(attempts, grounding=found, style_changes=changes, **parsed)
         previous_output, previous_errors = reply.text, errors
-    return SpecResult(attempts)
+    return SpecResult(attempts, grounding=found)

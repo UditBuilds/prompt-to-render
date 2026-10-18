@@ -1,0 +1,22 @@
+{
+  "about": "Typical retail box sizes for common products, in cm (width = left to right, height = bottom to top, depth = front to back, box standing as it would on a shelf). 'typical' is a sensible default; the ranges cover common variants. From general packaging dimensions; matched by grounding.py on whole words, longest phrase first.",
+  "products": {
+    "lipstick":          {"aliases": ["lipsticks"], "typical": [2.5, 8.5, 2.5], "width": [2, 3], "height": [7.5, 9.5], "depth": [2, 3]},
+    "lip gloss":         {"aliases": ["lipgloss"], "typical": [2.5, 11, 2.5], "width": [2, 3], "height": [10, 13], "depth": [2, 3]},
+    "mascara":           {"typical": [3, 15.5, 3], "width": [2.5, 3.5], "height": [14, 17], "depth": [2.5, 3.5]},
+    "nail polish":       {"aliases": ["nail varnish"], "typical": [4, 9, 4], "width": [3.5, 4.5], "height": [8, 10], "depth": [3.5, 4.5]},
+    "perfume":           {"aliases": ["fragrance", "cologne", "eau de parfum", "eau de toilette"], "typical": [7, 12, 4.5], "width": [6, 9], "height": [10, 15], "depth": [3.5, 6]},
+    "serum":             {"aliases": ["serums", "facial oil", "dropper bottle"], "typical": [4, 11.5, 4], "width": [3.5, 4.5], "height": [10, 13], "depth": [3.5, 4.5]},
+    "face cream":        {"aliases": ["moisturiser", "moisturizer", "night cream", "day cream", "eye cream"], "typical": [7, 6, 7], "width": [6, 8], "height": [5, 7], "depth": [6, 8]},
+    "gift box":          {"aliases": ["gift set", "skincare set"], "typical": [22, 8, 18], "width": [18, 26], "height": [6, 10], "depth": [15, 22], "note": "lies flat; the top face is close to square"},
+    "eyeshadow palette": {"aliases": ["eyeshadow", "palette"], "typical": [14, 2, 10], "width": [10, 18], "height": [1, 2.5], "depth": [7, 12], "note": "lies flat"},
+    "lash box":          {"aliases": ["lashes", "eyelashes", "false lashes"], "typical": [9, 2, 5], "width": [8, 10], "height": [1.5, 2.5], "depth": [4, 6], "note": "lies flat"},
+    "candle":            {"aliases": ["candles"], "typical": [9, 10.5, 9], "width": [8, 10], "height": [9, 12], "depth": [8, 10]},
+    "soap":              {"aliases": ["soap bar", "bar of soap"], "typical": [9, 3.5, 6], "width": [8.5, 10], "height": [3, 4], "depth": [5.5, 7], "note": "lies flat"},
+    "tea":               {"aliases": ["tea box"], "typical": [8, 14, 6], "width": [7, 9], "height": [12, 16], "depth": [5, 7]},
+    "jewellery":         {"aliases": ["jewelry", "ring box", "necklace box"], "typical": [10, 4, 10], "width": [8, 12], "height": [3, 5], "depth": [8, 12]},
+    "watch box":         {"aliases": ["watch"], "typical": [10, 8, 10], "width": [9, 11], "height": [7, 9], "depth": [9, 11]},
+    "shoe box":          {"aliases": ["shoebox", "shoes", "sneakers"], "typical": [33, 12, 20], "width": [30, 35], "height": [11, 13], "depth": [18, 22]},
+    "scarf":             {"aliases": ["silk scarf", "scarves"], "typical": [28, 5, 28], "width": [25, 32], "height": [3, 6], "depth": [25, 32], "note": "lies flat"}
+  }
+}

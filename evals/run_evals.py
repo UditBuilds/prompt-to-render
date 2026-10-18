@@ -125,8 +125,8 @@ def check_named_colour(check, result, done):
 
 
 def check_hex(check, result, done):
-    colour = result.spec["box"]["colour"]
-    return colour.upper() == check["equals"].upper(), f"colour {colour} (want {check['equals']})"
+    where, colour = colour_of(check, result)
+    return colour.upper() == check["equals"].upper(), f"{where} colour {colour} (want {check['equals']})"
 
 
 def check_roughness(check, result, done):
@@ -258,13 +258,17 @@ def main():
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Ollama model (default: {DEFAULT_MODEL})")
     parser.add_argument("--runs", type=int, default=3, help="runs per case (default: 3)")
     parser.add_argument("--label", help='a name for this run, e.g. "baseline"; added to the file name')
+    parser.add_argument("--no-grounding", action="store_true",
+                        help="don't add the matching rows of the data/ tables to the requests")
     parser.add_argument("--cases", help="comma-separated case ids (default: all)")
+    parser.add_argument("--cases-file", default=CASES_PATH,
+                        help="another cases file, e.g. evals/dev_cases.json; its results go to runs/dev_evals/")
     parser.add_argument("--render", action="store_true", help="also render one spec per case (after unloading the model)")
     parser.add_argument("--blender", help="path to blender.exe (for --render)")
     args = parser.parse_args()
 
     try:
-        cases = load_cases(args.cases.split(",") if args.cases else None)
+        cases = load_cases(args.cases.split(",") if args.cases else None, args.cases_file)
     except ValueError as e:
         print(e)
         return 2
@@ -295,7 +299,7 @@ def main():
     started = time.perf_counter()
     try:
         for case in cases:
-            results.append(run_case(case, backend, args.runs, done))
+            results.append(run_case(case, backend, args.runs, done, not args.no_grounding))
             done[case["id"]] = results[-1]
     except (BackendUnavailable, RuntimeError, KeyboardInterrupt) as e:
         # Keep what was collected so far rather than losing it all.
@@ -315,6 +319,8 @@ def main():
     report = {
         "created": datetime.now().isoformat(timespec="seconds"),
         "label": args.label,
+        "cases_file": os.path.relpath(args.cases_file, PROJECT_DIR),
+        "grounding": not args.no_grounding,
         "model": backend.model,
         "backend": backend.name,
         "llm_settings": backend.settings(),
@@ -329,13 +335,17 @@ def main():
     if args.render:
         report["renders"] = render_cases(results, blender, stamp)
 
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-    json_path = os.path.join(RESULTS_DIR, f"{stamp}.json")
+    # Only the frozen eval set is saved with the project; other case files
+    # (the dev set) go to the git-ignored runs/ folder.
+    is_eval_set = os.path.abspath(args.cases_file) == os.path.abspath(CASES_PATH)
+    results_dir = RESULTS_DIR if is_eval_set else os.path.join(PROJECT_DIR, "runs", "dev_evals")
+    os.makedirs(results_dir, exist_ok=True)
+    json_path = os.path.join(results_dir, f"{stamp}.json")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
         f.write("\n")
     table = markdown_table(report)
-    with open(os.path.join(RESULTS_DIR, f"{stamp}.md"), "w", encoding="utf-8") as f:
+    with open(os.path.join(results_dir, f"{stamp}.md"), "w", encoding="utf-8") as f:
         f.write(table)
 
     print()
@@ -344,13 +354,13 @@ def main():
     return 1 if stopped_early else 0
 
 
-def load_cases(wanted=None):
-    """The cases from cases.json, optionally only some ids.
+def load_cases(wanted=None, path=CASES_PATH):
+    """The cases from cases.json (or another file), optionally only some ids.
 
     A case may compare itself with an earlier one (style_shift); that case is
     always run too, before it.
     """
-    with open(CASES_PATH, encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         cases = json.load(f)["cases"]
     ids = [c["id"] for c in cases]
     for i, case in enumerate(cases):
@@ -369,11 +379,11 @@ def load_cases(wanted=None):
     return [c for c in cases if c["id"] in keep]
 
 
-def run_case(case, backend, runs, done=None):
+def run_case(case, backend, runs, done=None, grounding=True):
     print(f"{case['id']}: \"{case['sentence']}\"")
     case_runs = []
     for n in range(1, runs + 1):
-        result = write_spec(case["sentence"], backend)
+        result = write_spec(case["sentence"], backend, grounding=grounding)
         outcomes = run_checks(case, result, done)
         passed = all(o["passed"] for o in outcomes)
         retry_note = ", retried" if result.retried else ""
@@ -392,12 +402,16 @@ def run_case(case, backend, runs, done=None):
             "llm_seconds": round(result.total("seconds"), 2),
             "prompt_tokens": result.total("prompt_tokens"),
             "output_tokens": result.total("output_tokens"),
+            "call_prompt_tokens": [a.reply.prompt_tokens for a in result.attempts],
             "checks": outcomes,
             "is_box": result.is_box,
             "shape": result.shape,
             "unsupported": result.unsupported,
             "model_unsupported": result.model_unsupported,
             "shape_added_by_code": result.shape_added,
+            "grounding_rows": [{"table": r["table"], "name": r["name"], "matched": r["matched"]}
+                               for r in result.grounding.rows],
+            "style_changes": result.style_changes,
             "spec": result.spec,
             "validation_errors": [a.errors for a in result.attempts],
             "outputs": [a.reply.text for a in result.attempts],
@@ -429,6 +443,10 @@ def summarise(results):
         "shape_added_by_code_runs": sum(bool(r.get("shape_added_by_code")) for r in runs),
         "avg_llm_seconds": round(sum(r["llm_seconds"] for r in runs) / total, 2) if total else None,
         "avg_prompt_tokens": round(sum(r["prompt_tokens"] for r in runs) / total) if total else None,
+        # Per LLM call, not per run: a retry sends a longer prompt, and the
+        # context limit applies to each call.
+        "max_prompt_tokens_per_call": max(
+            (max(r["call_prompt_tokens"]) for r in runs if r.get("call_prompt_tokens")), default=None),
         "avg_output_tokens": round(sum(r["output_tokens"] for r in runs) / total) if total else None,
     }
 
@@ -467,7 +485,8 @@ def markdown_table(report):
         f"- **Non-box shape listed by code, not by the model:** {s['shape_added_by_code_runs']} run(s). "
         f"The model named the shape in its `shape` field; the code put it in the unsupported list.",
         f"- **Average LLM time per run:** {s['avg_llm_seconds']:.1f} s "
-        f"({s['avg_prompt_tokens']} prompt + {s['avg_output_tokens']} output tokens), model already loaded.",
+        f"({s['avg_prompt_tokens']} prompt + {s['avg_output_tokens']} output tokens), model already loaded. "
+        f"Largest prompt of any single call: {s['max_prompt_tokens_per_call']} tokens.",
         "",
     ]
     return "\n".join(lines)

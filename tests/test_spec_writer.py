@@ -11,7 +11,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from llm_backend import LLMBackend, Reply  # noqa: E402
+from llm_backend import BrokenFirstReply, LLMBackend, Reply  # noqa: E402
 from spec_writer import parse_reply, write_spec  # noqa: E402
 
 GOOD = {
@@ -44,11 +44,33 @@ class FakeBackend(LLMBackend):
         self.replies = list(replies)
         self.calls = []
 
-    def generate_spec(self, sentence, previous_errors=None, previous_output=None):
+    def generate_spec(self, sentence, previous_errors=None, previous_output=None, reference=None):
         self.calls.append({"sentence": sentence, "previous_errors": previous_errors,
-                           "previous_output": previous_output})
+                           "previous_output": previous_output, "reference": reference})
         text = self.replies.pop(0)
         return Reply(text if isinstance(text, str) else json.dumps(text), 100, 50, 0.1)
+
+
+class Grounded(unittest.TestCase):
+    def test_rows_reach_every_attempt(self):
+        backend = FakeBackend([bad(), GOOD])
+        result = write_spec("a luxury emerald green lipstick box", backend)
+        names = [r["name"] for r in result.grounding.rows]
+        self.assertEqual(names, ["luxury", "emerald", "lipstick"])
+        for call in backend.calls:  # the retry gets the same reference data
+            self.assertIn('"emerald green" = #50C878', call["reference"])
+
+    def test_no_grounding_and_no_match_send_nothing(self):
+        backend = FakeBackend([GOOD, GOOD])
+        write_spec("a luxury emerald green lipstick box", backend, grounding=False)
+        write_spec("a nice box", backend)
+        self.assertEqual([c["reference"] for c in backend.calls], [None, None])
+
+    def test_break_first_reply_keeps_the_reference(self):
+        inner = FakeBackend([GOOD, GOOD])
+        write_spec("an emerald serum box", BrokenFirstReply(inner))
+        self.assertIn("#50C878", inner.calls[0]["reference"])
+        self.assertIn("#50C878", inner.calls[1]["reference"])
 
 
 class RetryLoop(unittest.TestCase):

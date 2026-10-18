@@ -4,7 +4,7 @@ The LLM backend: the only code that talks to a language model.
 Everything else (prompt.py, the evals) uses the small LLMBackend interface:
 
     backend.check()                       is the model ready? (BackendUnavailable if not)
-    backend.generate_spec(sentence, previous_errors=None, previous_output=None)
+    backend.generate_spec(sentence, previous_errors=None, previous_output=None, reference=None)
                                           one LLM call -> Reply (raw JSON text + token counts)
     backend.load() / backend.release()    load the model / free its (GPU) memory
 
@@ -101,12 +101,16 @@ class LLMBackend:
     def __init__(self, model):
         self.model = model
 
-    def generate_spec(self, sentence, previous_errors=None, previous_output=None):
+    def generate_spec(self, sentence, previous_errors=None, previous_output=None, reference=None):
         """Ask the model for a spec. On a retry, pass its previous reply and the
-        exact validation errors so it can fix them. Returns a Reply."""
+        exact validation errors so it can fix them. `reference` is the
+        grounding block (table rows for this sentence); it goes in the user
+        message after the sentence, so the system prompt stays the same for
+        every sentence. Returns a Reply."""
+        request = f"{sentence}\n\n{reference}" if reference else sentence
         messages = [
             {"role": "system", "content": system_prompt()},
-            {"role": "user", "content": sentence},
+            {"role": "user", "content": request},
         ]
         if previous_errors:
             errors = "\n".join(f"- {e}" for e in previous_errors)
@@ -292,9 +296,9 @@ class BrokenFirstReply(LLMBackend):
         self.name = inner.name
         self.calls = 0
 
-    def generate_spec(self, sentence, previous_errors=None, previous_output=None):
+    def generate_spec(self, sentence, previous_errors=None, previous_output=None, reference=None):
         self.calls += 1
-        reply = self.inner.generate_spec(sentence, previous_errors, previous_output)
+        reply = self.inner.generate_spec(sentence, previous_errors, previous_output, reference)
         if self.calls == 1:
             data = json.loads(reply.text)
             box = data["spec"]["box"]

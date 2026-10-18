@@ -1,0 +1,35 @@
+{
+  "about": "Style words: how each one shifts a box's colour and finish. The finish is guidance for the model. The colour shift is applied by code (grounding.apply_style) to the colour the model picks: in testing on dev sentences, qwen3:8b couldn't do the hex arithmetic itself (with example hex values it copied the example, without them it didn't shift at all). lightness and saturation are shifts in HLS: a negative value scales towards 0 (-0.3 = 30% darker), a positive value moves that share of the way towards 1 (+0.3 = 30% of the way to white / full saturation). Matched by grounding.py on whole words.",
+  "styles": {
+    "luxury": {
+      "aliases": ["luxurious", "premium", "high-end", "elegant", "opulent"],
+      "colour": "deeper and richer",
+      "lightness": -0.30, "saturation": -0.10,
+      "finish": "matte 0.7-0.85, or high-gloss 0.03-0.08 if gloss is asked for; avoid the in-between"
+    },
+    "minimal": {
+      "aliases": ["minimalist", "minimalistic", "clean", "simple", "understated"],
+      "colour": "quiet and greyed",
+      "lightness": 0.25, "saturation": -0.65,
+      "finish": "matte 0.6-0.8"
+    },
+    "playful": {
+      "aliases": ["fun", "cheerful", "whimsical", "kids", "candy"],
+      "colour": "brighter and lighter, candy-like",
+      "lightness": 0.35, "saturation": 0.10,
+      "finish": "satin to glossy 0.2-0.4"
+    },
+    "natural": {
+      "aliases": ["organic", "eco", "eco-friendly", "earthy", "sustainable"],
+      "colour": "muted and earthy",
+      "lightness": -0.05, "saturation": -0.45,
+      "finish": "uncoated card, matte 0.75-0.9"
+    },
+    "bold": {
+      "aliases": ["vibrant", "striking", "punchy", "vivid"],
+      "colour": "strong and fully saturated",
+      "lightness": 0.0, "saturation": 0.60,
+      "finish": "glossy 0.1-0.25"
+    }
+  }
+}

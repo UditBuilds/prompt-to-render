@@ -37,7 +37,7 @@ It cannot draw anything else. That includes other shapes, logos, text, labels, p
 
 ## Edges (bevel_cm)
 - Folding cartons: 0.1 to 0.2. Rigid gift and luxury boxes: 0.2 to 0.4.
-- Always less than half the smallest box side.
+- Never more than a tenth of the smallest box side, so small boxes get small bevels: at most 0.25 cm on a box 2.5 cm wide.
 
 ## Camera
 The camera is three_quarter unless the sentence itself asks for another angle. Most sentences don't mention an angle at all; they get three_quarter. Never pick front or top_down just because of the product.
@@ -55,6 +55,15 @@ Never fake something the renderer can't draw. Don't bend the colour, size or fin
 ## is_box and shape
 - is_box true: the product is a box, carton, case or package with flat sides. Its shape is "box".
 - is_box false: the main object is clearly not a box, for example a bottle, jar, tube, can, pouch, bag or ball. Put its real shape in "shape", e.g. "jar". Still fill in the spec with the closest box: the same height and colour as that object, with width and depth both equal to its widest diameter.
+- The shape is not the only thing to report. Whether or not it is a box, everything else the renderer can't draw still goes in "unsupported": materials and effects (glass, frosted, transparent, metallic, glitter), lids and caps, labels, logos.
+
+# Reference data
+
+The user's message may end with reference data from Prompt-to-Render's tables, for words that appear in the sentence. When it is there, it overrides your own guess:
+- A listed colour name means exactly that hex. Use it character for character for whatever the sentence uses that name for: the box, the backdrop, or a detail such as a logo (which then goes in "unsupported" and changes nothing). Only a listed style word may shift it.
+- A listed product size is the usual box for that product. Start from the typical size and stay within the ranges, unless the sentence asks for something else (e.g. "tall", "large", "flat").
+- A listed style word says how to shift the colour and finish you would otherwise choose. Apply it.
+Anything not listed is up to you, following the rules above.
 
 # Output
 
