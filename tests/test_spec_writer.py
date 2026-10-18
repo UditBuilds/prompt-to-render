@@ -67,7 +67,7 @@ class RetryLoop(unittest.TestCase):
         first_errors = result.attempts[0].errors
         self.assertEqual(first_errors, [
             "box.roughness: must be between 0 and 1, got 1.4",
-            "box.bevel_cm: must be less than half the smallest box side (1.25 cm for this box), got 2.5",
+            "box.bevel_cm: must be at most 10% of the smallest box side (0.25 cm for this box), got 2.5",
         ])
         # The exact validator messages and the bad reply went back to the model.
         retry = backend.calls[1]
@@ -132,6 +132,8 @@ class ParseReply(unittest.TestCase):
         parsed = parse_reply(json.dumps(data))
         self.assertEqual(parsed["unsupported"], ["bottle shape", "gold logo"])
         self.assertTrue(parsed["shape_added"])
+        # The model's own list is kept apart: the evals only count that one.
+        self.assertEqual(parsed["model_unsupported"], ["gold logo"])
 
     def test_non_box_shape_not_repeated(self):
         data = dict(GOOD, is_box=False, shape="jar", unsupported=["glass jar", "wooden lid"])

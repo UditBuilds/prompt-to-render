@@ -42,11 +42,12 @@ class Attempt:
 
 
 class SpecResult:
-    def __init__(self, attempts, spec=None, unsupported=None, is_box=None, shape=None,
-                 shape_added=False):
+    def __init__(self, attempts, spec=None, unsupported=None, model_unsupported=None,
+                 is_box=None, shape=None, shape_added=False):
         self.attempts = attempts
         self.spec = spec                    # full validated spec, or None
-        self.unsupported = unsupported or []
+        self.unsupported = unsupported or []  # what the user is told was ignored
+        self.model_unsupported = model_unsupported or []  # the model's own list, before the code added anything
         self.is_box = is_box
         self.shape = shape
         self.shape_added = shape_added      # True if the code added the shape to `unsupported`
@@ -70,7 +71,8 @@ class SpecResult:
 
 
 def parse_reply(text):
-    """Turn the model's reply into a dict: spec, unsupported, is_box, shape, shape_added.
+    """Turn the model's reply into a dict: spec, unsupported, model_unsupported,
+    is_box, shape, shape_added.
 
     The spec is validated by spec.validate_spec, with defaults filled in. The
     rest is kept apart from it: it is reported to the user and never reaches
@@ -123,14 +125,15 @@ def parse_reply(text):
         if item and item.lower() not in (c.lower() for c in cleaned):
             cleaned.append(item)
 
+    final = list(cleaned)
     shape_added = False
     if not is_box:
         named = shape if shape and shape != "box" else "non-box"
-        if not any(named in item.lower() for item in cleaned):
-            cleaned.insert(0, f"{named} shape")
+        if not any(named in item.lower() for item in final):
+            final.insert(0, f"{named} shape")
             shape_added = True
-    return {"spec": spec, "unsupported": cleaned, "is_box": is_box, "shape": shape,
-            "shape_added": shape_added}
+    return {"spec": spec, "unsupported": final, "model_unsupported": cleaned, "is_box": is_box,
+            "shape": shape, "shape_added": shape_added}
 
 
 def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None):

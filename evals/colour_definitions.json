@@ -1,0 +1,77 @@
+{
+  "about": "What each colour name must look like, for the eval checks. Written from general colour definitions (Wikipedia colour articles, CSS, Pantone) BEFORE any colour table existed for the model, and never derived from that table. hue is HSV hue in degrees (a range like [335, 3] wraps round through 0), saturation is HSV saturation 0-1, lightness is CIE L* 0-100. Method 'references': the span of the reference colours, widened by fixed tolerances (hue 10 deg, saturation 0.15, L* 10) and rounded outward. Method 'description': only one standard reference, or the common meaning differs from the reference, so the range follows the written description. tests/test_eval_checks.py checks that every reference falls inside its range.",
+  "colours": {
+    "emerald": {
+      "description": "The gemstone green: rich and slightly bluish, brighter than plain green.",
+      "method": "references",
+      "references": [
+        {"hex": "#50C878", "source": "Wikipedia: Emerald (color)"},
+        {"hex": "#009473", "source": "Pantone 17-5641 Emerald"}
+      ],
+      "hue": [130, 177], "saturation": [0.45, 1.0], "lightness": [44, 83]
+    },
+    "sage": {
+      "description": "The herb: a muted grey-green, leaning yellow.",
+      "method": "references",
+      "references": [
+        {"hex": "#BCB88A", "source": "Wikipedia: Sage (color)"},
+        {"hex": "#9CAF88", "source": "common 'sage green'"}
+      ],
+      "hue": [45, 100], "saturation": [0.07, 0.42], "lightness": [59, 85]
+    },
+    "crimson": {
+      "description": "A strong, deep red leaning slightly towards blue.",
+      "method": "references",
+      "references": [
+        {"hex": "#DC143C", "source": "CSS / Wikipedia: Crimson"},
+        {"hex": "#9E1B32", "source": "Wikipedia: Crimson (University of Alabama crimson)"}
+      ],
+      "hue": [338, 360], "saturation": [0.68, 1.0], "lightness": [24, 57]
+    },
+    "wine": {
+      "description": "The colour of red wine: a dark red with a hint of purple (burgundy).",
+      "method": "references",
+      "references": [
+        {"hex": "#722F37", "source": "Wikipedia: Wine (color)"},
+        {"hex": "#800020", "source": "Wikipedia: Burgundy (color)"}
+      ],
+      "hue": [335, 3], "saturation": [0.44, 1.0], "lightness": [15, 40]
+    },
+    "gold": {
+      "description": "Metallic gold as used in packaging: a warm, slightly muted yellow-orange. CSS 'gold' (#FFD700) is deliberately not a reference: Wikipedia lists it as 'Gold (web) (Golden)', a saturated golden yellow, not the metallic colour packaging means.",
+      "method": "references",
+      "references": [
+        {"hex": "#D4AF37", "source": "Wikipedia: Gold (metallic)"},
+        {"hex": "#CFB53B", "source": "Wikipedia: Old gold"},
+        {"hex": "#C5B358", "source": "Wikipedia: Vegas gold"}
+      ],
+      "hue": [35, 61], "saturation": [0.40, 0.89], "lightness": [62, 84]
+    },
+    "navy": {
+      "description": "A very dark blue. Only one standard reference (CSS navy, which is at the extreme: pure, fully saturated), so the range follows the description: blue hue, clearly saturated, very dark.",
+      "method": "description",
+      "references": [
+        {"hex": "#000080", "source": "CSS / Wikipedia: Navy blue"}
+      ],
+      "hue": [205, 250], "saturation": [0.35, 1.0], "lightness": [3, 30]
+    },
+    "blush": {
+      "description": "A soft, pale pink, as 'blush' and 'blush pink' are used in fashion, interiors and packaging. Crayola's 'Blush' (#DE5D83) is a much deeper rose, so the range follows the common meaning: pink to warm pink, low saturation, light.",
+      "method": "description",
+      "references": [
+        {"hex": "#F4C2C2", "source": "Wikipedia: Baby pink"},
+        {"hex": "#FADADD", "source": "Wikipedia: Pale pink"}
+      ],
+      "hue": [330, 20], "saturation": [0.08, 0.45], "lightness": [70, 93]
+    },
+    "champagne": {
+      "description": "The drink: a very pale, warm beige.",
+      "method": "references",
+      "references": [
+        {"hex": "#F7E7CE", "source": "Wikipedia: Champagne (color)"},
+        {"hex": "#F1DDCF", "source": "Wikipedia: Champagne pink"}
+      ],
+      "hue": [14, 47], "saturation": [0.0, 0.32], "lightness": [79, 100]
+    }
+  }
+}

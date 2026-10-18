@@ -251,6 +251,7 @@ def log_llm(log, result):
         is_box=result.is_box,
         shape=result.shape,
         unsupported=result.unsupported,
+        model_unsupported=result.model_unsupported,
         shape_added_by_code=result.shape_added,
         prompt_tokens=result.total("prompt_tokens"),
         output_tokens=result.total("output_tokens"),

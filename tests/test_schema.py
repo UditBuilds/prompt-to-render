@@ -36,8 +36,11 @@ def with_value(path, value):
         raw[path[0]][path[1]] = value
     else:
         raw[path[0]] = value
-    # A big box, so the bevel rule doesn't get in the way of bevel range tests.
-    if path != ("box", "width_cm") and path != ("box", "height_cm") and path != ("box", "depth_cm"):
+    # Keep the bevel rule (a share of the smallest side) out of the way: sharp
+    # edges when testing sizes, a big box for everything else.
+    if path in (("box", "width_cm"), ("box", "height_cm"), ("box", "depth_cm")):
+        raw["box"]["bevel_cm"] = 0
+    else:
         raw["box"].update(width_cm=200, height_cm=200, depth_cm=200)
     return raw
 
@@ -70,7 +73,8 @@ class SchemaMatchesValidator(unittest.TestCase):
             step = 1 if prop["type"] == "integer" else 0.001
             with self.subTest(field=".".join(path)):
                 if path == ("box", "bevel_cm"):
-                    high = 99.9  # its real upper limit is half the smallest side
+                    # Its real upper limit is a share of the smallest side (200 cm here).
+                    high = 200 * spec.BEVEL_MAX_SHARE
                 for good in (low, high):
                     self.assertTrue(is_valid(with_value(path, good)), good)
                 for bad in (low - step, prop["maximum"] + step):
@@ -100,6 +104,12 @@ class SchemaMatchesValidator(unittest.TestCase):
         self.assertTrue(is_valid(with_value(("resolution",), [low, high])))
         self.assertFalse(is_valid(with_value(("resolution",), [low - 1, high])))
         self.assertFalse(is_valid(with_value(("resolution",), [low])))
+
+    def test_bevel_share_of_smallest_side(self):
+        box = {"width_cm": 12, "height_cm": 18, "depth_cm": 8}
+        self.assertTrue(is_valid({"box": dict(box, bevel_cm=0.8)}))   # exactly 10% of 8 cm
+        self.assertFalse(is_valid({"box": dict(box, bevel_cm=0.81)}))
+        self.assertFalse(is_valid({"box": dict(box, bevel_cm=1.5)}))  # the "bar of soap" repair
 
     def test_llm_schema_is_the_spec_schema(self):
         llm_spec = llm_backend.output_schema()["properties"]["spec"]

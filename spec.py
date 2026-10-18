@@ -30,6 +30,12 @@ MIN_SIZE_CM, MAX_SIZE_CM = 0.5, 200.0
 MIN_RES, MAX_RES = 16, 8192
 MIN_SAMPLES, MAX_SAMPLES = 1, 8192
 
+# The edge radius may be at most this share of the box's smallest side. Then
+# every face stays at least 80% flat, so it always reads as a box. Real cartons
+# sit at 1-5% (0.1-0.3 cm on 3-30 cm sides); 10% leaves room for soft-edged
+# rigid boxes but rules out a "bar of soap" (1.5 cm on an 8 cm side is 19%).
+BEVEL_MAX_SHARE = 0.10
+
 
 class SpecError(Exception):
     """Raised when a spec is invalid. Holds a list of human-readable problems."""
@@ -150,7 +156,7 @@ FIELDS = {
         "roughness": Number(0.5, 0.0, 1.0, "Surface finish: 0 = mirror-glossy, 1 = fully matte."),
         "bevel_cm": Number(0.15, 0.0, MAX_SIZE_CM,
                            "Radius of the rounded edges in cm (0 = razor sharp). "
-                           "Must be less than half the smallest box side."),
+                           f"At most {BEVEL_MAX_SHARE:.0%} of the smallest box side."),
     },
     "background_colour": Colour("#EDEDED", "Studio backdrop colour as a hex code."),
     "colour_mode": Choice("accurate", COLOUR_MODES,
@@ -177,7 +183,7 @@ def json_schema(fields=FIELDS, only=None):
 
     `only` limits it to some top-level fields. Every field in the schema is
     required, so whoever fills it in has to choose each value. One rule can't
-    be written as JSON schema (the bevel must fit the box); it is in the
+    be written as JSON schema (the bevel must suit the box); it is in the
     bevel's description and validate_spec() checks it.
     """
     properties = {}
@@ -253,11 +259,11 @@ def _check_box(box, problems):
     # numbers. This is the one rule the JSON schema can't express.
     sizes = [box[f] for f in ("width_cm", "height_cm", "depth_cm")]
     if ok["bevel_cm"] and all(_is_number(s) for s in sizes):
-        limit = min(sizes) / 2
-        if box["bevel_cm"] >= limit:
+        limit = min(sizes) * BEVEL_MAX_SHARE
+        if box["bevel_cm"] > limit + 1e-9:  # tolerance for float rounding
             problems.append(
-                f"box.bevel_cm: must be less than half the smallest box side "
-                f"({limit:g} cm for this box), got {box['bevel_cm']}"
+                f"box.bevel_cm: must be at most {BEVEL_MAX_SHARE:.0%} of the smallest box side "
+                f"({limit:g} cm for this box), got {box['bevel_cm']:g}"
             )
 
 

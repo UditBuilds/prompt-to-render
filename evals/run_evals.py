@@ -1,7 +1,8 @@
 """
 Evals for the spec writer: does the LLM turn sentences into the right specs?
 
-    python evals/run_evals.py                    15 cases x 3 runs, specs only (no rendering)
+    python evals/run_evals.py                    every case x 3 runs, specs only (no rendering)
+    python evals/run_evals.py --label grounded   name the results file
     python evals/run_evals.py --render           also render one spec per case
     python evals/run_evals.py --model llama3.1:8b
     python evals/run_evals.py --runs 1 --cases red_lipstick,vague
@@ -9,18 +10,20 @@ Evals for the spec writer: does the LLM turn sentences into the right specs?
 Every case in evals/cases.json goes through the same LLM + validation loop as
 prompt.py, several times (the model samples at temperature 0.2, so runs can
 differ). The checks are ranges, not exact values, e.g. "glossy" means
-roughness <= 0.2. A run passes when it produced a valid spec within 2
-attempts AND every check passes.
+roughness <= 0.2, and named colours must fit evals/colour_definitions.json.
+A run passes when it produced a valid spec within 2 attempts AND every check
+passes.
 
 Reports the pass rate per case and overall, how often the retry loop fired,
-and the average LLM time. Results are saved to evals/results/<timestamp>.json,
-with a Markdown summary next to it.
+and the average LLM time. Results are saved to
+evals/results/<timestamp>_<label>.json, with a Markdown summary next to it.
 """
 
 import argparse
 import colorsys
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -34,11 +37,16 @@ from run import PROJECT_DIR, find_blender, render  # noqa: E402
 from spec_writer import MAX_ATTEMPTS, write_spec  # noqa: E402
 
 CASES_PATH = os.path.join(EVALS_DIR, "cases.json")
+COLOURS_PATH = os.path.join(EVALS_DIR, "colour_definitions.json")
 RESULTS_DIR = os.path.join(EVALS_DIR, "results")
+
+with open(COLOURS_PATH, encoding="utf-8") as _f:
+    COLOUR_DEFINITIONS = json.load(_f)["colours"]
 
 
 # ---------------------------------------------------------------------------
-# Checks. Each takes (check, result) and returns (passed, what was found).
+# Checks. Each takes (check, result, done) and returns (passed, what was found).
+# `done` holds the cases finished so far, for checks that compare two cases.
 # ---------------------------------------------------------------------------
 
 def hex_to_hsv(hex_colour):
@@ -66,93 +74,176 @@ def describe_range(check):
     return " and ".join(parts)
 
 
-def check_hue(check, result):
-    colour = result.spec["box"]["colour"]
-    hue = hex_to_hsv(colour)[0]
-    low, high = check["min"], check["max"]
+def hue_in(hue, low, high):
     # A range like 345..15 wraps round through 0 (red).
-    ok = low <= hue <= high if low <= high else (hue >= low or hue <= high)
-    return ok, f"hue {hue:.0f} deg of {colour} (want {low}..{high})"
+    return low <= hue <= high if low <= high else (hue >= low or hue <= high)
 
 
-def check_saturation(check, result):
-    colour = result.spec["box"]["colour"]
+def colour_of(check, result):
+    """The box colour, or the backdrop colour with "target": "background"."""
+    if check.get("target") == "background":
+        return "backdrop", result.spec["background_colour"]
+    return "box", result.spec["box"]["colour"]
+
+
+def check_hue(check, result, done):
+    where, colour = colour_of(check, result)
+    hue = hex_to_hsv(colour)[0]
+    return (hue_in(hue, check["min"], check["max"]),
+            f"hue {hue:.0f} deg of {where} {colour} (want {check['min']}..{check['max']})")
+
+
+def check_saturation(check, result, done):
+    where, colour = colour_of(check, result)
     saturation = hex_to_hsv(colour)[1]
-    return in_range(saturation, check), f"saturation {saturation:.2f} of {colour} (want {describe_range(check)})"
+    return in_range(saturation, check), f"saturation {saturation:.2f} of {where} {colour} (want {describe_range(check)})"
 
 
-def check_lightness(check, result):
-    colour = result.spec["box"]["colour"]
+def check_lightness(check, result, done):
+    where, colour = colour_of(check, result)
     lightness = hex_to_lab(colour)[0]
-    return in_range(lightness, check), f"L* {lightness:.0f} of {colour} (want {describe_range(check)})"
+    return in_range(lightness, check), f"L* {lightness:.0f} of {where} {colour} (want {describe_range(check)})"
 
 
-def check_hex(check, result):
+def check_named_colour(check, result, done):
+    """The colour must fit evals/colour_definitions.json for that name."""
+    name = check["name"]
+    definition = COLOUR_DEFINITIONS[name]
+    where, colour = colour_of(check, result)
+    hue, saturation, _ = hex_to_hsv(colour)
+    lightness = hex_to_lab(colour)[0]
+    (h_lo, h_hi), (s_lo, s_hi), (l_lo, l_hi) = definition["hue"], definition["saturation"], definition["lightness"]
+    misses = []
+    if not hue_in(hue, h_lo, h_hi):
+        misses.append(f"hue {hue:.0f} not in {h_lo}..{h_hi}")
+    if not s_lo <= saturation <= s_hi:
+        misses.append(f"saturation {saturation:.2f} not in {s_lo:g}..{s_hi:g}")
+    if not l_lo <= lightness <= l_hi:
+        misses.append(f"L* {lightness:.0f} not in {l_lo}..{l_hi}")
+    detail = "; ".join(misses) if misses else f"hue {hue:.0f}, saturation {saturation:.2f}, L* {lightness:.0f}"
+    return not misses, f"{where} {colour} as {name}: {detail}"
+
+
+def check_hex(check, result, done):
     colour = result.spec["box"]["colour"]
     return colour.upper() == check["equals"].upper(), f"colour {colour} (want {check['equals']})"
 
 
-def check_roughness(check, result):
+def check_roughness(check, result, done):
     roughness = result.spec["box"]["roughness"]
     return in_range(roughness, check), f"roughness {roughness:g} (want {describe_range(check)})"
 
 
-def check_camera(check, result):
+def check_camera(check, result, done):
     camera = result.spec["camera"]
     return camera == check["equals"], f"camera {camera} (want {check['equals']})"
 
 
-def check_ratio(check, result):
+def check_ratio(check, result, done):
     box = result.spec["box"]
     ratio = box[check["num"]] / box[check["den"]]
     return in_range(ratio, check), (f"{check['num']}/{check['den']} = {box[check['num']]:g}/{box[check['den']]:g} "
                                     f"= {ratio:.2f} (want {describe_range(check)})")
 
 
-def check_size(check, result):
+def check_size(check, result, done):
     box = result.spec["box"]
     sides = [box["width_cm"], box["height_cm"], box["depth_cm"]]
     side = max(sides) if check["side"] == "longest" else min(sides)
     return in_range(side, check), f"{check['side']} side {side:g} cm (want {describe_range(check)})"
 
 
-def check_is_box(check, result):
+def check_dimension(check, result, done):
+    value = result.spec["box"][check["field"]]
+    return in_range(value, check), f"{check['field']} {value:g} cm (want {describe_range(check)})"
+
+
+def check_top_aspect(check, result, done):
+    """Long side / short side of the top face (width x depth)."""
+    box = result.spec["box"]
+    width, depth = box["width_cm"], box["depth_cm"]
+    aspect = max(width, depth) / min(width, depth)
+    return (in_range(aspect, check),
+            f"top face {width:g} x {depth:g} cm, aspect {aspect:.2f} (want {describe_range(check)})")
+
+
+def check_is_box(check, result, done):
     return result.is_box == check["equals"], f"is_box {json.dumps(result.is_box)} (want {json.dumps(check['equals'])})"
 
 
-def check_unsupported_mentions(check, result):
-    text = " | ".join(result.unsupported).lower()
+def check_shape_contains(check, result, done):
+    shape = (result.shape or "").lower()
+    ok = any(word in shape for word in check["any"])
+    return ok, f"shape {json.dumps(result.shape)} (want it to contain {' or '.join(check['any'])})"
+
+
+def check_model_unsupported_mentions(check, result, done):
+    """Only the model's own list counts, not items the code added."""
+    text = " | ".join(result.model_unsupported).lower()
     ok = any(word in text for word in check["any"])
-    return ok, f"unsupported {json.dumps(result.unsupported)} (want a mention of {' or '.join(check['any'])})"
+    return ok, (f"model's own unsupported list {json.dumps(result.model_unsupported)} "
+                f"(want a mention of {' or '.join(check['any'])})")
 
 
-def check_unsupported_empty(check, result):
+def check_unsupported_empty(check, result, done):
     return not result.unsupported, f"unsupported {json.dumps(result.unsupported)} (want [])"
+
+
+def check_style_shift(check, result, done):
+    """Compare the box colour with another case's (e.g. "a luxury red box" vs "a red box").
+
+    The reference is the mean L* and saturation over that case's valid runs.
+    The colour must move in the given direction by at least min_lightness L*
+    OR by min_saturation of saturation.
+    """
+    reference = done.get(check["than"])
+    colours = [r["spec"]["box"]["colour"] for r in reference["runs"] if r["valid"]] if reference else []
+    if not colours:
+        return False, f"no valid spec from {check['than']} to compare with"
+    ref_lightness = sum(hex_to_lab(c)[0] for c in colours) / len(colours)
+    ref_saturation = sum(hex_to_hsv(c)[1] for c in colours) / len(colours)
+    colour = result.spec["box"]["colour"]
+    lightness, saturation = hex_to_lab(colour)[0], hex_to_hsv(colour)[1]
+    if check["direction"] == "darker_or_less_saturated":
+        light_shift, sat_shift = ref_lightness - lightness, ref_saturation - saturation
+        words = ("darker", "less saturated")
+    else:  # lighter_or_more_saturated
+        light_shift, sat_shift = lightness - ref_lightness, saturation - ref_saturation
+        words = ("lighter", "more saturated")
+    ok = light_shift >= check["min_lightness"] or sat_shift >= check["min_saturation"]
+    return ok, (f"{colour} vs {check['than']} (mean L* {ref_lightness:.0f}, saturation {ref_saturation:.2f}): "
+                f"{light_shift:+.0f} L* {words[0]}, {sat_shift:+.2f} {words[1]} "
+                f"(want >= {check['min_lightness']} L* {words[0]} or >= {check['min_saturation']} {words[1]})")
 
 
 CHECKS = {
     "hue": check_hue,
     "saturation": check_saturation,
     "lightness": check_lightness,
+    "named_colour": check_named_colour,
     "hex": check_hex,
     "roughness": check_roughness,
     "camera": check_camera,
     "ratio": check_ratio,
     "size": check_size,
+    "dimension": check_dimension,
+    "top_aspect": check_top_aspect,
     "is_box": check_is_box,
-    "unsupported_mentions": check_unsupported_mentions,
+    "shape_contains": check_shape_contains,
+    "model_unsupported_mentions": check_model_unsupported_mentions,
     "unsupported_empty": check_unsupported_empty,
+    "style_shift": check_style_shift,
 }
 
 
-def run_checks(case, result):
+def run_checks(case, result, done=None):
     """Returns a list of {check, passed, found}. An invalid spec fails outright."""
     if not result.ok:
         return [{"check": "valid spec", "passed": False,
                  "found": f"no valid spec in {MAX_ATTEMPTS} attempts: {result.errors}"}]
     outcomes = []
     for check in case["checks"]:
-        passed, found = CHECKS[check["type"]](check, result)
+        passed, found = CHECKS[check["type"]](check, result, done or {})
         outcomes.append({"check": check["type"], "passed": passed, "found": found})
     return outcomes
 
@@ -166,20 +257,17 @@ def main():
     parser = argparse.ArgumentParser(description="Run the spec-writer evals.")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Ollama model (default: {DEFAULT_MODEL})")
     parser.add_argument("--runs", type=int, default=3, help="runs per case (default: 3)")
+    parser.add_argument("--label", help='a name for this run, e.g. "baseline"; added to the file name')
     parser.add_argument("--cases", help="comma-separated case ids (default: all)")
     parser.add_argument("--render", action="store_true", help="also render one spec per case (after unloading the model)")
     parser.add_argument("--blender", help="path to blender.exe (for --render)")
     args = parser.parse_args()
 
-    with open(CASES_PATH, encoding="utf-8") as f:
-        cases = json.load(f)["cases"]
-    if args.cases:
-        wanted = args.cases.split(",")
-        unknown = set(wanted) - {c["id"] for c in cases}
-        if unknown:
-            print(f"Unknown case id(s): {', '.join(sorted(unknown))}")
-            return 2
-        cases = [c for c in cases if c["id"] in wanted]
+    try:
+        cases = load_cases(args.cases.split(",") if args.cases else None)
+    except ValueError as e:
+        print(e)
+        return 2
 
     blender = None
     if args.render:
@@ -198,13 +286,17 @@ def main():
         return 1
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if args.label:
+        stamp += "_" + re.sub(r"[^A-Za-z0-9-]+", "-", args.label)
     print(f"{len(cases)} cases x {args.runs} runs\n")
     results = []
+    done = {}
     stopped_early = None
     started = time.perf_counter()
     try:
         for case in cases:
-            results.append(run_case(case, backend, args.runs))
+            results.append(run_case(case, backend, args.runs, done))
+            done[case["id"]] = results[-1]
     except (BackendUnavailable, RuntimeError, KeyboardInterrupt) as e:
         # Keep what was collected so far rather than losing it all.
         stopped_early = str(e) or type(e).__name__
@@ -222,6 +314,7 @@ def main():
     summary = summarise(results)
     report = {
         "created": datetime.now().isoformat(timespec="seconds"),
+        "label": args.label,
         "model": backend.model,
         "backend": backend.name,
         "llm_settings": backend.settings(),
@@ -251,12 +344,37 @@ def main():
     return 1 if stopped_early else 0
 
 
-def run_case(case, backend, runs):
+def load_cases(wanted=None):
+    """The cases from cases.json, optionally only some ids.
+
+    A case may compare itself with an earlier one (style_shift); that case is
+    always run too, before it.
+    """
+    with open(CASES_PATH, encoding="utf-8") as f:
+        cases = json.load(f)["cases"]
+    ids = [c["id"] for c in cases]
+    for i, case in enumerate(cases):
+        for check in case["checks"]:
+            if "than" in check and check["than"] not in ids[:i]:
+                raise ValueError(f"{case['id']}: compares with {check['than']}, which must be an earlier case")
+    if wanted is None:
+        return cases
+    unknown = set(wanted) - set(ids)
+    if unknown:
+        raise ValueError(f"Unknown case id(s): {', '.join(sorted(unknown))}")
+    keep = set(wanted)
+    for case in reversed(cases):
+        if case["id"] in keep:
+            keep.update(check["than"] for check in case["checks"] if "than" in check)
+    return [c for c in cases if c["id"] in keep]
+
+
+def run_case(case, backend, runs, done=None):
     print(f"{case['id']}: \"{case['sentence']}\"")
     case_runs = []
     for n in range(1, runs + 1):
         result = write_spec(case["sentence"], backend)
-        outcomes = run_checks(case, result)
+        outcomes = run_checks(case, result, done)
         passed = all(o["passed"] for o in outcomes)
         retry_note = ", retried" if result.retried else ""
         print(f"  run {n}: {'PASS' if passed else 'FAIL'}  "
@@ -278,6 +396,7 @@ def run_case(case, backend, runs):
             "is_box": result.is_box,
             "shape": result.shape,
             "unsupported": result.unsupported,
+            "model_unsupported": result.model_unsupported,
             "shape_added_by_code": result.shape_added,
             "spec": result.spec,
             "validation_errors": [a.errors for a in result.attempts],
@@ -316,8 +435,9 @@ def summarise(results):
 
 def markdown_table(report):
     s = report["summary"]
+    label = f"**{report['label']}**: " if report.get("label") else ""
     lines = [
-        f"Model `{report['model']}` (Ollama, local), {report['runs_per_case']} runs per case, "
+        f"{label}model `{report['model']}` (Ollama, local), {report['runs_per_case']} runs per case, "
         f"{report['created'][:10]}.",
         "",
     ]
