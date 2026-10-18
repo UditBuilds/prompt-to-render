@@ -1,6 +1,6 @@
-# Prompt-to-Render (v1)
+# Prompt-to-Render (v1.1)
 
-Describe a box product shot in one sentence and get a clean studio render (cosmetics-packaging style). A **local** LLM writes the scene spec, a validator checks it, and Blender renders it on the GPU.
+Describe a box product shot in one sentence and get a clean studio render (cosmetics-packaging style). A **local** LLM writes the scene spec, grounded by small reference tables; a validator checks it; Blender renders it on the GPU.
 
 ```
 python prompt.py "luxury matte red lipstick box, three-quarter view"
@@ -8,10 +8,14 @@ python prompt.py "luxury matte red lipstick box, three-quarter view"
 
 **Runs fully offline. No API keys, no paid APIs, nothing leaves the machine.** The LLM is [Ollama](https://ollama.com) running `qwen3:8b` on the same laptop GPU that renders.
 
-## How v1 works
+| v1 (no tables) | v1.1 (grounded) |
+|---|---|
+| <img src="docs/v1-before/v1_matte_red_lipstick.png" width="300"> | <img src="docs/v1.1_matte_red_lipstick.png" width="300"> |
+
+## The pipeline
 
 ```
-sentence -> local LLM -> spec -> validator -> Blender -> PNG
+sentence -> table lookup -> local LLM -> spec -> validator -> Blender -> PNG
 ```
 
 In more detail:
@@ -20,16 +24,24 @@ In more detail:
 "luxury matte red lipstick box, three-quarter view"
       |
       v
++----------------------+   whole-word lookup in data/: colours, product sizes, style words
+| grounding.py         |   -> only the matching rows, e.g. "lipstick: typically 2.5 x 8.5 x 2.5 cm",
++----------------------+      "luxury: deeper and richer"   (nothing matched -> nothing added)
+      |
+      v
 +----------------------+   system prompt: prompts/spec_writer.md
 | local LLM            |   + a JSON schema generated from spec.py
-| qwen3:8b via Ollama  |   (structured output, thinking off, temperature 0.2)
-+----------------------+
+| qwen3:8b via Ollama  |   + the sentence and its table rows
++----------------------+   (structured output, thinking off, temperature 0.2)
       |  JSON: is_box, shape, unsupported[], spec{...}
       v
 +----------------------+   invalid? the validator's exact error messages
 | spec.py validator    | ----------------------------------------------> back to the LLM
 +----------------------+                                                (2 attempts in total)
       |  valid spec          unsupported[] -> printed and logged, never rendered
+      v
+style words shift the box colour (code, from data/style_words.json)
+      |
       v
 unload the LLM from GPU memory (Ollama keep_alive 0, checked with nvidia-smi)
       |
@@ -46,23 +58,13 @@ runs/<timestamp>_<slug>/   render.png, spec.json, prompt.txt, log.json
 The design choices that matter:
 
 - **One source of truth for the schema.** Every spec field is declared once, in `spec.FIELDS` (default, allowed values, description). `validate_spec()` checks against that table, and `json_schema()` turns the same table into the JSON schema the LLM must follow. They can't drift apart, and `tests/test_schema.py` checks that every value at the edge of the schema's ranges passes the validator and every value just outside fails.
-- **Structured output, then validation anyway.** Ollama's `format` field turns the schema into a grammar that constrains decoding. In practice the grammar enforces the hex pattern, the camera names and the JSON structure. It does **not** enforce number ranges (asked for `roughness: 7.5`, the model wrote 7.5), and the bevel rule (bevel < half the smallest side) can't be written as JSON schema at all. `spec.py` catches both, and that is where the retry loop earns its place.
+- **Structured output, then validation anyway.** Ollama's `format` field turns the schema into a grammar that constrains decoding. In practice the grammar enforces the hex pattern, the camera names and the JSON structure. It does **not** enforce number ranges (asked for `roughness: 7.5`, the model wrote 7.5), and one rule can't be written as JSON schema at all: the bevel may be at most 10% of the box's smallest side. `spec.py` catches those, and that is where the retry loop earns its place.
 - **A repair loop with the real error messages.** If validation fails, the model gets its own reply back plus the validator's messages, word for word, and tries once more. After 2 attempts it stops with a clear error.
-- **Unsupported requests are never faked.** The renderer draws one box with one colour. Logos, text, patterns and other shapes go into an `unsupported` list that is printed and saved in `log.json`, but never passed to the renderer. A non-box (`"a pink perfume bottle"`) still renders as the closest box, with a clear warning.
+- **Grounding with small tables, not a bigger prompt.** The words of the sentence are looked up in three small tables in `data/`, and only the matching rows are added to the request (see [Grounding](#grounding)). This took the eval from 76% to 100% of runs; prompt edits alone didn't move it.
+- **Unsupported requests are never faked.** The renderer draws one box with one colour. Logos, text, patterns, materials and other shapes go into an `unsupported` list that is printed and saved in `log.json`, but never passed to the renderer. A non-box (`"a pink perfume bottle"`) still renders as the closest box, with a clear warning.
+- **The model judges, the code does arithmetic.** Two things an 8B model got wrong reliably are done in code from what the model decides: listing a non-box's shape (from its `shape` field), and shifting a colour for a style word like "luxury" (from `data/style_words.json`). Both are logged, and both are counted separately in the evals.
 - **Shared GPU, one at a time.** `qwen3:8b` takes about 5.5 GB of the 8 GB card. Once the spec is accepted, the model is unloaded and nvidia-smi confirms the memory came back before Blender starts.
-- **Measured, not assumed.** 15 eval sentences with range checks, run 3 times each (see [Evals](#evals)).
-
-## Examples (v1)
-
-Each image is the unedited output of `prompt.py`, from the sentence on the left. All rendered on an RTX 5060 Laptop GPU, 1080x1080, about 3 s each.
-
-| Sentence | What the LLM wrote | Render |
-|---|---|---|
-| `luxury matte red lipstick box, three-quarter view` | 5 x 12 x 3 cm, `#D32F2F`, roughness 0.85, `three_quarter` | <img src="docs/v1_matte_red_lipstick.png" width="260"> |
-| `a high-gloss emerald green perfume box on a pale blush backdrop` | 10 x 20 x 5 cm, `#208040`, roughness 0.1, backdrop `#F8BBD0`, `three_quarter` | <img src="docs/v1_glossy_emerald_perfume.png" width="260"> |
-| `flat lay of a matte sage green skincare gift box, seen from above` | 15 x 10 x 5 cm, `#B5EAD7`, roughness 0.8, `top_down` | <img src="docs/v1_top_down_sage_gift_box.png" width="260"> |
-
-The images also show the model's limits: the lipstick box is bigger than a real one (about 2.5 x 8.5 x 2.5 cm), and "sage" came out closer to mint. See [Known limitations](#known-limitations).
+- **Measured, not assumed.** 30 frozen eval sentences with range checks, run 3 times each, before and after grounding (see [Evals](#evals)).
 
 ## Setup
 
@@ -87,36 +89,38 @@ Output:
 ```
 Sentence: luxury matte red lipstick box, three-quarter view
 Model:    qwen3:8b via Ollama (local, http://127.0.0.1:11434)
-Run:      runs\20261018_134310_luxury-matte-red-lipstick-box-three
+Run:      runs\20261018_145027_luxury-matte-red-lipstick-box-three
 
+[grounding] table rows for this sentence: style luxury, product lipstick
 [llm] attempt 1 of 2: asking qwen3:8b for a spec ...
-[llm]   reply in 5.8 s, 2.7 s of it loading the model; 1996 prompt + 141 output tokens
+[llm]   reply in 5.9 s, 2.7 s of it loading the model; 2445 prompt + 138 output tokens
 [llm]   valid: spec.py accepted the spec
+[grounding] style "luxury" applied to the box colour: #C51E2A -> #841B22
 
 Spec:
-  box        5 x 12 x 3 cm (width x height x depth)
-  finish     colour #D32F2F, roughness 0.85, bevel 0.15 cm
+  box        2.5 x 8.5 x 2.5 cm (width x height x depth)
+  finish     colour #841B22, roughness 0.8, bevel 0.15 cm
   backdrop   #F5F5F5
   camera     three_quarter
-  about      A luxury matte red lipstick box in a three-quarter view.
+  about      Luxury matte red lipstick box, three-quarter view
 
 [gpu] unloading qwen3:8b from GPU memory before rendering ...
-[gpu] GPU memory: 5831 MiB with the model loaded -> 348 MiB after unloading (5483 MiB freed)
+[gpu] GPU memory: 5826 MiB with the model loaded -> 341 MiB after unloading (5485 MiB freed)
 
 Rendering with C:\Program Files\Blender Foundation\Blender 5.2\blender.exe
 [render] device: GPU (OptiX) - NVIDIA GeForce RTX 5060 Laptop GPU
 [...]
-[render] render time: 3.2 s
-[render] colour check: spec #D32F2F, measured #CF2222, Delta E 5.4 (noticeable)
+[render] render time: 3.1 s
+[render] colour check: spec #841B22, measured #82171E, Delta E 1.7 (hard to see)
 
 Done.
-  Run folder:   runs\20261018_134310_luxury-matte-red-lipstick-box-three
-  Image:        runs\20261018_134310_luxury-matte-red-lipstick-box-three\render.png
-  LLM:          qwen3:8b, 1 attempt, 5.8 s (incl. 2.7 s loading the model), 1996 prompt + 141 output tokens
-  GPU memory:   5831 MiB with the model loaded -> 348 MiB after unloading -> 1521 MiB peak while rendering
+  Run folder:   runs\20261018_145027_luxury-matte-red-lipstick-box-three
+  Image:        runs\20261018_145027_luxury-matte-red-lipstick-box-three\render.png
+  LLM:          qwen3:8b, 1 attempt, 5.9 s (incl. 2.7 s loading the model), 2445 prompt + 138 output tokens
+  GPU memory:   5826 MiB with the model loaded -> 341 MiB after unloading -> 1172 MiB peak while rendering
   Device:       GPU (OptiX) - NVIDIA GeForce RTX 5060 Laptop GPU
-  Render time:  3.2 s (total incl. Blender start-up: 5.5 s)
-  Colour check: spec #D32F2F, measured #CF2222, Delta E 5.4 (noticeable)
+  Render time:  3.1 s (total incl. Blender start-up: 5.6 s)
+  Colour check: spec #841B22, measured #82171E, Delta E 1.7 (hard to see)
 ```
 
 The whole run takes about 15 s: loading the model about 3 s (more on the very first run after a reboot), writing the spec about 2–3 s, then Blender.
@@ -126,7 +130,8 @@ Options:
 | Option | What it does |
 |---|---|
 | `--model NAME` | Use another Ollama model, e.g. `--model llama3.1:8b`. Default `qwen3:8b`. |
-| `--verbose` | Show the model's raw JSON replies and Blender's full output. |
+| `--no-grounding` | Don't add the table rows; the model decides everything on its own. |
+| `--verbose` | Show the table rows sent, the model's raw JSON replies and Blender's full output. |
 | `--blender "C:\path\to\blender.exe"` | Use a specific Blender (or set `BLENDER_PATH`). |
 | `--break-first-reply` | For testing: corrupt the model's first reply, to watch the repair loop work (see [The repair loop](#the-repair-loop)). |
 
@@ -141,7 +146,7 @@ Every run gets its own folder, `runs/<timestamp>_<short-slug>/` (ignored by git)
 | `prompt.txt` | The sentence. |
 | `spec.json` | The validated spec that was rendered. Re-render it any time with `python run.py runs\...\spec.json`. |
 | `render.png` | The image. |
-| `log.json` | Model and settings, number of attempts, validation errors per attempt, `is_box`, `shape`, the unsupported list, prompt/output token counts (from Ollama's reply), LLM time (and how much of it was loading the model), render time, device, colour check, and GPU memory with the model loaded, after unloading and at peak while rendering. Also every raw model reply. |
+| `log.json` | Model and settings; whether grounding was on and **which table rows were used** (`grounding_rows`); any style colour shift (`style_changes`); number of attempts and validation errors per attempt; `is_box`, `shape`; the unsupported list, and the model's own list before the code added anything (`model_unsupported`); prompt/output token counts (from Ollama's reply); LLM time (and how much of it was loading the model); render time; device; colour check; GPU memory with the model loaded, after unloading and at peak while rendering. Also every raw model reply. |
 
 ### Things it can't draw
 
@@ -149,10 +154,11 @@ The renderer draws exactly one box with one colour. Anything else is listed, not
 
 ```
 > python prompt.py "a pink perfume bottle with gold logo"
+[grounding] table rows for this sentence: product perfume, colour gold #D4AF37
 [...]
 Spec:
-  box        4 x 16 x 2 cm (width x height x depth)
-  finish     colour #FFC0CB, roughness 0.4, bevel 0.1 cm
+  box        7.5 x 13.5 x 5 cm (width x height x depth)
+  finish     colour #FFC0CB, roughness 0.4, bevel 0.15 cm
   [...]
 
 ========================================================================
@@ -166,9 +172,9 @@ Rendering the closest box instead. Ignored:
   WARNING:      not a box; the closest box was rendered instead.
 ```
 
-For a box with a logo, there's no warning banner, just the list (`Not rendered (the renderer can't draw these): - gold logo`). The box keeps its own colour; the logo's gold doesn't leak into it.
+The gold row was retrieved because "gold" is in the sentence, but it describes the logo, so the box stays pink: colour rows are given to the model as a glossary ("use it for whatever the sentence uses that name for"), not as the box colour.
 
-The model reports two things here: `is_box` (true/false) and `shape` (e.g. `"bottle"`). When it isn't a box, the code makes sure the shape is the first item in the ignored list. Without this, `qwen3:8b` named the shape in only 2 of 12 dev runs once something else (a logo, a label) was also unsupported. It recorded `is_box: false` correctly in all of them. With the dedicated `shape` field it got 11/12. `log.json` records when the code added the shape (`shape_added_by_code`).
+The model reports `is_box` and `shape` (e.g. `"bottle"`). When it isn't a box, the code makes sure the shape is the first item in the ignored list: without that, `qwen3:8b` named the shape in only 2 of 12 dev runs once something else (a logo, a label) was also unsupported. `log.json` records when the code added it (`shape_added_by_code`), and the evals only count the model's own list.
 
 ### When Ollama isn't running
 
@@ -187,88 +193,172 @@ Nothing was generated or rendered.
 
 A model that isn't installed gets `The model qwen9:404b isn't installed in Ollama. Download it with: ollama pull qwen9:404b`.
 
+## Grounding
+
+**The problem.** The v1 renders worked, but the model picked bad values: "emerald" became plain web green, "sage" became mint, the luxury red was a fire-engine red no deeper than a plain red, the lipstick box was twice as wide as a real one, and the gift box was a 3:1 slab. A small model knows roughly what these words mean, but not precisely, and not consistently.
+
+**The fix: three small tables, retrieved per sentence.**
+
+| Table | Rows | What a row says |
+|---|---|---|
+| `data/colours.json` | 44 specific colour names common in cosmetics and packaging (emerald, sage, wine, blush, champagne, rose gold, nude, charcoal, ...) | the hex, from CSS or Wikipedia |
+| `data/product_sizes.json` | 17 products (lipstick, perfume, serum, gift box, eyeshadow palette, lash box, candle, ...) | typical box size and ranges in cm |
+| `data/style_words.json` | 5 styles (luxury, minimal, playful, natural, bold, with synonyms) | a colour shift (lightness, saturation) and a finish |
+
+`grounding.py` matches the sentence against every name and alias: whole words, case-insensitive, longest phrase first, each word used once ("rose gold" isn't also gold; "face cream" is a product, not the colour cream). Only the matching rows are added after the sentence in the user message, at most 4 colours, 2 products and 2 styles, so the system prompt stays the same for every sentence. A word that isn't in the tables is left to the model; a sentence with no match ("a nice box") gets nothing added. Basic colour words (red, blue, green, ...) are deliberately not in the colour table: the model handles them well, and a fixed hex would flatten style words.
+
+For "luxury matte red lipstick box, three-quarter view", the model receives:
+
+```
+luxury matte red lipstick box, three-quarter view
+
+Reference data for words in this sentence (from Prompt-to-Render's tables):
+Product sizes: the usual box for that product, width x height x depth in cm.
+- lipstick: typically 2.5 x 8.5 x 2.5; width 2-3, height 7.5-9.5, depth 2-3
+Style words: choose the plain box colour as usual (don't shift it yourself); the colour shift is applied to it automatically afterwards. Do apply the finish.
+- "luxury": colour becomes deeper and richer (30% darker, 10% less saturated, applied for you). Finish: matte 0.7-0.85, or high-gloss 0.03-0.08 if gloss is asked for; avoid the in-between.
+Use these values. Anything not listed here is up to you.
+```
+
+**Why the style shift is code.** On the dev sentences, `qwen3:8b` couldn't apply a style word to a colour itself. When the style table had example hex values, it copied the example verbatim ("a playful orange box" got the example's `#FF8C42`, darker than its own plain orange). Without examples, it didn't shift at all ("a luxury teal box" came back exactly teal). So the model picks the plain colour and the finish, and `grounding.apply_style()` shifts the box colour in HLS by the table's numbers. It skips the shift when the sentence gives an exact hex.
+
+### Before and after
+
+The same 30 frozen eval sentences, 3 runs each, `qwen3:8b`, temperature 0.2 (built with `python evals/compare.py`, also in `evals/results/comparison_v1.1.md`):
+
+- **baseline**: the v1 prompt, no tables.
+- **prompt-only**: the final v1.1 prompt with no table rows (`--no-grounding`). This separates the effect of the tables from the prompt edits made alongside them.
+- **grounded**: the final v1.1 prompt with table rows.
+
+| Case | baseline | prompt-only | grounded | grounded: values straight from tables or code |
+|---|---|---|---|---|
+| `red_lipstick` | 0/3 | 0/3 | 3/3 | typical size 3 |
+| `navy_serum` | 3/3 | 3/3 | 3/3 | table colour 3, typical size 3 |
+| `hex_exact` | 3/3 | 3/3 | 3/3 | typical size 3 |
+| `hex_glossy` | 3/3 | 3/3 | 3/3 | - |
+| `glossy_black` | 3/3 | 3/3 | 3/3 | - |
+| `shiny_gold` | 0/3 | 0/3 | 3/3 | table colour 3, typical size 3 |
+| `matte_white` | 3/3 | 3/3 | 3/3 | typical size 3 |
+| `camera_front` | 3/3 | 3/3 | 3/3 | typical size 3 |
+| `camera_top_down` | 3/3 | 3/3 | 3/3 | typical size 3 |
+| `camera_three_quarter` | 3/3 | 3/3 | 3/3 | typical size 3 |
+| `tall` | 3/3 | 3/3 | 3/3 | - |
+| `flat` | 3/3 | 3/3 | 3/3 | - |
+| `vague` | 3/3 | 3/3 | 3/3 | - |
+| `not_a_box` | 0/3 | 3/3 | 3/3 | - |
+| `logo` | 3/3 | 3/3 | 3/3 | - |
+| `bottle_logo` | 3/3 | 3/3 | 3/3 | - |
+| `doc_lipstick` | 0/3 | 0/3 | 3/3 | style shift by code 3, typical size 3 |
+| `doc_emerald` | 2/3 | 0/3 | 3/3 | table colour 3 |
+| `doc_sage` | 0/3 | 0/3 | 3/3 | table colour 3, typical size 3 |
+| `emerald_serum` | 3/3 | 0/3 | 3/3 | table colour 3, typical size 3 |
+| `sage_tea` | 0/3 | 0/3 | 3/3 | table colour 3, typical size 3 |
+| `crimson` | 3/3 | 3/3 | 3/3 | table colour 3 |
+| `wine_gift` | 0/3 | 0/3 | 3/3 | table colour 3, typical size 3 |
+| `blush` | 3/3 | 3/3 | 3/3 | table colour 3, typical size 3 |
+| `champagne` | 3/3 | 3/3 | 3/3 | table colour 3, typical size 3 |
+| `high_gloss_white` | 3/3 | 3/3 | 3/3 | - |
+| `plain_red` | 3/3 | 3/3 | 3/3 | - |
+| `luxury_red` | 3/3 | 3/3 | 3/3 | style shift by code 3 |
+| `plain_blue` | 3/3 | 3/3 | 3/3 | - |
+| `playful_blue` | 3/3 | 3/3 | 3/3 | style shift by code 3 |
+| **Runs passed** | 68/90 (76%) | 66/90 (73%) | **90/90 (100%)** | |
+| **Cases passing every run** | 22/30 | 22/30 | 30/30 | |
+| **Retry loop fired** | 0/90 | 0/90 | 0/90 | |
+| **Avg prompt tokens per run** | 1995 | 2256 | 2348 | |
+| **Largest prompt (one call)** | 2002 | 2263 | 2445 | |
+| **Avg LLM time per run** | 2.25 s | 2.28 s | 2.29 s | |
+
+**Why tables beat prompt tweaks here.** The prompt edits alone (prompt-only) didn't improve the score: 66/90 against the baseline's 68/90. They fixed one thing (the model now lists "glass" itself, `not_a_box` 0/3 → 3/3) and, without anyone intending it, broke another: emerald went from the `#208040` family of greens to plain web green `#008000` in all 6 emerald runs (5 of 6 had passed). A small model's guesses for vague words move around with any change to the prompt. The tables replace the guess with a fact for exactly the words in the sentence: every case that went from failing to passing did so by using a table row or the code's style shift (last column). The table rows add about 90 prompt tokens on average (2,348 vs 2,256 for the same prompt without them; about 350 over v1 including the prompt edits), and no measurable time.
+
+**What this does and doesn't show.**
+- Where an eval colour is in the table, the check mostly measures **whether the model copies the row**: the table hexes and the eval's reference colours come from the same public sources (e.g. Wikipedia's emerald `#50C878`). The same goes for sizes: the lipstick and gift-box size checks pass because the model used the table's typical size. That's the point of grounding, but it means a 100% here says the retrieval and copying work, not that the model got better at colour.
+- The two style pairs (`luxury_red`, `playful_blue`) and the luxury lipstick measure **the code's** style shift. Both pairs already passed in the baseline; `doc_lipstick`'s "luxury is darker than plain" check didn't.
+- Runs are close to deterministic (13 of 30 grounded cases gave the same spec in all 3 runs), so a case going 0/3 → 3/3 is usually one changed decision, not three.
+- The table design and the prompt edits were settled on 15 separate dev sentences (`evals/dev_cases.json`), never on the eval sentences. The eval cases and colour definitions were committed before the tables existed, and the baseline results before the tables were written (see the git history).
+
+### The renders, before and after
+
+The same three sentences. The v1 images are in `docs/v1-before/`.
+
+| Sentence | v1 (no tables) | v1.1 (grounded) |
+|---|---|---|
+| `luxury matte red lipstick box, three-quarter view` | <img src="docs/v1-before/v1_matte_red_lipstick.png" width="260"><br>5 x 12 x 3 cm, `#D32F2F` | <img src="docs/v1.1_matte_red_lipstick.png" width="260"><br>2.5 x 8.5 x 2.5 cm (table), `#C51E2A` → luxury `#841B22` |
+| `a high-gloss emerald green perfume box on a pale blush backdrop` | <img src="docs/v1-before/v1_glossy_emerald_perfume.png" width="260"><br>`#208040`, roughness 0.1, backdrop `#F8BBD0` | <img src="docs/v1.1_glossy_emerald_perfume.png" width="260"><br>emerald `#50C878`, roughness 0.1, blush backdrop `#F4C2C2` (both table) |
+| `flat lay of a matte sage green skincare gift box, seen from above` | <img src="docs/v1-before/v1_top_down_sage_gift_box.png" width="260"><br>15 x 10 x 5 cm, `#B5EAD7` (mint) | <img src="docs/v1.1_top_down_sage_gift_box.png" width="260"><br>22 x 8 x 18 cm (table), sage `#BCB88A` (table) |
+
+What's still not right in these images:
+- **"High-gloss" still looks satin.** The spec has roughness 0.1, which passes the "high-gloss ≤ 0.1" check, but under the soft studio lights 0.1 still gives a broad, soft highlight. A truly glossy look needs a lower roughness (about 0.03–0.05) or harder lighting.
+- **Sage** is Wikipedia's sage `#BCB88A`, which reads closer to khaki than to the greener "sage green" many brands use (e.g. `#9CAF88`, which the eval also accepts).
+
 ## The repair loop
 
 If the spec fails validation, the loop sends the model's reply back to it with the validator's exact messages and asks for a corrected version. It allows 2 attempts in total.
 
-With structured output on, the loop **never fired naturally** in the final eval (0 of 45 runs), because the model's numbers stayed in range. So it is tested two ways:
+With structured output on, the loop **never fired naturally** in any eval run (0 of 270 runs across baseline, prompt-only and grounded): the model's numbers stayed in range. So it is tested two ways:
 
-1. **Offline, with a scripted fake model** (`tests/test_spec_writer.py`). Covers: bad then fixed, bad twice then give up, broken JSON, and that the exact validator messages and the bad reply are what get sent back.
+1. **Offline, with a scripted fake model** (`tests/test_spec_writer.py`). Covers: bad then fixed, bad twice then give up, broken JSON, that the exact validator messages and the bad reply are what get sent back, and that the table rows go with every attempt.
 2. **With the real model** (`--break-first-reply`). The model's first reply is corrupted on purpose (roughness 1.4 and a bevel as wide as the box). The validator rejects it, and the real model has to repair it from the real error messages:
 
 ```
 > python prompt.py "a satin teal tea box, three-quarter view" --break-first-reply
+[grounding] table rows for this sentence: colour teal #008080, product tea
 [llm] attempt 1 of 2: asking qwen3:8b for a spec ...
-[llm]   reply in 5.7 s, 2.7 s of it loading the model; 1995 prompt + 135 output tokens
+[llm]   reply in 5.8 s, 2.7 s of it loading the model; 2388 prompt + 132 output tokens
 [llm]   note: first reply corrupted on purpose (--break-first-reply)
-[llm]   reply:
-[llm]   | {
-[...]
-[llm]   |       "roughness": 1.4,
-[llm]   |       "bevel_cm": 12
 [...]
 [llm]   INVALID: spec.py found 2 problem(s):
 [llm]     - box.roughness: must be between 0 and 1, got 1.4
-[llm]     - box.bevel_cm: must be less than half the smallest box side (4 cm for this box), got 12
+[llm]     - box.bevel_cm: must be at most 10% of the smallest box side (0.6 cm for this box), got 8
 [llm] attempt 2 of 2: sending the 2 validation error(s) back to the model ...
-[llm]   reply in 2.3 s; 2208 prompt + 133 output tokens
+[llm]   reply in 2.2 s; 2603 prompt + 131 output tokens
 [llm]   valid: spec.py accepted the spec
 
 Spec:
-  box        12 x 18 x 8 cm (width x height x depth)
-  finish     colour #008080, roughness 0.4, bevel 1.5 cm
+  box        8 x 14 x 6 cm (width x height x depth)
+  finish     colour #008080, roughness 0.4, bevel 0.6 cm
 ```
 
-The model fixed both values and kept everything else. The fixed bevel (1.5 cm) is valid but much rounder than the prompt's usual 0.1–0.4 cm: the model fixes just enough to pass. I tried adding "pick values that follow the rules, not just values that pass" to the fix request. In one test it still chose 1.5 cm, so I dropped the extra wording.
+The model fixed both values and kept everything else. It fixes just enough to pass: the bevel landed exactly on the limit. In v1 the limit was "under half the smallest side", and the same demo produced a 1.5 cm bevel on an 8 cm side that looked like a bar of soap. v1.1's validator caps the bevel at 10% of the smallest side, so a repair can't go that far (at 10% the edges are still soft, but it reads as a box).
 
 ## Evals
 
 ```
-python evals/run_evals.py                      # 15 cases x 3 runs, specs only (about 2 minutes)
-python evals/run_evals.py --render             # also render one spec per case (model unloaded first)
-python evals/run_evals.py --model llama3.1:8b  # compare models
-python evals/run_evals.py --runs 1 --cases red_lipstick,vague
+python evals/run_evals.py                                  # 30 cases x 3 runs, specs only (about 3.5 minutes)
+python evals/run_evals.py --label grounded                 # name the results file
+python evals/run_evals.py --no-grounding --label prompt-only
+python evals/run_evals.py --render                         # also render one spec per case (model unloaded first)
+python evals/run_evals.py --model llama3.1:8b              # compare models
+python evals/run_evals.py --runs 1 --cases luxury_red      # a referenced case (plain_red) comes along
+python evals/run_evals.py --cases-file evals/dev_cases.json  # the dev set; results go to runs/dev_evals/
+python evals/compare.py <a.json> <b.json> [...]            # side-by-side table
 ```
 
-The 15 sentences in `evals/cases.json` go through exactly the same LLM + validation loop as `prompt.py`. Checks run on the final spec and are **ranges, not exact values**: "glossy" means roughness ≤ 0.2, "red" means a hue between 345° and 15°, "tall" means height > 1.5 × width. A run passes only if it produced a valid spec within 2 attempts **and** every check passes. Results go to `evals/results/<timestamp>.json` (every spec, every raw reply, every check) and a Markdown summary beside it.
+The 30 sentences in `evals/cases.json` go through exactly the same LLM + validation loop as `prompt.py`. Checks run on the final spec and are **ranges, not exact values**. A run passes only if it produced a valid spec within 2 attempts **and** every check passes. Results go to `evals/results/<timestamp>_<label>.json` (every spec, every raw reply, the table rows used, every check) and a Markdown summary beside it.
 
-The eval sentences were written and frozen **before** the system prompt, and none of them (or their products) appear in the prompt as examples. Prompt changes were tried on a separate set of dev sentences.
+What the checks cover:
 
-### Latest results
+| Check | Example |
+|---|---|
+| Named colours | "emerald", "sage", "crimson", "wine", "gold", "navy", "blush", "champagne" must fall inside hue/saturation/lightness ranges in `evals/colour_definitions.json`. These were written from general colour definitions (Wikipedia, CSS, Pantone) **before** the colour table existed, and never derived from it: where a colour has two or more standard references, the range is their span plus fixed tolerances (hue ±10°, saturation ±0.15, L\* ±10); navy and blush follow a written description. |
+| Finish | "glossy" roughness ≤ 0.2, "high-gloss" ≤ 0.1, "matte" ≥ 0.6. |
+| Sizes and proportions | lipstick height 6–10 cm with width and depth 1.5–4 cm; gift box top face at most 1.6:1; "tall" height > 1.5 × width; "flat" height ≤ half the width and depth. |
+| Camera | front / top_down / three_quarter, including three-quarter when no angle is named. |
+| Non-box and unsupported | `shape` must contain "bottle"; glass and logos must be in the **model's own** unsupported list (items the code adds don't count). |
+| Style pairs | "a luxury red box" must be at least 5 L\* darker or 0.10 less saturated than "a red box" (mean over its runs); "a playful blue box" lighter or more saturated than "a blue box". |
 
-Model `qwen3:8b` (Ollama, local), 3 runs per case, 2026-10-18 (`evals/results/20261018_133949.json`):
+Rules:
+- The eval sentences and checks are frozen. They were committed before any table existed, and the baseline results were committed before the tables were written.
+- Tuning used only the dev sentences in `evals/dev_cases.json`.
+- No check was loosened after seeing results.
 
-| Case | Sentence | Tests | Passed | Distinct specs |
-|---|---|---|---|---|
-| `red_lipstick` | a red lipstick box | named colour, realistic size | 3/3 | 2 |
-| `navy_serum` | a navy blue serum box | named colour | 3/3 | 1 |
-| `hex_exact` | a perfume box in #1B4D3E | exact hex | 3/3 | 1 |
-| `hex_glossy` | a glossy box in #F4B6C2 | exact hex, glossy | 3/3 | 2 |
-| `glossy_black` | a glossy black perfume box | glossy, named colour | 3/3 | 2 |
-| `shiny_gold` | a shiny gold candle box | shiny (= glossy), named colour | 3/3 | 2 |
-| `matte_white` | a matte white face cream carton | matte, named colour | 3/3 | 1 |
-| `camera_front` | front view of a yellow soap box | camera: front, named colour | 3/3 | 1 |
-| `camera_top_down` | overhead shot of a flat blue jewellery box | camera: top_down, flat proportions | 3/3 | 2 |
-| `camera_three_quarter` | a purple tea box, three-quarter view | camera: three_quarter, named colour | 3/3 | 1 |
-| `tall` | a tall, slim grey box | tall proportions, named colour | 3/3 | 2 |
-| `flat` | a flat square box for a silk scarf | flat proportions | 3/3 | 3 |
-| `vague` | a nice box | vague prompt | 3/3 | 3 |
-| `not_a_box` | a glass perfume bottle | non-box prompt | 3/3 | 3 |
-| `logo` | a white matte box with a gold logo on the front | logo request | 3/3 | 1 |
+Things the checks don't catch (by design, these are not changed after the fact):
+- v1's emerald `#208040` is **inside** the emerald range built from the references (hue 140°, L\* 47), so that complaint is only caught when the model picks plain `#008000`.
+- The "high-gloss ≤ 0.1" check passes roughness 0.1, which still renders satin-like (see above).
+- "glass" is matched as a substring of the model's own unsupported items, so an item like "glass perfume bottle" (restating the object) counts as flagging glass.
+- The gold range excludes CSS `gold` (`#FFD700`, a saturated golden yellow) because packaging gold is metallic gold (`#D4AF37`). That's a judgment call; it is written down in `evals/colour_definitions.json`.
 
-- **Overall:** 45/45 runs passed (100%); 15/15 cases passed every run.
-- **Retry loop fired:** 0/45 runs. Still invalid after 2 attempts: 0.
-- **Average LLM time:** 2.3 s per run (about 1,990 prompt + 130 output tokens), with the model already loaded.
-
-How to read this honestly:
-
-- **The runs are not very independent.** At temperature 0.2, 6 of the 15 cases gave the identical spec in all 3 runs ("Distinct specs" = 1). So 3 runs measure consistency more than they give three fresh samples.
-- **These checks are what this model finds easy.** A perfect score here doesn't mean the specs are good. Some failures no check catches:
-  - The lipstick size check (longest side 6–12 cm, shortest 1.5–4 cm) is looser than I meant it to be. It passed `5 x 12 x 2.5`, right at the 12 cm limit, while a real lipstick carton is about `2.5 x 8.5 x 2.5`. It is reported here rather than tightened after the fact.
-  - Named colours are mostly CSS keyword colours (`#000080` navy, `#FFD700` gold, `#800080` purple).
-  - The backdrop is usually plain `#F5F5F5`, although the prompt asks for a soft tint.
-- **`not_a_box` passes partly thanks to code.** In all 3 runs the model set `is_box: false` and `shape: "bottle"`, and the code put "bottle shape" in the unsupported list (see [Things it can't draw](#things-it-cant-draw)). The model's own unsupported list was **empty** in all 3, so "glass" (transparency, which the renderer can't do) was flagged nowhere; the box came out white. The check's keywords ("bottle" or "shape") would accept any non-box shape the model names, so in practice this case now mostly tests `is_box`. Before the `shape` field existed, the model listed "glass perfume bottle" itself in 3/3 runs.
-- **One prompt fix was measured on dev sentences.** In the first eval run, 2 of 45 runs chose a `front` camera although the sentence named no angle; no check covered that. (5 of 45 if you count "a gold logo *on the front*", which got `front` in all 3 runs.) On 10 dev sentences with no angle, `front` came up in 6 of 20 runs. After making "three-quarter unless asked" explicit, it was 0 of 20. 14 of 14 dev runs with an explicit front/top-down/angled request still got the right camera. The first eval run (also 45/45, before the fix) is kept in `evals/results/20261018_132659.json`.
+v1's 15-case results are kept in `evals/results/` (`20261018_132659`, `20261018_133949`) for history; they used the older, looser checks.
 
 ## Tests
 
@@ -276,17 +366,18 @@ How to read this honestly:
 python -m unittest discover tests
 ```
 
-Offline, no Ollama or Blender needed (27 tests):
+Offline, no Ollama or Blender needed (48 tests):
 
-- `test_schema.py`: the generated JSON schema and the validator agree on every field (range edges, choices, colour pattern), and the LLM's schema is exactly the spec schema.
-- `test_spec_writer.py`: the repair loop with a scripted fake model, and parsing of the model's reply (including the non-box shape rule).
-- `test_eval_checks.py`: the eval checks themselves (hue wrapping round red, strict vs inclusive ranges, ...).
+- `test_schema.py`: the generated JSON schema and the validator agree on every field (range edges, choices, colour pattern), the bevel rule, and the LLM's schema is exactly the spec schema.
+- `test_spec_writer.py`: the repair loop with a scripted fake model, parsing of the model's reply (including the non-box shape rule and the model's own unsupported list), and that table rows reach every attempt, also through `--break-first-reply`.
+- `test_grounding.py`: the table lookup (longest phrase first, whole words, a product word isn't also a colour, row caps), the style shift, and that the tables are well formed.
+- `test_eval_checks.py`: the eval checks themselves; every colour definition's references fall inside its range, and known-wrong colours (mint for sage, CSS green for emerald) fall outside.
 
 ---
 
 # The renderer (v0.1)
 
-Everything below is the part that turns a spec into an image. It is unchanged in v1, and still works on its own with hand-written JSON:
+Everything below is the part that turns a spec into an image. It is unchanged since v0.1 except for one validator rule (the bevel limit, added in v1.1), and still works on its own with hand-written JSON:
 
 ```
 python run.py specs/pink_three_quarter.json
@@ -377,7 +468,7 @@ Copy one of the files in `specs/`, change the values, and run it. Every field is
 
 ### Spec fields
 
-These are defined once, in `spec.FIELDS`. The LLM in v1 writes `description`, `box`, `background_colour` and `camera`; the render settings (`colour_mode`, `lighting`, `resolution`, `samples`) keep their defaults.
+These are defined once, in `spec.FIELDS`. The LLM writes `description`, `box`, `background_colour` and `camera`; the render settings (`colour_mode`, `lighting`, `resolution`, `samples`) keep their defaults.
 
 | Field | Default | Allowed | What it means |
 |---|---|---|---|
@@ -387,7 +478,7 @@ These are defined once, in `spec.FIELDS`. The LLM in v1 writes `description`, `b
 | `box.depth_cm` | `4` | 0.5 – 200 | Front-to-back size. |
 | `box.colour` | `"#D9D9D9"` | hex, `"#RRGGBB"` or `"#RGB"` | Box colour. |
 | `box.roughness` | `0.5` | 0 – 1 | `0` = mirror-glossy, `1` = fully matte. Glossy packaging ≈ 0.1–0.2, matte card ≈ 0.6–0.8. |
-| `box.bevel_cm` | `0.15` | 0 to just under half the smallest side | How rounded the edges are. `0` = razor sharp. Small values (0.1–0.3) look most realistic. |
+| `box.bevel_cm` | `0.15` | 0 to 10% of the smallest side | How rounded the edges are. `0` = razor sharp. Small values (0.1–0.3) look most realistic. The 10% cap keeps every face at least 80% flat, so it always reads as a box. A box with a side under 1.5 cm needs a bevel smaller than the default. |
 | `background_colour` | `"#EDEDED"` | hex | Colour of the studio backdrop. |
 | `colour_mode` | `"accurate"` | `"accurate"`, `"realistic"` | `accurate`: the box colour matches your hex as closely as possible. `realistic`: filmic AgX look; nice highlights, but colours come out paler. See below. |
 | `camera` | `"three_quarter"` | `"front"`, `"three_quarter"`, `"top_down"` | Camera angle (see below). |
@@ -482,11 +573,11 @@ The checks also catch:
 - numbers out of range;
 - text where a number should be;
 - unknown camera names;
-- bevels too big for the box;
+- bevels bigger than 10% of the box's smallest side;
 - broken JSON (with the line and column);
 - misspelled field names, with a suggestion such as `box.color: unknown field. Did you mean "box.colour"?`.
 
-These are the same messages the LLM receives in v1 when its spec fails.
+These are the same messages the LLM receives when its spec fails.
 
 ## GPU vs CPU
 
@@ -502,16 +593,18 @@ On an RTX 5060 Laptop GPU a 1080×1080, 128-sample render takes about 3 seconds,
 
 | File | Job |
 |---|---|
-| `prompt.py` | **v1 entry point.** Sentence in, render out: LLM + validation loop, unload the model, render, save the run folder. |
+| `prompt.py` | **The entry point.** Sentence in, render out: table lookup, LLM + validation loop, unload the model, render, save the run folder. |
+| `grounding.py` | The table lookup: finds the rows of `data/` that match the sentence and writes the block added to the request; applies style-word colour shifts. |
+| `data/` | The grounding tables: `colours.json`, `product_sizes.json`, `style_words.json`. |
 | `llm_backend.py` | The only code that talks to an LLM. Builds the system prompt and the JSON schema, and implements Ollama over its REST API (standard-library `urllib`). A new backend (e.g. a hosted API) only has to implement `_chat(messages, schema)`, `release()` and `check()`. |
-| `spec_writer.py` | The validation loop: parse the model's reply, validate the spec, send errors back, 2 attempts max. Shared by `prompt.py` and the evals. |
+| `spec_writer.py` | The validation loop: look up the table rows, parse the model's reply, validate the spec, send errors back (2 attempts max), apply style shifts. Shared by `prompt.py` and the evals. |
 | `prompts/spec_writer.md` | The system prompt: what the renderer can do, and the rules (sizes, colours, finish, camera, unsupported, non-box). |
 | `gpu.py` | GPU memory readings from nvidia-smi. |
 | `run.py` | Renders a JSON spec. Checks the spec, finds Blender, starts it in the background, shows the important lines, saves the PNG, prints the timing and colour check. |
 | `spec.py` | The spec's single source of truth: fields, defaults, validation, and the JSON schema. Used by everything, including Blender. |
 | `render_scene.py` | Runs inside Blender. Builds the box, backdrop, lights, world and camera from scratch, runs the light meter (`accurate` mode), renders, checks the colour. |
 | `check_colour.py` | Measures the box colour in a render against the spec (spec hex, measured hex, Delta E). |
-| `evals/` | `cases.json` (15 eval sentences and their checks), `run_evals.py`, and `results/`. |
+| `evals/` | `cases.json` (30 frozen eval sentences and their checks), `colour_definitions.json` (what each colour name must look like), `dev_cases.json` (the separate tuning set), `run_evals.py`, `compare.py`, and `results/`. |
 | `tests/` | Unit tests (`python -m unittest discover tests`) and deliberately broken specs. |
 | `specs/` | Example hand-written specs. |
 | `docs/` | The example images shown above. |
@@ -528,7 +621,7 @@ LLM details:
 
 - **Structured output:** the schema goes in Ollama's `format` field, and also into the system prompt, as Ollama's docs recommend.
 - **Thinking off:** `qwen3` thinks out loud by default. The request sets `"think": false` (only for models that support thinking), and any stray `<think>` block would be stripped before parsing.
-- **Settings:** temperature 0.2, context 4096 tokens, at most 512 output tokens. Ollama silently cuts the start off a prompt that doesn't fit its context, which would remove the system prompt. So the context size is set explicitly, and every reply is checked: a prompt that used more than 4096 − 512 tokens is an error. The prompt is about 2,000 tokens; a retry about 2,200.
+- **Settings:** temperature 0.2, context 4096 tokens, at most 512 output tokens. Ollama silently cuts the start off a prompt that doesn't fit its context, which would remove the system prompt. So the context size is set explicitly, and every reply is checked: a prompt that used more than 4096 − 512 tokens is an error. The prompt is about 2,250 tokens plus up to about 200 for table rows; the largest single call seen was 2,603 tokens (a retry).
 - **Unloading:** `keep_alive: 0`, then wait until Ollama's `/api/ps` no longer lists the model, then wait until nvidia-smi shows the memory back. It also unloads when the spec is invalid, on errors and on Ctrl-C.
 
 You can also run the Blender part directly:
@@ -540,9 +633,11 @@ You can also run the Blender part directly:
 ## Known limitations
 
 - **One box, one colour.** No logos, text, patterns, other shapes, materials or props. These are reported, never faked.
-- **An 8B model's taste.** The specs are valid and follow the main rules, but colours are often plain CSS colours, sizes can be off for small products (lipstick), backdrops are usually plain off-white, and round objects become boxes with the wrong depth (the perfume bottle came out 4 x 16 x **2** cm instead of square).
-- **Materials aren't reliably flagged.** "Glass" in "a glass perfume bottle" wasn't listed as unsupported (see the eval notes); the box was simply white.
-- **Repairs pass, but can be off-style** (see [The repair loop](#the-repair-loop)).
+- **Only what's in the tables is grounded.** A colour name or product that isn't in `data/` is the model's guess, and its guesses are often plain CSS colours. Basic colour words (red, blue) are always the model's own choice.
+- **Backdrops** are usually plain off-white, although the prompt asks for a soft tint. Named backdrop colours ("a pale blush backdrop") do work.
+- **"High-gloss" looks satin** at the roughness the model picks (0.1); see [Grounding](#grounding).
+- **Style words are arithmetic, not taste.** "Luxury" darkens by 30% in code; it doesn't pick a different colour family (e.g. red stays red, it doesn't become burgundy).
+- **Repairs pass, but sit at the limit** (see [The repair loop](#the-repair-loop)).
 - **Cold start.** The first run after a reboot loads about 5 GB from disk. Later runs load in about 3 s, because the model is unloaded after every run to free the GPU for Blender.
 
 ## Troubleshooting
@@ -557,5 +652,6 @@ You can also run the Blender part directly:
 
 - **v0**: JSON spec → studio render of a box.
 - **v0.1**: colour modes with a measured colour check, cleaner studio sweeps, softer top-down lighting.
-- **v1 (this)**: a local LLM (Ollama, `qwen3:8b`) turns a sentence into the spec, with a schema generated from the validator, a repair loop, GPU hand-off and evals. Fully offline.
-- **Next**: harder eval cases (conflicting instructions, named backdrops, sizes of small products), a second backend behind `llm_backend.py`, and comparing models with `--model`.
+- **v1**: a local LLM (Ollama, `qwen3:8b`) turns a sentence into the spec, with a schema generated from the validator, a repair loop, GPU hand-off and evals. Fully offline.
+- **v1.1 (this)**: stricter frozen evals (30 cases, colour definitions, style pairs), a bevel limit in the validator, and grounding tables retrieved per sentence: 76% → 100% of eval runs.
+- **Next**: harder eval cases (colour names and products not in the tables, conflicting instructions), a lower roughness for "high-gloss", a second backend behind `llm_backend.py`, and comparing models with `--model`.
