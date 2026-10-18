@@ -1,0 +1,146 @@
+{
+  "about": "Eval cases for the spec writer. Each sentence goes through the same LLM + validation loop as prompt.py; the checks run on the final spec. Every check is a range, not an exact value, except where the sentence gives an exact hex. Colour checks use HSV hue (degrees) and saturation (0-1) and CIE L* lightness (0-100). A run also fails if no valid spec came back within 2 attempts. These sentences are kept out of prompts/spec_writer.md on purpose.",
+  "cases": [
+    {
+      "id": "red_lipstick",
+      "covers": "named colour, realistic size",
+      "sentence": "a red lipstick box",
+      "checks": [
+        {"type": "hue", "min": 345, "max": 15},
+        {"type": "saturation", "min": 0.5},
+        {"type": "size", "side": "longest", "min": 6, "max": 12},
+        {"type": "size", "side": "shortest", "min": 1.5, "max": 4}
+      ]
+    },
+    {
+      "id": "navy_serum",
+      "covers": "named colour",
+      "sentence": "a navy blue serum box",
+      "checks": [
+        {"type": "hue", "min": 200, "max": 250},
+        {"type": "lightness", "max": 35}
+      ]
+    },
+    {
+      "id": "hex_exact",
+      "covers": "exact hex",
+      "sentence": "a perfume box in #1B4D3E",
+      "checks": [
+        {"type": "hex", "equals": "#1B4D3E"}
+      ]
+    },
+    {
+      "id": "hex_glossy",
+      "covers": "exact hex, glossy",
+      "sentence": "a glossy box in #F4B6C2",
+      "checks": [
+        {"type": "hex", "equals": "#F4B6C2"},
+        {"type": "roughness", "max": 0.2}
+      ]
+    },
+    {
+      "id": "glossy_black",
+      "covers": "glossy, named colour",
+      "sentence": "a glossy black perfume box",
+      "checks": [
+        {"type": "roughness", "max": 0.2},
+        {"type": "lightness", "max": 20}
+      ]
+    },
+    {
+      "id": "shiny_gold",
+      "covers": "shiny (= glossy), named colour",
+      "sentence": "a shiny gold candle box",
+      "checks": [
+        {"type": "roughness", "max": 0.2},
+        {"type": "hue", "min": 35, "max": 60}
+      ]
+    },
+    {
+      "id": "matte_white",
+      "covers": "matte, named colour",
+      "sentence": "a matte white face cream carton",
+      "checks": [
+        {"type": "roughness", "min": 0.6},
+        {"type": "lightness", "min": 85}
+      ]
+    },
+    {
+      "id": "camera_front",
+      "covers": "camera: front, named colour",
+      "sentence": "front view of a yellow soap box",
+      "checks": [
+        {"type": "camera", "equals": "front"},
+        {"type": "hue", "min": 40, "max": 65}
+      ]
+    },
+    {
+      "id": "camera_top_down",
+      "covers": "camera: top_down, flat proportions",
+      "sentence": "overhead shot of a flat blue jewellery box",
+      "checks": [
+        {"type": "camera", "equals": "top_down"},
+        {"type": "ratio", "num": "height_cm", "den": "width_cm", "max": 0.5},
+        {"type": "ratio", "num": "height_cm", "den": "depth_cm", "max": 0.5}
+      ]
+    },
+    {
+      "id": "camera_three_quarter",
+      "covers": "camera: three_quarter, named colour",
+      "sentence": "a purple tea box, three-quarter view",
+      "checks": [
+        {"type": "camera", "equals": "three_quarter"},
+        {"type": "hue", "min": 255, "max": 315}
+      ]
+    },
+    {
+      "id": "tall",
+      "covers": "tall proportions, named colour",
+      "sentence": "a tall, slim grey box",
+      "checks": [
+        {"type": "ratio", "num": "height_cm", "den": "width_cm", "gt": 1.5},
+        {"type": "saturation", "max": 0.2}
+      ]
+    },
+    {
+      "id": "flat",
+      "covers": "flat proportions",
+      "sentence": "a flat square box for a silk scarf",
+      "checks": [
+        {"type": "ratio", "num": "height_cm", "den": "width_cm", "max": 0.5},
+        {"type": "ratio", "num": "height_cm", "den": "depth_cm", "max": 0.5},
+        {"type": "ratio", "num": "width_cm", "den": "depth_cm", "min": 0.9, "max": 1.1}
+      ]
+    },
+    {
+      "id": "vague",
+      "covers": "vague prompt",
+      "sentence": "a nice box",
+      "checks": [
+        {"type": "is_box", "equals": true},
+        {"type": "unsupported_empty"},
+        {"type": "size", "side": "longest", "min": 5, "max": 60}
+      ]
+    },
+    {
+      "id": "not_a_box",
+      "covers": "non-box prompt",
+      "sentence": "a glass perfume bottle",
+      "checks": [
+        {"type": "is_box", "equals": false},
+        {"type": "unsupported_mentions", "any": ["bottle", "shape"]}
+      ]
+    },
+    {
+      "id": "logo",
+      "covers": "logo request",
+      "sentence": "a white matte box with a gold logo on the front",
+      "checks": [
+        {"type": "unsupported_mentions", "any": ["logo"]},
+        {"type": "is_box", "equals": true},
+        {"type": "lightness", "min": 85},
+        {"type": "roughness", "min": 0.6}
+      ]
+    }
+  ]
+}

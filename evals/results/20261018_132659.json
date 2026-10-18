@@ -1,0 +1,2719 @@
+{
+  "created": "2026-10-18T13:28:40",
+  "model": "qwen3:8b",
+  "backend": "ollama",
+  "llm_settings": {
+    "url": "http://127.0.0.1:11434",
+    "temperature": 0.2,
+    "think": false,
+    "num_ctx": 4096,
+    "num_predict": 512
+  },
+  "runs_per_case": 3,
+  "max_attempts": 2,
+  "eval_seconds": 101.2,
+  "summary": {
+    "passed_runs": 45,
+    "total_runs": 45,
+    "pass_rate": 1.0,
+    "cases_passing_all_runs": 15,
+    "total_cases": 15,
+    "retry_runs": 0,
+    "retry_rate": 0.0,
+    "invalid_after_retries": 0,
+    "avg_llm_seconds": 2.25,
+    "avg_prompt_tokens": 1873,
+    "avg_output_tokens": 128
+  },
+  "cases": [
+    {
+      "id": "red_lipstick",
+      "sentence": "a red lipstick box",
+      "covers": "named colour, realistic size",
+      "checks": [
+        {
+          "type": "hue",
+          "min": 345,
+          "max": 15
+        },
+        {
+          "type": "saturation",
+          "min": 0.5
+        },
+        {
+          "type": "size",
+          "side": "longest",
+          "min": 6,
+          "max": 12
+        },
+        {
+          "type": "size",
+          "side": "shortest",
+          "min": 1.5,
+          "max": 4
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.71,
+          "prompt_tokens": 1870,
+          "output_tokens": 123,
+          "checks": [
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 0 deg of #D32F2F (want 345..15)"
+            },
+            {
+              "check": "saturation",
+              "passed": true,
+              "found": "saturation 0.78 of #D32F2F (want >= 0.5)"
+            },
+            {
+              "check": "size",
+              "passed": true,
+              "found": "longest side 12 cm (want >= 6 and <= 12)"
+            },
+            {
+              "check": "size",
+              "passed": true,
+              "found": "shortest side 2 cm (want >= 1.5 and <= 4)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A red lipstick box on a pale backdrop.",
+            "box": {
+              "width_cm": 5,
+              "height_cm": 12,
+              "depth_cm": 2,
+              "colour": "#D32F2F",
+              "roughness": 0.4,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A red lipstick box on a pale backdrop.\",\n    \"box\": {\n      \"width_cm\": 5,\n      \"height_cm\": 12,\n      \"depth_cm\": 2,\n      \"colour\": \"#D32F2F\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 1.98,
+          "prompt_tokens": 1870,
+          "output_tokens": 123,
+          "checks": [
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 0 deg of #D32F2F (want 345..15)"
+            },
+            {
+              "check": "saturation",
+              "passed": true,
+              "found": "saturation 0.78 of #D32F2F (want >= 0.5)"
+            },
+            {
+              "check": "size",
+              "passed": true,
+              "found": "longest side 12 cm (want >= 6 and <= 12)"
+            },
+            {
+              "check": "size",
+              "passed": true,
+              "found": "shortest side 2 cm (want >= 1.5 and <= 4)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A red lipstick box on a pale backdrop.",
+            "box": {
+              "width_cm": 5,
+              "height_cm": 12,
+              "depth_cm": 2,
+              "colour": "#D32F2F",
+              "roughness": 0.4,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A red lipstick box on a pale backdrop.\",\n    \"box\": {\n      \"width_cm\": 5,\n      \"height_cm\": 12,\n      \"depth_cm\": 2,\n      \"colour\": \"#D32F2F\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.06,
+          "prompt_tokens": 1870,
+          "output_tokens": 123,
+          "checks": [
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 0 deg of #D32F2F (want 345..15)"
+            },
+            {
+              "check": "saturation",
+              "passed": true,
+              "found": "saturation 0.78 of #D32F2F (want >= 0.5)"
+            },
+            {
+              "check": "size",
+              "passed": true,
+              "found": "longest side 12 cm (want >= 6 and <= 12)"
+            },
+            {
+              "check": "size",
+              "passed": true,
+              "found": "shortest side 2 cm (want >= 1.5 and <= 4)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A red lipstick box on a pale backdrop.",
+            "box": {
+              "width_cm": 5,
+              "height_cm": 12,
+              "depth_cm": 2,
+              "colour": "#D32F2F",
+              "roughness": 0.4,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A red lipstick box on a pale backdrop.\",\n    \"box\": {\n      \"width_cm\": 5,\n      \"height_cm\": 12,\n      \"depth_cm\": 2,\n      \"colour\": \"#D32F2F\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "navy_serum",
+      "sentence": "a navy blue serum box",
+      "covers": "named colour",
+      "checks": [
+        {
+          "type": "hue",
+          "min": 200,
+          "max": 250
+        },
+        {
+          "type": "lightness",
+          "max": 35
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.15,
+          "prompt_tokens": 1871,
+          "output_tokens": 126,
+          "checks": [
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 240 deg of #000080 (want 200..250)"
+            },
+            {
+              "check": "lightness",
+              "passed": true,
+              "found": "L* 13 of #000080 (want <= 35)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A navy blue serum box on a soft studio backdrop.",
+            "box": {
+              "width_cm": 8,
+              "height_cm": 15,
+              "depth_cm": 4,
+              "colour": "#000080",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#f5f5f5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A navy blue serum box on a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 8,\n      \"height_cm\": 15,\n      \"depth_cm\": 4,\n      \"colour\": \"#000080\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#f5f5f5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.13,
+          "prompt_tokens": 1871,
+          "output_tokens": 126,
+          "checks": [
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 240 deg of #000080 (want 200..250)"
+            },
+            {
+              "check": "lightness",
+              "passed": true,
+              "found": "L* 13 of #000080 (want <= 35)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A navy blue serum box on a soft studio backdrop.",
+            "box": {
+              "width_cm": 8,
+              "height_cm": 12,
+              "depth_cm": 4,
+              "colour": "#000080",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#f5f5f5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A navy blue serum box on a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 8,\n      \"height_cm\": 12,\n      \"depth_cm\": 4,\n      \"colour\": \"#000080\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#f5f5f5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.12,
+          "prompt_tokens": 1871,
+          "output_tokens": 126,
+          "checks": [
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 240 deg of #000080 (want 200..250)"
+            },
+            {
+              "check": "lightness",
+              "passed": true,
+              "found": "L* 13 of #000080 (want <= 35)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A navy blue serum box on a soft studio backdrop.",
+            "box": {
+              "width_cm": 8,
+              "height_cm": 15,
+              "depth_cm": 4,
+              "colour": "#000080",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#f5f5f5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A navy blue serum box on a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 8,\n      \"height_cm\": 15,\n      \"depth_cm\": 4,\n      \"colour\": \"#000080\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#f5f5f5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hex_exact",
+      "sentence": "a perfume box in #1B4D3E",
+      "covers": "exact hex",
+      "checks": [
+        {
+          "type": "hex",
+          "equals": "#1B4D3E"
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.26,
+          "prompt_tokens": 1877,
+          "output_tokens": 133,
+          "checks": [
+            {
+              "check": "hex",
+              "passed": true,
+              "found": "colour #1B4D3E (want #1B4D3E)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A perfume box in #1B4D3E on a soft studio backdrop.",
+            "box": {
+              "width_cm": 12,
+              "height_cm": 18,
+              "depth_cm": 6,
+              "colour": "#1B4D3E",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A perfume box in #1B4D3E on a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 12,\n      \"height_cm\": 18,\n      \"depth_cm\": 6,\n      \"colour\": \"#1B4D3E\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.24,
+          "prompt_tokens": 1877,
+          "output_tokens": 133,
+          "checks": [
+            {
+              "check": "hex",
+              "passed": true,
+              "found": "colour #1B4D3E (want #1B4D3E)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A perfume box in #1B4D3E on a soft studio backdrop.",
+            "box": {
+              "width_cm": 12,
+              "height_cm": 18,
+              "depth_cm": 6,
+              "colour": "#1B4D3E",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A perfume box in #1B4D3E on a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 12,\n      \"height_cm\": 18,\n      \"depth_cm\": 6,\n      \"colour\": \"#1B4D3E\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.24,
+          "prompt_tokens": 1877,
+          "output_tokens": 133,
+          "checks": [
+            {
+              "check": "hex",
+              "passed": true,
+              "found": "colour #1B4D3E (want #1B4D3E)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A perfume box in #1B4D3E on a soft studio backdrop.",
+            "box": {
+              "width_cm": 12,
+              "height_cm": 18,
+              "depth_cm": 6,
+              "colour": "#1B4D3E",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A perfume box in #1B4D3E on a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 12,\n      \"height_cm\": 18,\n      \"depth_cm\": 6,\n      \"colour\": \"#1B4D3E\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hex_glossy",
+      "sentence": "a glossy box in #F4B6C2",
+      "covers": "exact hex, glossy",
+      "checks": [
+        {
+          "type": "hex",
+          "equals": "#F4B6C2"
+        },
+        {
+          "type": "roughness",
+          "max": 0.2
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.25,
+          "prompt_tokens": 1877,
+          "output_tokens": 133,
+          "checks": [
+            {
+              "check": "hex",
+              "passed": true,
+              "found": "colour #F4B6C2 (want #F4B6C2)"
+            },
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.1 (want <= 0.2)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A glossy box in #F4B6C2 on a soft studio backdrop.",
+            "box": {
+              "width_cm": 15,
+              "height_cm": 20,
+              "depth_cm": 10,
+              "colour": "#F4B6C2",
+              "roughness": 0.1,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F0F8FF",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A glossy box in #F4B6C2 on a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 15,\n      \"height_cm\": 20,\n      \"depth_cm\": 10,\n      \"colour\": \"#F4B6C2\",\n      \"roughness\": 0.1,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F0F8FF\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.24,
+          "prompt_tokens": 1877,
+          "output_tokens": 133,
+          "checks": [
+            {
+              "check": "hex",
+              "passed": true,
+              "found": "colour #F4B6C2 (want #F4B6C2)"
+            },
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.1 (want <= 0.2)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A glossy box in #F4B6C2 on a soft studio backdrop.",
+            "box": {
+              "width_cm": 15,
+              "height_cm": 20,
+              "depth_cm": 10,
+              "colour": "#F4B6C2",
+              "roughness": 0.1,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F0F8FF",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A glossy box in #F4B6C2 on a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 15,\n      \"height_cm\": 20,\n      \"depth_cm\": 10,\n      \"colour\": \"#F4B6C2\",\n      \"roughness\": 0.1,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F0F8FF\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.23,
+          "prompt_tokens": 1877,
+          "output_tokens": 133,
+          "checks": [
+            {
+              "check": "hex",
+              "passed": true,
+              "found": "colour #F4B6C2 (want #F4B6C2)"
+            },
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.1 (want <= 0.2)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A glossy box in #F4B6C2 on a soft studio backdrop.",
+            "box": {
+              "width_cm": 12,
+              "height_cm": 18,
+              "depth_cm": 6,
+              "colour": "#F4B6C2",
+              "roughness": 0.1,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A glossy box in #F4B6C2 on a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 12,\n      \"height_cm\": 18,\n      \"depth_cm\": 6,\n      \"colour\": \"#F4B6C2\",\n      \"roughness\": 0.1,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "glossy_black",
+      "sentence": "a glossy black perfume box",
+      "covers": "glossy, named colour",
+      "checks": [
+        {
+          "type": "roughness",
+          "max": 0.2
+        },
+        {
+          "type": "lightness",
+          "max": 20
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.18,
+          "prompt_tokens": 1871,
+          "output_tokens": 127,
+          "checks": [
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.1 (want <= 0.2)"
+            },
+            {
+              "check": "lightness",
+              "passed": true,
+              "found": "L* 0 of #000000 (want <= 20)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A glossy black perfume box on a soft grey backdrop.",
+            "box": {
+              "width_cm": 10,
+              "height_cm": 15,
+              "depth_cm": 5,
+              "colour": "#000000",
+              "roughness": 0.1,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#d3d3d3",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A glossy black perfume box on a soft grey backdrop.\",\n    \"box\": {\n      \"width_cm\": 10,\n      \"height_cm\": 15,\n      \"depth_cm\": 5,\n      \"colour\": \"#000000\",\n      \"roughness\": 0.1,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#d3d3d3\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.16,
+          "prompt_tokens": 1871,
+          "output_tokens": 127,
+          "checks": [
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.1 (want <= 0.2)"
+            },
+            {
+              "check": "lightness",
+              "passed": true,
+              "found": "L* 0 of #000000 (want <= 20)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A glossy black perfume box on a pale grey backdrop.",
+            "box": {
+              "width_cm": 10,
+              "height_cm": 15,
+              "depth_cm": 5,
+              "colour": "#000000",
+              "roughness": 0.1,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#D3D3D3",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A glossy black perfume box on a pale grey backdrop.\",\n    \"box\": {\n      \"width_cm\": 10,\n      \"height_cm\": 15,\n      \"depth_cm\": 5,\n      \"colour\": \"#000000\",\n      \"roughness\": 0.1,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#D3D3D3\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.12,
+          "prompt_tokens": 1871,
+          "output_tokens": 125,
+          "checks": [
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.1 (want <= 0.2)"
+            },
+            {
+              "check": "lightness",
+              "passed": true,
+              "found": "L* 0 of #000000 (want <= 20)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A glossy black perfume box on a soft grey backdrop.",
+            "box": {
+              "width_cm": 10,
+              "height_cm": 15,
+              "depth_cm": 5,
+              "colour": "#000000",
+              "roughness": 0.1,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#D3D3D3",
+            "colour_mode": "accurate",
+            "camera": "front",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A glossy black perfume box on a soft grey backdrop.\",\n    \"box\": {\n      \"width_cm\": 10,\n      \"height_cm\": 15,\n      \"depth_cm\": 5,\n      \"colour\": \"#000000\",\n      \"roughness\": 0.1,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#D3D3D3\",\n    \"camera\": \"front\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shiny_gold",
+      "sentence": "a shiny gold candle box",
+      "covers": "shiny (= glossy), named colour",
+      "checks": [
+        {
+          "type": "roughness",
+          "max": 0.2
+        },
+        {
+          "type": "hue",
+          "min": 35,
+          "max": 60
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.12,
+          "prompt_tokens": 1871,
+          "output_tokens": 125,
+          "checks": [
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.1 (want <= 0.2)"
+            },
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 51 deg of #FFD700 (want 35..60)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A shiny gold candle box on a pale backdrop.",
+            "box": {
+              "width_cm": 10,
+              "height_cm": 15,
+              "depth_cm": 8,
+              "colour": "#FFD700",
+              "roughness": 0.1,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A shiny gold candle box on a pale backdrop.\",\n    \"box\": {\n      \"width_cm\": 10,\n      \"height_cm\": 15,\n      \"depth_cm\": 8,\n      \"colour\": \"#FFD700\",\n      \"roughness\": 0.1,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.11,
+          "prompt_tokens": 1871,
+          "output_tokens": 125,
+          "checks": [
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.1 (want <= 0.2)"
+            },
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 51 deg of #FFD700 (want 35..60)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A shiny gold candle box on a pale backdrop.",
+            "box": {
+              "width_cm": 10,
+              "height_cm": 15,
+              "depth_cm": 8,
+              "colour": "#FFD700",
+              "roughness": 0.1,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A shiny gold candle box on a pale backdrop.\",\n    \"box\": {\n      \"width_cm\": 10,\n      \"height_cm\": 15,\n      \"depth_cm\": 8,\n      \"colour\": \"#FFD700\",\n      \"roughness\": 0.1,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.1,
+          "prompt_tokens": 1871,
+          "output_tokens": 125,
+          "checks": [
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.1 (want <= 0.2)"
+            },
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 51 deg of #FFD700 (want 35..60)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A shiny gold candle box on a pale backdrop.",
+            "box": {
+              "width_cm": 10,
+              "height_cm": 15,
+              "depth_cm": 8,
+              "colour": "#FFD700",
+              "roughness": 0.1,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A shiny gold candle box on a pale backdrop.\",\n    \"box\": {\n      \"width_cm\": 10,\n      \"height_cm\": 15,\n      \"depth_cm\": 8,\n      \"colour\": \"#FFD700\",\n      \"roughness\": 0.1,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "matte_white",
+      "sentence": "a matte white face cream carton",
+      "covers": "matte, named colour",
+      "checks": [
+        {
+          "type": "roughness",
+          "min": 0.6
+        },
+        {
+          "type": "lightness",
+          "min": 85
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.11,
+          "prompt_tokens": 1873,
+          "output_tokens": 124,
+          "checks": [
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.85 (want >= 0.6)"
+            },
+            {
+              "check": "lightness",
+              "passed": true,
+              "found": "L* 100 of #FFFFFF (want >= 85)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A matte white face cream carton on a soft grey backdrop.",
+            "box": {
+              "width_cm": 8,
+              "height_cm": 12,
+              "depth_cm": 5,
+              "colour": "#FFFFFF",
+              "roughness": 0.85,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#D3D3D3",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A matte white face cream carton on a soft grey backdrop.\",\n    \"box\": {\n      \"width_cm\": 8,\n      \"height_cm\": 12,\n      \"depth_cm\": 5,\n      \"colour\": \"#FFFFFF\",\n      \"roughness\": 0.85,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#D3D3D3\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.1,
+          "prompt_tokens": 1873,
+          "output_tokens": 124,
+          "checks": [
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.85 (want >= 0.6)"
+            },
+            {
+              "check": "lightness",
+              "passed": true,
+              "found": "L* 100 of #FFFFFF (want >= 85)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A matte white face cream carton on a soft grey backdrop.",
+            "box": {
+              "width_cm": 8,
+              "height_cm": 12,
+              "depth_cm": 5,
+              "colour": "#FFFFFF",
+              "roughness": 0.85,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#D3D3D3",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A matte white face cream carton on a soft grey backdrop.\",\n    \"box\": {\n      \"width_cm\": 8,\n      \"height_cm\": 12,\n      \"depth_cm\": 5,\n      \"colour\": \"#FFFFFF\",\n      \"roughness\": 0.85,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#D3D3D3\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.18,
+          "prompt_tokens": 1873,
+          "output_tokens": 130,
+          "checks": [
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.85 (want >= 0.6)"
+            },
+            {
+              "check": "lightness",
+              "passed": true,
+              "found": "L* 100 of #FFFFFF (want >= 85)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A matte white face cream carton on a soft grey backdrop.",
+            "box": {
+              "width_cm": 8.5,
+              "height_cm": 15.5,
+              "depth_cm": 4.5,
+              "colour": "#FFFFFF",
+              "roughness": 0.85,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#D3D3D3",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A matte white face cream carton on a soft grey backdrop.\",\n    \"box\": {\n      \"width_cm\": 8.5,\n      \"height_cm\": 15.5,\n      \"depth_cm\": 4.5,\n      \"colour\": \"#FFFFFF\",\n      \"roughness\": 0.85,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#D3D3D3\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "camera_front",
+      "sentence": "front view of a yellow soap box",
+      "covers": "camera: front, named colour",
+      "checks": [
+        {
+          "type": "camera",
+          "equals": "front"
+        },
+        {
+          "type": "hue",
+          "min": 40,
+          "max": 65
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.13,
+          "prompt_tokens": 1873,
+          "output_tokens": 126,
+          "checks": [
+            {
+              "check": "camera",
+              "passed": true,
+              "found": "camera front (want front)"
+            },
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 51 deg of #FFD700 (want 40..65)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A yellow soap box in a front view with a soft studio backdrop.",
+            "box": {
+              "width_cm": 10,
+              "height_cm": 15,
+              "depth_cm": 6,
+              "colour": "#FFD700",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5DC",
+            "colour_mode": "accurate",
+            "camera": "front",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A yellow soap box in a front view with a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 10,\n      \"height_cm\": 15,\n      \"depth_cm\": 6,\n      \"colour\": \"#FFD700\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5DC\",\n    \"camera\": \"front\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.13,
+          "prompt_tokens": 1873,
+          "output_tokens": 126,
+          "checks": [
+            {
+              "check": "camera",
+              "passed": true,
+              "found": "camera front (want front)"
+            },
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 51 deg of #FFD700 (want 40..65)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A yellow soap box in a front view with a soft studio backdrop.",
+            "box": {
+              "width_cm": 10,
+              "height_cm": 15,
+              "depth_cm": 6,
+              "colour": "#FFD700",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5DC",
+            "colour_mode": "accurate",
+            "camera": "front",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A yellow soap box in a front view with a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 10,\n      \"height_cm\": 15,\n      \"depth_cm\": 6,\n      \"colour\": \"#FFD700\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5DC\",\n    \"camera\": \"front\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.12,
+          "prompt_tokens": 1873,
+          "output_tokens": 126,
+          "checks": [
+            {
+              "check": "camera",
+              "passed": true,
+              "found": "camera front (want front)"
+            },
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 51 deg of #FFD700 (want 40..65)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A yellow soap box in a front view with a soft studio backdrop.",
+            "box": {
+              "width_cm": 10,
+              "height_cm": 15,
+              "depth_cm": 6,
+              "colour": "#FFD700",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5DC",
+            "colour_mode": "accurate",
+            "camera": "front",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A yellow soap box in a front view with a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 10,\n      \"height_cm\": 15,\n      \"depth_cm\": 6,\n      \"colour\": \"#FFD700\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5DC\",\n    \"camera\": \"front\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "camera_top_down",
+      "sentence": "overhead shot of a flat blue jewellery box",
+      "covers": "camera: top_down, flat proportions",
+      "checks": [
+        {
+          "type": "camera",
+          "equals": "top_down"
+        },
+        {
+          "type": "ratio",
+          "num": "height_cm",
+          "den": "width_cm",
+          "max": 0.5
+        },
+        {
+          "type": "ratio",
+          "num": "height_cm",
+          "den": "depth_cm",
+          "max": 0.5
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.17,
+          "prompt_tokens": 1875,
+          "output_tokens": 128,
+          "checks": [
+            {
+              "check": "camera",
+              "passed": true,
+              "found": "camera top_down (want top_down)"
+            },
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/width_cm = 4/12 = 0.33 (want <= 0.5)"
+            },
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/depth_cm = 4/12 = 0.33 (want <= 0.5)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "Overhead shot of a flat blue jewellery box on a soft studio backdrop.",
+            "box": {
+              "width_cm": 12,
+              "height_cm": 4,
+              "depth_cm": 12,
+              "colour": "#3399FF",
+              "roughness": 0.4,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "top_down",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"Overhead shot of a flat blue jewellery box on a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 12,\n      \"height_cm\": 4,\n      \"depth_cm\": 12,\n      \"colour\": \"#3399FF\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"top_down\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.16,
+          "prompt_tokens": 1875,
+          "output_tokens": 128,
+          "checks": [
+            {
+              "check": "camera",
+              "passed": true,
+              "found": "camera top_down (want top_down)"
+            },
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/width_cm = 3/15 = 0.20 (want <= 0.5)"
+            },
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/depth_cm = 3/15 = 0.20 (want <= 0.5)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "Overhead shot of a flat blue jewellery box on a soft studio backdrop.",
+            "box": {
+              "width_cm": 15,
+              "height_cm": 3,
+              "depth_cm": 15,
+              "colour": "#3399FF",
+              "roughness": 0.4,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "top_down",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"Overhead shot of a flat blue jewellery box on a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 15,\n      \"height_cm\": 3,\n      \"depth_cm\": 15,\n      \"colour\": \"#3399FF\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"top_down\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.15,
+          "prompt_tokens": 1875,
+          "output_tokens": 128,
+          "checks": [
+            {
+              "check": "camera",
+              "passed": true,
+              "found": "camera top_down (want top_down)"
+            },
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/width_cm = 4/12 = 0.33 (want <= 0.5)"
+            },
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/depth_cm = 4/12 = 0.33 (want <= 0.5)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "Overhead shot of a flat blue jewellery box on a soft studio backdrop.",
+            "box": {
+              "width_cm": 12,
+              "height_cm": 4,
+              "depth_cm": 12,
+              "colour": "#3399FF",
+              "roughness": 0.4,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "top_down",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"Overhead shot of a flat blue jewellery box on a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 12,\n      \"height_cm\": 4,\n      \"depth_cm\": 12,\n      \"colour\": \"#3399FF\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"top_down\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "camera_three_quarter",
+      "sentence": "a purple tea box, three-quarter view",
+      "covers": "camera: three_quarter, named colour",
+      "checks": [
+        {
+          "type": "camera",
+          "equals": "three_quarter"
+        },
+        {
+          "type": "hue",
+          "min": 255,
+          "max": 315
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.13,
+          "prompt_tokens": 1874,
+          "output_tokens": 126,
+          "checks": [
+            {
+              "check": "camera",
+              "passed": true,
+              "found": "camera three_quarter (want three_quarter)"
+            },
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 300 deg of #800080 (want 255..315)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A purple tea box in a three-quarter view.",
+            "box": {
+              "width_cm": 12,
+              "height_cm": 18,
+              "depth_cm": 6,
+              "colour": "#800080",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#f5f5f5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A purple tea box in a three-quarter view.\",\n    \"box\": {\n      \"width_cm\": 12,\n      \"height_cm\": 18,\n      \"depth_cm\": 6,\n      \"colour\": \"#800080\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#f5f5f5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.12,
+          "prompt_tokens": 1874,
+          "output_tokens": 126,
+          "checks": [
+            {
+              "check": "camera",
+              "passed": true,
+              "found": "camera three_quarter (want three_quarter)"
+            },
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 300 deg of #800080 (want 255..315)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A purple tea box in a three-quarter view.",
+            "box": {
+              "width_cm": 12,
+              "height_cm": 18,
+              "depth_cm": 6,
+              "colour": "#800080",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#f5f5f5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A purple tea box in a three-quarter view.\",\n    \"box\": {\n      \"width_cm\": 12,\n      \"height_cm\": 18,\n      \"depth_cm\": 6,\n      \"colour\": \"#800080\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#f5f5f5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.12,
+          "prompt_tokens": 1874,
+          "output_tokens": 126,
+          "checks": [
+            {
+              "check": "camera",
+              "passed": true,
+              "found": "camera three_quarter (want three_quarter)"
+            },
+            {
+              "check": "hue",
+              "passed": true,
+              "found": "hue 300 deg of #800080 (want 255..315)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A purple tea box in a three-quarter view.",
+            "box": {
+              "width_cm": 12,
+              "height_cm": 18,
+              "depth_cm": 6,
+              "colour": "#800080",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#f5f5f5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A purple tea box in a three-quarter view.\",\n    \"box\": {\n      \"width_cm\": 12,\n      \"height_cm\": 18,\n      \"depth_cm\": 6,\n      \"colour\": \"#800080\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#f5f5f5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tall",
+      "sentence": "a tall, slim grey box",
+      "covers": "tall proportions, named colour",
+      "checks": [
+        {
+          "type": "ratio",
+          "num": "height_cm",
+          "den": "width_cm",
+          "gt": 1.5
+        },
+        {
+          "type": "saturation",
+          "max": 0.2
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.14,
+          "prompt_tokens": 1872,
+          "output_tokens": 126,
+          "checks": [
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/width_cm = 24/6 = 4.00 (want > 1.5)"
+            },
+            {
+              "check": "saturation",
+              "passed": true,
+              "found": "saturation 0.00 of #808080 (want <= 0.2)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A tall, slim grey box on a soft studio backdrop.",
+            "box": {
+              "width_cm": 6,
+              "height_cm": 24,
+              "depth_cm": 4,
+              "colour": "#808080",
+              "roughness": 0.4,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#f5f5f5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A tall, slim grey box on a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 6,\n      \"height_cm\": 24,\n      \"depth_cm\": 4,\n      \"colour\": \"#808080\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#f5f5f5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.1,
+          "prompt_tokens": 1872,
+          "output_tokens": 126,
+          "checks": [
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/width_cm = 18/6 = 3.00 (want > 1.5)"
+            },
+            {
+              "check": "saturation",
+              "passed": true,
+              "found": "saturation 0.00 of #808080 (want <= 0.2)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A tall, slim grey box on a pale studio backdrop.",
+            "box": {
+              "width_cm": 6,
+              "height_cm": 18,
+              "depth_cm": 3,
+              "colour": "#808080",
+              "roughness": 0.4,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#f5f5f5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A tall, slim grey box on a pale studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 6,\n      \"height_cm\": 18,\n      \"depth_cm\": 3,\n      \"colour\": \"#808080\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#f5f5f5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.13,
+          "prompt_tokens": 1872,
+          "output_tokens": 126,
+          "checks": [
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/width_cm = 18/6 = 3.00 (want > 1.5)"
+            },
+            {
+              "check": "saturation",
+              "passed": true,
+              "found": "saturation 0.00 of #808080 (want <= 0.2)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A tall, slim grey box on a soft studio backdrop.",
+            "box": {
+              "width_cm": 6,
+              "height_cm": 18,
+              "depth_cm": 3,
+              "colour": "#808080",
+              "roughness": 0.4,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#f5f5f5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A tall, slim grey box on a soft studio backdrop.\",\n    \"box\": {\n      \"width_cm\": 6,\n      \"height_cm\": 18,\n      \"depth_cm\": 3,\n      \"colour\": \"#808080\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#f5f5f5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "flat",
+      "sentence": "a flat square box for a silk scarf",
+      "covers": "flat proportions",
+      "checks": [
+        {
+          "type": "ratio",
+          "num": "height_cm",
+          "den": "width_cm",
+          "max": 0.5
+        },
+        {
+          "type": "ratio",
+          "num": "height_cm",
+          "den": "depth_cm",
+          "max": 0.5
+        },
+        {
+          "type": "ratio",
+          "num": "width_cm",
+          "den": "depth_cm",
+          "min": 0.9,
+          "max": 1.1
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.12,
+          "prompt_tokens": 1874,
+          "output_tokens": 125,
+          "checks": [
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/width_cm = 5/15 = 0.33 (want <= 0.5)"
+            },
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/depth_cm = 5/15 = 0.33 (want <= 0.5)"
+            },
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "width_cm/depth_cm = 15/15 = 1.00 (want >= 0.9 and <= 1.1)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A flat square box for a silk scarf.",
+            "box": {
+              "width_cm": 15,
+              "height_cm": 5,
+              "depth_cm": 15,
+              "colour": "#D8B28B",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A flat square box for a silk scarf.\",\n    \"box\": {\n      \"width_cm\": 15,\n      \"height_cm\": 5,\n      \"depth_cm\": 15,\n      \"colour\": \"#D8B28B\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.1,
+          "prompt_tokens": 1874,
+          "output_tokens": 125,
+          "checks": [
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/width_cm = 5/15 = 0.33 (want <= 0.5)"
+            },
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/depth_cm = 5/15 = 0.33 (want <= 0.5)"
+            },
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "width_cm/depth_cm = 15/15 = 1.00 (want >= 0.9 and <= 1.1)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A flat square box for a silk scarf.",
+            "box": {
+              "width_cm": 15,
+              "height_cm": 5,
+              "depth_cm": 15,
+              "colour": "#D8A3A3",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A flat square box for a silk scarf.\",\n    \"box\": {\n      \"width_cm\": 15,\n      \"height_cm\": 5,\n      \"depth_cm\": 15,\n      \"colour\": \"#D8A3A3\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.11,
+          "prompt_tokens": 1874,
+          "output_tokens": 125,
+          "checks": [
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/width_cm = 5/15 = 0.33 (want <= 0.5)"
+            },
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/depth_cm = 5/15 = 0.33 (want <= 0.5)"
+            },
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "width_cm/depth_cm = 15/15 = 1.00 (want >= 0.9 and <= 1.1)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A flat square box for a silk scarf",
+            "box": {
+              "width_cm": 15,
+              "height_cm": 5,
+              "depth_cm": 15,
+              "colour": "#D8A486",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A flat square box for a silk scarf\",\n    \"box\": {\n      \"width_cm\": 15,\n      \"height_cm\": 5,\n      \"depth_cm\": 15,\n      \"colour\": \"#D8A486\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vague",
+      "sentence": "a nice box",
+      "covers": "vague prompt",
+      "checks": [
+        {
+          "type": "is_box",
+          "equals": true
+        },
+        {
+          "type": "unsupported_empty"
+        },
+        {
+          "type": "size",
+          "side": "longest",
+          "min": 5,
+          "max": 60
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 5.16,
+          "prompt_tokens": 1869,
+          "output_tokens": 131,
+          "checks": [
+            {
+              "check": "is_box",
+              "passed": true,
+              "found": "is_box true (want true)"
+            },
+            {
+              "check": "unsupported_empty",
+              "passed": true,
+              "found": "unsupported [] (want [])"
+            },
+            {
+              "check": "size",
+              "passed": true,
+              "found": "longest side 15 cm (want >= 5 and <= 60)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A nice box with a soft, elegant finish on a pale backdrop.",
+            "box": {
+              "width_cm": 15,
+              "height_cm": 15,
+              "depth_cm": 15,
+              "colour": "#8B4513",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5DC",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A nice box with a soft, elegant finish on a pale backdrop.\",\n    \"box\": {\n      \"width_cm\": 15,\n      \"height_cm\": 15,\n      \"depth_cm\": 15,\n      \"colour\": \"#8B4513\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5DC\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.29,
+          "prompt_tokens": 1869,
+          "output_tokens": 136,
+          "checks": [
+            {
+              "check": "is_box",
+              "passed": true,
+              "found": "is_box true (want true)"
+            },
+            {
+              "check": "unsupported_empty",
+              "passed": true,
+              "found": "unsupported [] (want [])"
+            },
+            {
+              "check": "size",
+              "passed": true,
+              "found": "longest side 15 cm (want >= 5 and <= 60)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A nice box with a soft-touch finish, standing on a pale grey backdrop in a front view.",
+            "box": {
+              "width_cm": 15,
+              "height_cm": 15,
+              "depth_cm": 15,
+              "colour": "#8B4513",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "front",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A nice box with a soft-touch finish, standing on a pale grey backdrop in a front view.\",\n    \"box\": {\n      \"width_cm\": 15,\n      \"height_cm\": 15,\n      \"depth_cm\": 15,\n      \"colour\": \"#8B4513\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"front\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.2,
+          "prompt_tokens": 1869,
+          "output_tokens": 130,
+          "checks": [
+            {
+              "check": "is_box",
+              "passed": true,
+              "found": "is_box true (want true)"
+            },
+            {
+              "check": "unsupported_empty",
+              "passed": true,
+              "found": "unsupported [] (want [])"
+            },
+            {
+              "check": "size",
+              "passed": true,
+              "found": "longest side 15 cm (want >= 5 and <= 60)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [],
+          "spec": {
+            "description": "A nice box with a soft, elegant finish on a pale backdrop.",
+            "box": {
+              "width_cm": 15,
+              "height_cm": 12,
+              "depth_cm": 8,
+              "colour": "#8B4513",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5DC",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"A nice box with a soft, elegant finish on a pale backdrop.\",\n    \"box\": {\n      \"width_cm\": 15,\n      \"height_cm\": 12,\n      \"depth_cm\": 8,\n      \"colour\": \"#8B4513\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"background_colour\": \"#F5F5DC\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "not_a_box",
+      "sentence": "a glass perfume bottle",
+      "covers": "non-box prompt",
+      "checks": [
+        {
+          "type": "is_box",
+          "equals": false
+        },
+        {
+          "type": "unsupported_mentions",
+          "any": [
+            "bottle",
+            "shape"
+          ]
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.48,
+          "prompt_tokens": 1870,
+          "output_tokens": 147,
+          "checks": [
+            {
+              "check": "is_box",
+              "passed": true,
+              "found": "is_box false (want false)"
+            },
+            {
+              "check": "unsupported_mentions",
+              "passed": true,
+              "found": "unsupported [\"glass perfume bottle\"] (want a mention of bottle or shape)"
+            }
+          ],
+          "is_box": false,
+          "unsupported": [
+            "glass perfume bottle"
+          ],
+          "spec": {
+            "description": "A box shaped like a glass perfume bottle with the same height and colour as the bottle, with width and depth equal to its widest diameter.",
+            "box": {
+              "width_cm": 4.0,
+              "height_cm": 16.0,
+              "depth_cm": 4.0,
+              "colour": "#FFFFFF",
+              "roughness": 0.7,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": false,\n  \"unsupported\": [\"glass perfume bottle\"],\n  \"spec\": {\n    \"description\": \"A box shaped like a glass perfume bottle with the same height and colour as the bottle, with width and depth equal to its widest diameter.\",\n    \"box\": {\n      \"width_cm\": 4.0,\n      \"height_cm\": 16.0,\n      \"depth_cm\": 4.0,\n      \"colour\": \"#FFFFFF\",\n      \"roughness\": 0.7,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.49,
+          "prompt_tokens": 1870,
+          "output_tokens": 148,
+          "checks": [
+            {
+              "check": "is_box",
+              "passed": true,
+              "found": "is_box false (want false)"
+            },
+            {
+              "check": "unsupported_mentions",
+              "passed": true,
+              "found": "unsupported [\"glass perfume bottle\"] (want a mention of bottle or shape)"
+            }
+          ],
+          "is_box": false,
+          "unsupported": [
+            "glass perfume bottle"
+          ],
+          "spec": {
+            "description": "A box shaped like a glass perfume bottle with the same height and colour as the bottle, with width and depth both equal to its widest diameter.",
+            "box": {
+              "width_cm": 4.5,
+              "height_cm": 18.0,
+              "depth_cm": 4.5,
+              "colour": "#FFFFFF",
+              "roughness": 0.7,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": false,\n  \"unsupported\": [\"glass perfume bottle\"],\n  \"spec\": {\n    \"description\": \"A box shaped like a glass perfume bottle with the same height and colour as the bottle, with width and depth both equal to its widest diameter.\",\n    \"box\": {\n      \"width_cm\": 4.5,\n      \"height_cm\": 18.0,\n      \"depth_cm\": 4.5,\n      \"colour\": \"#FFFFFF\",\n      \"roughness\": 0.7,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.47,
+          "prompt_tokens": 1870,
+          "output_tokens": 147,
+          "checks": [
+            {
+              "check": "is_box",
+              "passed": true,
+              "found": "is_box false (want false)"
+            },
+            {
+              "check": "unsupported_mentions",
+              "passed": true,
+              "found": "unsupported [\"glass perfume bottle\"] (want a mention of bottle or shape)"
+            }
+          ],
+          "is_box": false,
+          "unsupported": [
+            "glass perfume bottle"
+          ],
+          "spec": {
+            "description": "A box shaped like a glass perfume bottle with the same height and colour as the bottle, with width and depth equal to its widest diameter.",
+            "box": {
+              "width_cm": 4.5,
+              "height_cm": 18.0,
+              "depth_cm": 4.5,
+              "colour": "#FFFFFF",
+              "roughness": 0.7,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": false,\n  \"unsupported\": [\"glass perfume bottle\"],\n  \"spec\": {\n    \"description\": \"A box shaped like a glass perfume bottle with the same height and colour as the bottle, with width and depth equal to its widest diameter.\",\n    \"box\": {\n      \"width_cm\": 4.5,\n      \"height_cm\": 18.0,\n      \"depth_cm\": 4.5,\n      \"colour\": \"#FFFFFF\",\n      \"roughness\": 0.7,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "logo",
+      "sentence": "a white matte box with a gold logo on the front",
+      "covers": "logo request",
+      "checks": [
+        {
+          "type": "unsupported_mentions",
+          "any": [
+            "logo"
+          ]
+        },
+        {
+          "type": "is_box",
+          "equals": true
+        },
+        {
+          "type": "lightness",
+          "min": 85
+        },
+        {
+          "type": "roughness",
+          "min": 0.6
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.11,
+          "prompt_tokens": 1877,
+          "output_tokens": 124,
+          "checks": [
+            {
+              "check": "unsupported_mentions",
+              "passed": true,
+              "found": "unsupported [\"gold logo\"] (want a mention of logo)"
+            },
+            {
+              "check": "is_box",
+              "passed": true,
+              "found": "is_box true (want true)"
+            },
+            {
+              "check": "lightness",
+              "passed": true,
+              "found": "L* 100 of #FFFFFF (want >= 85)"
+            },
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.85 (want >= 0.6)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [
+            "gold logo"
+          ],
+          "spec": {
+            "description": "A white matte box with a gold logo on the front.",
+            "box": {
+              "width_cm": 10,
+              "height_cm": 20,
+              "depth_cm": 5,
+              "colour": "#FFFFFF",
+              "roughness": 0.85,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "front",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [\"gold logo\"],\n  \"spec\": {\n    \"description\": \"A white matte box with a gold logo on the front.\",\n    \"box\": {\n      \"width_cm\": 10,\n      \"height_cm\": 20,\n      \"depth_cm\": 5,\n      \"colour\": \"#FFFFFF\",\n      \"roughness\": 0.85,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"front\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.09,
+          "prompt_tokens": 1877,
+          "output_tokens": 124,
+          "checks": [
+            {
+              "check": "unsupported_mentions",
+              "passed": true,
+              "found": "unsupported [\"gold logo\"] (want a mention of logo)"
+            },
+            {
+              "check": "is_box",
+              "passed": true,
+              "found": "is_box true (want true)"
+            },
+            {
+              "check": "lightness",
+              "passed": true,
+              "found": "L* 100 of #FFFFFF (want >= 85)"
+            },
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.85 (want >= 0.6)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [
+            "gold logo"
+          ],
+          "spec": {
+            "description": "A white matte box with a gold logo on the front.",
+            "box": {
+              "width_cm": 10,
+              "height_cm": 20,
+              "depth_cm": 5,
+              "colour": "#FFFFFF",
+              "roughness": 0.85,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "front",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [\"gold logo\"],\n  \"spec\": {\n    \"description\": \"A white matte box with a gold logo on the front.\",\n    \"box\": {\n      \"width_cm\": 10,\n      \"height_cm\": 20,\n      \"depth_cm\": 5,\n      \"colour\": \"#FFFFFF\",\n      \"roughness\": 0.85,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"front\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.1,
+          "prompt_tokens": 1877,
+          "output_tokens": 124,
+          "checks": [
+            {
+              "check": "unsupported_mentions",
+              "passed": true,
+              "found": "unsupported [\"gold logo\"] (want a mention of logo)"
+            },
+            {
+              "check": "is_box",
+              "passed": true,
+              "found": "is_box true (want true)"
+            },
+            {
+              "check": "lightness",
+              "passed": true,
+              "found": "L* 100 of #FFFFFF (want >= 85)"
+            },
+            {
+              "check": "roughness",
+              "passed": true,
+              "found": "roughness 0.85 (want >= 0.6)"
+            }
+          ],
+          "is_box": true,
+          "unsupported": [
+            "gold logo"
+          ],
+          "spec": {
+            "description": "A white matte box with a gold logo on the front.",
+            "box": {
+              "width_cm": 10,
+              "height_cm": 20,
+              "depth_cm": 5,
+              "colour": "#FFFFFF",
+              "roughness": 0.85,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "front",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"unsupported\": [\"gold logo\"],\n  \"spec\": {\n    \"description\": \"A white matte box with a gold logo on the front.\",\n    \"box\": {\n      \"width_cm\": 10,\n      \"height_cm\": 20,\n      \"depth_cm\": 5,\n      \"colour\": \"#FFFFFF\",\n      \"roughness\": 0.85,\n      \"bevel_cm\": 0.1\n    },\n    \"background_colour\": \"#F5F5F5\",\n    \"camera\": \"front\"\n  }\n}"
+          ]
+        }
+      ]
+    }
+  ]
+}

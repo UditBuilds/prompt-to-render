@@ -7,3 +7,6 @@ __pycache__/
 
 # Blender backups
 *.blend1
+
+# prompt.py runs (one folder per sentence)
+runs/

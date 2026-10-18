@@ -58,6 +58,74 @@ def _version_key(path):
     return tuple(int(n) for n in match.groups()) if match else (0, 0)
 
 
+def render(spec_path, output_path, blender, verbose=False):
+    """Render a (valid) spec file to output_path with Blender, headless.
+
+    Shows only the lines that matter while Blender runs (everything with
+    verbose=True). Returns a dict: ok, returncode, device, cycles (the
+    devices Cycles reported), render_time, colour_check, total_seconds and,
+    on failure, log_tail (Blender's last lines).
+    """
+    command = [
+        blender,
+        "--background",          # no window
+        "--factory-startup",     # ignore saved Blender settings: the spec decides everything
+        "--python-exit-code", "1",  # a Python error inside Blender = a failed run
+        "--debug-cycles",        # makes Cycles report which device it really used
+        "--python", RENDER_SCRIPT,
+        "--",                    # everything after this goes to render_scene.py
+        "--spec", os.path.abspath(spec_path),
+        "--output", output_path,
+    ]
+
+    start = time.perf_counter()
+    log_lines = []
+    device = render_time = colour_check = None
+    cycles_report = []
+
+    process = subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, encoding="utf-8", errors="replace",
+    )
+    for line in process.stdout:
+        line = line.rstrip()
+        log_lines.append(line)
+        cycles_match = CYCLES_DEVICE_LINE.search(line)
+        cycles_line = f"{cycles_match.group(1)}: {cycles_match.group(2)}" if cycles_match else None
+        # Accurate mode renders twice (light meter, then the image), so Cycles
+        # reports the device twice. Show each line once.
+        new_cycles_line = cycles_line is not None and cycles_line not in cycles_report
+
+        if verbose:
+            print(line)
+        elif line.startswith("[render]"):
+            print(line)
+        elif new_cycles_line:
+            print(f"[cycles] {cycles_line}")
+
+        if new_cycles_line:
+            cycles_report.append(cycles_line)
+        if line.startswith("[render] device:"):
+            device = line.split(":", 1)[1].strip()
+        elif line.startswith("[render] render time:"):
+            render_time = line.split(":", 1)[1].strip()
+        elif line.startswith("[render] colour check:"):
+            colour_check = line.split(":", 1)[1].strip()
+    process.wait()
+
+    ok = process.returncode == 0 and os.path.isfile(output_path)
+    return {
+        "ok": ok,
+        "returncode": process.returncode,
+        "device": device,
+        "cycles": cycles_report,
+        "render_time": render_time,
+        "colour_check": colour_check,
+        "total_seconds": time.perf_counter() - start,
+        "log_tail": [] if ok else log_lines[-30:],
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description="Render a box product shot from a JSON spec.")
     parser.add_argument("spec", help="path to a JSON spec, e.g. specs/pink_three_quarter.json")
@@ -77,9 +145,7 @@ def main():
 
     blender = find_blender(args.blender)
     if not blender:
-        print("Could not find blender.exe.")
-        print(f"Expected it at: {DEFAULT_BLENDER}")
-        print('Pass the path with --blender "C:\\path\\to\\blender.exe" or set BLENDER_PATH.')
+        print_blender_not_found()
         return 1
 
     # 2. Work out where the PNG goes.
@@ -88,79 +154,48 @@ def main():
     output_path = os.path.join(RENDERS_DIR, f"{spec_name}_{timestamp}.png")
     os.makedirs(RENDERS_DIR, exist_ok=True)
 
-    command = [
-        blender,
-        "--background",          # no window
-        "--factory-startup",     # ignore saved Blender settings: the spec decides everything
-        "--python-exit-code", "1",  # a Python error inside Blender = a failed run
-        "--debug-cycles",        # makes Cycles report which device it really used
-        "--python", RENDER_SCRIPT,
-        "--",                    # everything after this goes to render_scene.py
-        "--spec", os.path.abspath(args.spec),
-        "--output", output_path,
-    ]
-
     # 3. Run Blender, showing only the lines that matter.
     print(f"Rendering {args.spec} with {blender}")
-    start = time.perf_counter()
-    log_lines = []
-    device = render_time = colour_check = None
-    cycles_report = []
-
-    process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, encoding="utf-8", errors="replace",
-    )
-    for line in process.stdout:
-        line = line.rstrip()
-        log_lines.append(line)
-        cycles_match = CYCLES_DEVICE_LINE.search(line)
-        cycles_line = f"{cycles_match.group(1)}: {cycles_match.group(2)}" if cycles_match else None
-        # Accurate mode renders twice (light meter, then the image), so Cycles
-        # reports the device twice. Show each line once.
-        new_cycles_line = cycles_line is not None and cycles_line not in cycles_report
-
-        if args.verbose:
-            print(line)
-        elif line.startswith("[render]"):
-            print(line)
-        elif new_cycles_line:
-            print(f"[cycles] {cycles_line}")
-
-        if new_cycles_line:
-            cycles_report.append(cycles_line)
-        if line.startswith("[render] device:"):
-            device = line.split(":", 1)[1].strip()
-        elif line.startswith("[render] render time:"):
-            render_time = line.split(":", 1)[1].strip()
-        elif line.startswith("[render] colour check:"):
-            colour_check = line.split(":", 1)[1].strip()
-    process.wait()
-    total_seconds = time.perf_counter() - start
+    result = render(args.spec, output_path, blender, args.verbose)
 
     # 4. Report.
-    if process.returncode != 0 or not os.path.isfile(output_path):
-        print()
-        print(f"RENDER FAILED (Blender exit code {process.returncode}).")
-        if not args.verbose:
-            print("Last lines of Blender's output:")
-            for line in log_lines[-30:]:
-                print(f"    {line}")
+    if not result["ok"]:
+        print_render_failed(result, args.verbose)
         return 1
 
     print()
     print("Done.")
     print(f"  Spec:         {args.spec}")
-    print(f"  Device:       {device}")
-    for report in cycles_report:
+    print(f"  Device:       {result['device']}")
+    for report in result["cycles"]:
         print(f"  Cycles:       {report}")
-    print(f"  Render time:  {render_time} (total incl. Blender start-up: {total_seconds:.1f} s)")
-    print(f"  Colour check: {colour_check}")
+    print(f"  Render time:  {result['render_time']} "
+          f"(total incl. Blender start-up: {result['total_seconds']:.1f} s)")
+    print(f"  Colour check: {result['colour_check']}")
     print(f"  Saved:        {os.path.relpath(output_path, PROJECT_DIR)}")
-    if device and device.startswith("CPU"):
+    print_cpu_warning(result)
+    return 0
+
+
+def print_blender_not_found():
+    print("Could not find blender.exe.")
+    print(f"Expected it at: {DEFAULT_BLENDER}")
+    print('Pass the path with --blender "C:\\path\\to\\blender.exe" or set BLENDER_PATH.')
+
+
+def print_render_failed(result, verbose):
+    print()
+    print(f"RENDER FAILED (Blender exit code {result['returncode']}).")
+    if not verbose:
+        print("Last lines of Blender's output:")
+        for line in result["log_tail"]:
+            print(f"    {line}")
+
+
+def print_cpu_warning(result):
+    if result["device"] and result["device"].startswith("CPU"):
         print()
         print("  WARNING: this render ran on the CPU, not the GPU. See the warning above.")
-    return 0
 
 
 if __name__ == "__main__":
