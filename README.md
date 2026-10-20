@@ -1,4 +1,4 @@
-# Prompt-to-Render (v1.2)
+# Prompt-to-Render (v1.3)
 
 Describe a box product shot in one sentence and get a clean studio render (cosmetics-packaging style). A **local** LLM writes the scene spec, grounded by small reference tables; code sets the few values the model gets wrong reliably; a validator checks it; Blender renders it on the GPU.
 
@@ -8,9 +8,11 @@ python prompt.py "luxury matte red lipstick box, three-quarter view"
 
 **Runs fully offline. No API keys, no paid APIs, nothing leaves the machine.** The LLM is [Ollama](https://ollama.com) running `qwen3:8b` on the same laptop GPU that renders.
 
-| luxury matte red lipstick box, three-quarter view | a glossy emerald perfume box | a sage green gift box |
+| luxury matte red lipstick box, three-quarter view (v1.2) | a glossy emerald perfume box (v1.3) | a sage green gift box (v1.3) |
 |---|---|---|
-| <img src="docs/v1.2_luxury_matte_red_lipstick.png" width="260"> | <img src="docs/v1.2_glossy_emerald_perfume.png" width="260"> | <img src="docs/v1.2_sage_green_gift_box.png" width="260"> |
+| <img src="docs/v1.2_luxury_matte_red_lipstick.png" width="260"> | <img src="docs/v1.3_glossy_emerald_perfume.png" width="260"> | <img src="docs/v1.3_sage_green_gift_box.png" width="260"> |
+
+The lipstick is the v1.2 render: v1.3's came out a warmer brick red (see [v1.3](#v13-a-clean-prompt-and-the-out-of-table-score)).
 
 ## The pipeline
 
@@ -317,7 +319,7 @@ What wasn't right in these images (all three were addressed in v1.2):
 
 ### Results: v1 → v1.1 → v1.2
 
-The same 37 cases on the same checks, 3 runs each, `qwen3:8b`, temperature 0.2. "Named colour right" counts only the box's named-colour check, so code-set values can't lift it.
+The same 37 cases on the same checks, 3 runs each, `qwen3:8b`, temperature 0.2. "Named colour right" counts only the box's named-colour check, so code-set values can't lift it. (These are the v1.2 numbers, on v1.2's HSL backdrop check. v1.3 replaced that check and re-scored all three; see [v1.3](#v13-a-clean-prompt-and-the-out-of-table-score).)
 
 | Version | All checks (runs passed) | In-table colours: named colour right (10 cases) | Out-of-table colours: named colour right (5 cases) | Avg LLM time per run |
 |---|---|---|---|---|
@@ -364,6 +366,57 @@ v1.2: one render per sentence, no re-rolls, all three-quarter.
 - **"A matte red lipstick box" is a different sentence from the v1.1 lipstick.** Without "luxury" nothing deepens the red, so it is the model's own bright red. This render's `#E84A5F` (a watermelon red) was an unusual pick: 9 more spec-only runs of the same sentence gave `#FF0000` five times, `#E81111` twice, `#C31B3D` and `#CC0000` once each. Its request is byte-identical to v1.1, so v1.1 would have picked from the same set.
 - **Glossy at 0.05** gives crisper highlights along the edges, but the big faces still look smooth rather than mirror-like: the soft studio has nothing sharp to reflect. Harder lighting would be the next step.
 
+## v1.3: a clean prompt, and the out-of-table score
+
+**The problem.** The out-of-table score went v1 6/15 → v1.1 0/15 → v1.2 0/15: the model got worse at the colours that aren't in the table. Three suspects: (a) the schema's example hex `#E8A3B5` (fuchsia came out exactly that), (b) the two prompt lines code had overridden since v1.2, (c) the colour table making the model copy instead of think.
+
+**Changes:**
+- **A fairer backdrop check** (evals only, committed first). "Neutral" is now: R, G and B within 20 of each other (0–255), and HSL lightness ≥ 80%. The v1.2 check used HSL saturation, which fails every warm off-white (`#FAF9F6` reads as 29% saturated). `#FAF9F6` and `#F5F5F5` pass, a pale pink like `#F8D7DA` fails. The saved v1, v1.1 and v1.2 results were re-scored on it with `evals/rescore.py` (no new model runs; only backdrop outcomes changed).
+- **No real colour in anything the model reads.** The schema said `e.g. "#E8A3B5"`; it now says `"#RRGGBB"`, and so does the validator's error message (the model reads it on a retry). A test keeps real hexes out of the system prompt.
+- **The model sets the backdrop only when the sentence names one**, and may leave `background_colour` out (it is no longer required in its schema); code then sets `#F5F5F5`. The "pale tint" backdrop line is gone.
+- **Lines code already handles were removed:** the gloss 0.05–0.15 line (code clamps glossy), "backdrop" in the mood-words line, and "A listed style word … Apply it", which told the model to shift the colour itself while the reference block told it not to.
+- **Kept, because no code rule covers them:** "choose a hex a packaging designer would use for that colour" (it may lean muted, but nothing replaces it), and "soft studio lighting" (it describes the lighting, not colours).
+
+### Results: v1 → v1.3
+
+The same 37 cases on the same checks, 3 runs each, `qwen3:8b`, temperature 0.2; v1, v1.1 and v1.2 re-scored on the v1.3 backdrop check. "Named colour right" counts only the box's named-colour check. Per case: `evals/results/comparison_v1.3.md`.
+
+| Version | All checks (runs passed) | In-table colours: named colour right (10 cases) | Out-of-table colours: named colour right (5 cases) | Avg LLM time per run |
+|---|---|---|---|---|
+| v1: v1 prompt, no tables | 66/111 (60%) | 13/30 (43%) | 6/15 (40%) | 2.27 s |
+| v1.1: tables | 73/111 (66%) | 18/30 (60%) | 0/15 (0%) | 2.31 s |
+| v1.2: new hexes, gloss and backdrop by code | 94/111 (85%) | 30/30 (100%) | 0/15 (0%) | 2.31 s |
+| **v1.3: clean prompt** | **102/111 (92%)** | **30/30 (100%)** | **6/15 (40%)** | **2.09 s** |
+| Diagnostic: v1.3 without the colour table (the 5 out-of-table cases only) | n/a | n/a | 6/15 (40%) | 2.1 s |
+
+**In-table vs out-of-table, and what the diagnostic showed.** The in-table score is 30/30 because the model copies the table's hex for names the table knows; it measures the lookup, not the model. The out-of-table score is the model's own colour knowledge, and it is back to v1's 6/15, though with a different 2 of 5 right (v1: rust and sapphire; v1.3: rust and fuchsia). Fuchsia is the one change with a clear cause: it left the schema's example `#E8A3B5` for `#E100FF` the moment the example was gone, so suspect (a) was real. The other changes came from editing several prompt lines at once, so they can't be pinned on (a) or (b). The diagnostic rules out (c) as it was posed: these 5 sentences never retrieve a colour row, so with the colour table switched off the request the model gets is byte-identical (checked with a hash), and it scored the same 6/15 (the few samples that differed, like one sapphire, are sampling). The table can only reach these sentences through the system prompt's "Reference data" paragraph, which every request contains; that was not tested.
+
+What the model picks for the out-of-table names in v1.3 (the diagnostic picked the same colours, with fuchsia's two hexes in a different mix and one sapphire sample `#66B2FF`, also too light):
+
+| Colour | Range (HSL hue, saturation, lightness) | v1.3, 3 runs | |
+|---|---|---|---|
+| rust | 8–30°, 40–100%, 22–48% | `#8B4513` ×3 (CSS "saddlebrown") | ✓ |
+| ochre | 25–50°, 40–90%, 35–60% | `#CC9966` ×3 | ✗, but see below |
+| fuchsia | 290–348°, 31–100%, 40–65% | `#E100FF` ×2, `#E13FFF` | ✓ |
+| periwinkle | 215–255°, 30–100%, 65–92% | `#B59FC3` ×3 | ✗ hue 277°: lavender |
+| sapphire | 192–232°, 70–100%, 11–50% | `#6495ED` ×3 (CSS "cornflowerblue") | ✗ lightness 66%: too light |
+
+- **Ochre fails on floating point, not on colour.** `#CC9966` has an HSL lightness of exactly 60% (153/255), on the range's inclusive edge, but Python computes 60.00000000000001, which fails "≤ 60". The check is left as it is until that is decided; with it fixed, the out-of-table score would be 9/15.
+- When the model doesn't know a colour it often reaches for a CSS named colour (saddlebrown for rust, cornflowerblue for sapphire, tan for ochre in v1.2). Each name is one near-deterministic decision, so the score moves in steps of 3 whenever the prompt's wording changes.
+
+What else moved:
+- **The model now leaves the backdrop out in 86 of 111 runs**, and set it in all 9 runs whose sentence names one (pink, black, blush: all kept). Shorter replies: 2.09 s per run instead of 2.31 s.
+- `red_lipstick` and `plain_red` are back to 3/3: every run picked `#FF0000`.
+- **Worse: the luxury lipstick.** For "luxury matte red lipstick box, three-quarter view" the model now picks `#D32F2F` before the luxury shift (all 3 eval runs), so the box comes out `#8F2525`, a warmer brick red, where v1.2 gave `#83192E`, a deeper crimson close to the v1.1 image. It still passes every check.
+
+### The renders, v1.2 → v1.3
+
+| v1.2 | v1.3 |
+|---|---|
+| <img src="docs/v1.2_glossy_emerald_perfume.png" width="260"> | <img src="docs/v1.3_glossy_emerald_perfume.png" width="260"><br>`a glossy emerald perfume box`: the same spec as v1.2 (the model left the backdrop out; code set it), pixel-identical within 1 level |
+| <img src="docs/v1.2_sage_green_gift_box.png" width="260"> | <img src="docs/v1.3_sage_green_gift_box.png" width="260"><br>`a sage green gift box`: the same spec as v1.2, pixel-identical within 1 level |
+| <img src="docs/v1.2_luxury_matte_red_lipstick.png" width="260"><br>`luxury matte red lipstick box, three-quarter view`<br>`#C31B3D` → luxury `#83192E` | <img src="docs/v1.3_luxury_matte_red_lipstick.png" width="260"><br>`a luxury matte red lipstick box` (no ", three-quarter view")<br>`#D32F2F` → luxury `#8F2525`: **worse**, a warmer brick red |
+
 ## The repair loop
 
 If the spec fails validation, the loop sends the model's reply back to it with the validator's exact messages and asks for a corrected version. It allows 2 attempts in total.
@@ -399,12 +452,14 @@ The model fixed both values and kept everything else. It fixes just enough to pa
 ```
 python evals/run_evals.py                                  # 37 cases x 3 runs, specs only (about 4.5 minutes)
 python evals/run_evals.py --label grounded                 # name the results file
-python evals/run_evals.py --no-grounding --label prompt-only
+python evals/run_evals.py --no-grounding --label prompt-only   # no table rows AND no code rules: the model alone
+python evals/run_evals.py --without-table colours          # leave one table out; code rules stay on
 python evals/run_evals.py --render                         # also render one spec per case (model unloaded first)
 python evals/run_evals.py --model llama3.1:8b              # compare models
 python evals/run_evals.py --runs 1 --cases luxury_red      # a referenced case (plain_red) comes along
 python evals/run_evals.py --cases-file evals/dev_cases.json  # the dev set; results go to runs/dev_evals/
 python evals/compare.py <a.json> <b.json> [...]            # side-by-side table
+python evals/rescore.py <results.json> [...]               # re-run today's checks on saved specs (no model calls)
 ```
 
 The 37 sentences in `evals/cases.json` go through exactly the same LLM + validation loop as `prompt.py`. Checks run on the final spec and are **ranges, not exact values**. A run passes only if it produced a valid spec within 2 attempts **and** every check passes. Results go to `evals/results/<timestamp>_<label>.json` (every spec, every raw reply, the table rows used, every value code set, every check) and a Markdown summary beside it. The summary also gives the named-colour score of the in-table and the out-of-table colour cases separately (`colour_group` in `cases.json`).
@@ -416,7 +471,7 @@ What the checks cover:
 | Named colours, in the table | "emerald", "sage", "crimson", "wine", "gold", "navy", "blush", "champagne" must fall inside hue/saturation/lightness ranges in `evals/colour_definitions.json`. The v1.1 ones were written from general colour definitions (Wikipedia, CSS, Pantone) **before** the colour table existed: where a colour has two or more standard references, the range is their span plus fixed tolerances (hue ±10°, saturation ±0.15, L\* ±10); navy and blush follow a written description. Emerald and sage were set in v1.2 from the render review, in HSL, and list the colours they must reject. |
 | Named colours, not in the table | "rust", "ochre", "fuchsia", "periwinkle", "sapphire", in HSL, written before any run: references plus tolerances (hue ±10°, saturation and lightness ±15 and ±10 points) where there are several, a written description where there is one. A test keeps these names out of `data/colours.json`. |
 | Finish | "glossy" and "high-gloss" roughness ≤ 0.05, "shiny" ≤ 0.2, "matte" ≥ 0.6. |
-| Backdrop | no backdrop named: neutral, HSL saturation ≤ 10% and lightness ≥ 80%; a named one is kept (pink, black, blush). |
+| Backdrop | no backdrop named: neutral, meaning near-grey (R, G and B within 20 of each other, 0–255) and HSL lightness ≥ 80%; a named one is kept (pink, black, blush). Until v1.3 "near-grey" was HSL saturation ≤ 10%, which failed every warm off-white. |
 | Sizes and proportions | lipstick height 6–10 cm with width and depth 1.5–4 cm; gift box top face at most 1.6:1; "tall" height > 1.5 × width; "flat" height ≤ half the width and depth. |
 | Camera | front / top_down / three_quarter, including three-quarter when no angle is named. |
 | Non-box and unsupported | `shape` must contain "bottle"; glass and logos must be in the **model's own** unsupported list (items the code adds don't count). |
@@ -425,11 +480,11 @@ What the checks cover:
 Rules:
 - The eval sentences and checks are frozen. The v1.1 ones were committed before any table existed, and the baseline results before the tables were written. The v1.2 changes were committed before any v1.2 fix, and the v1.1 baseline on them before any fix was written.
 - Tuning used only the dev sentences in `evals/dev_cases.json` (and, for the backdrop rule, dev sentences in `tests/test_grounding.py`).
-- No check was loosened after seeing results. The v1.2 changes only tightened checks or added them.
+- No check was loosened to make a result pass. The v1.2 changes only tightened checks or added them. v1.3 replaced the neutral-backdrop check, on review, with a near-grey one that is looser for warm off-whites (which the HSL version wrongly failed); every saved result was re-scored on it, so all versions are compared on the same check.
 
 Things the checks don't catch (by design, these are not changed after the fact):
 - In-table colours mostly measure copying (see [v1.2](#v12-colour-fixes-neutral-backdrops-an-honest-score)); the out-of-table colours are the measure of the model.
-- HSL saturation is very sensitive near white: the common off-white `#FAF9F6` is 29% saturated and fails the neutral-backdrop check. In practice "neutral" means a light grey.
+- Colour values are compared as floating-point numbers, so a colour exactly on a range's edge can fail: ochre `#CC9966` has HSL lightness exactly 60% but computes as 60.00000000000001 and fails "≤ 60" (see [v1.3](#v13-a-clean-prompt-and-the-out-of-table-score)). Left as it is until decided.
 - "shiny" keeps the older ≤ 0.2 check, although code now clamps it like "glossy".
 - "glass" is matched as a substring of the model's own unsupported items, so an item like "glass perfume bottle" (restating the object) counts as flagging glass.
 - The gold range excludes CSS `gold` (`#FFD700`, a saturated golden yellow) because packaging gold is metallic gold (`#D4AF37`). That's a judgment call; it is written down in `evals/colour_definitions.json`.
@@ -442,12 +497,12 @@ v1's 15-case results are kept in `evals/results/` (`20261018_132659`, `20261018_
 python -m unittest discover tests
 ```
 
-Offline, no Ollama or Blender needed (64 tests):
+Offline, no Ollama or Blender needed (67 tests):
 
-- `test_schema.py`: the generated JSON schema and the validator agree on every field (range edges, choices, colour pattern), the bevel rule, and the LLM's schema is exactly the spec schema.
-- `test_spec_writer.py`: the repair loop with a scripted fake model, parsing of the model's reply (including the non-box shape rule and the model's own unsupported list), that table rows reach every attempt, also through `--break-first-reply`, and that code sets the gloss and backdrop after the model (and not with `--no-grounding`).
+- `test_schema.py`: the generated JSON schema and the validator agree on every field (range edges, choices, colour pattern), the bevel rule, the LLM's schema is exactly the spec schema (with the backdrop optional), and no real hex appears in the system prompt or the colour error message.
+- `test_spec_writer.py`: the repair loop with a scripted fake model, parsing of the model's reply (including the non-box shape rule and the model's own unsupported list), that table rows reach every attempt, also through `--break-first-reply`, that code sets the gloss and backdrop after the model (also when the model leaves the backdrop out, and not with `--no-grounding`), and that a table can be left out.
 - `test_grounding.py`: the table lookup (longest phrase first, whole words, a product word isn't also a colour, style words for the backdrop left out, row caps), the style shift, the glossy clamp (not for semi-gloss, satin, matte, "lip gloss", a glossy backdrop, or two finishes), which sentences name a backdrop colour, and that the tables are well formed.
-- `test_eval_checks.py`: the eval checks themselves; every colour definition's references fall inside its range and its must-fail colours outside, the exact emerald and sage hexes, the neutral-backdrop check, that every sentence without a backdrop has it, and that the out-of-table colours stay out of the colour table.
+- `test_eval_checks.py`: the eval checks themselves; every colour definition's references fall inside its range and its must-fail colours outside, the exact emerald and sage hexes, the near-grey backdrop check, that every sentence without a backdrop has it, that the out-of-table colours stay out of the colour table, and re-scoring saved runs.
 
 ---
 
@@ -680,7 +735,7 @@ On an RTX 5060 Laptop GPU a 1080×1080, 128-sample render takes about 3 seconds,
 | `spec.py` | The spec's single source of truth: fields, defaults, validation, and the JSON schema. Used by everything, including Blender. |
 | `render_scene.py` | Runs inside Blender. Builds the box, backdrop, lights, world and camera from scratch, runs the light meter (`accurate` mode), renders, checks the colour. |
 | `check_colour.py` | Measures the box colour in a render against the spec (spec hex, measured hex, Delta E). |
-| `evals/` | `cases.json` (37 frozen eval sentences and their checks), `colour_definitions.json` (what each colour name must look like), `dev_cases.json` (the separate tuning set), `run_evals.py`, `compare.py`, and `results/`. |
+| `evals/` | `cases.json` (37 frozen eval sentences and their checks), `colour_definitions.json` (what each colour name must look like), `dev_cases.json` (the separate tuning set), `run_evals.py`, `compare.py`, `rescore.py`, and `results/`. |
 | `tests/` | Unit tests (`python -m unittest discover tests`) and deliberately broken specs. |
 | `specs/` | Example hand-written specs. |
 | `docs/` | The example images shown above. |
@@ -709,9 +764,9 @@ You can also run the Blender part directly:
 ## Known limitations
 
 - **One box, one colour.** No logos, text, patterns, other shapes, materials or props. These are reported, never faked.
-- **Only what's in the tables is grounded.** A colour name or product that isn't in `data/` is the model's guess, and its guesses are often wrong: 0 of 5 out-of-table colours right (see [v1.2](#v12-colour-fixes-neutral-backdrops-an-honest-score)), sometimes a plain CSS colour or the schema's example hex. Basic colour words (red, blue) are always the model's own choice, and a plain red occasionally comes out pinkish (`#E3256B`).
+- **Only what's in the tables is grounded.** A colour name or product that isn't in `data/` is the model's guess, and its guesses are often wrong: 2 of 5 out-of-table colours right in v1.3 (see [v1.3](#v13-a-clean-prompt-and-the-out-of-table-score)), often a CSS named colour. Which ones it gets right changes with the prompt's wording. Basic colour words (red, blue) are always the model's own choice.
 - **Backdrops** are a neutral `#F5F5F5`, set by code, unless the sentence names a backdrop colour. The rule only looks next to the words "backdrop" and "background": "a red box on pink" gets the neutral backdrop.
-- **The system prompt is out of date in two lines**: it still asks for a "pale tint" backdrop and gloss 0.05–0.15. Code overrides both. Left alone on purpose, so the request for every sentence without emerald or sage stayed byte-identical to v1.1.
+- **`--no-grounding` turns off both the table rows and the code rules** (style shift, gloss, backdrop): the model alone. To leave out only one table, use `evals/run_evals.py --without-table`.
 - **Glossy** is clamped to 0.03–0.05, which gives crisper edge highlights, but under the soft studio lights the big faces still don't look mirror-like.
 - **Style words are arithmetic, not taste.** "Luxury" darkens by 30% in code; it doesn't pick a different colour family (e.g. red stays red, it doesn't become burgundy).
 - **Repairs pass, but sit at the limit** (see [The repair loop](#the-repair-loop)).
@@ -731,5 +786,6 @@ You can also run the Blender part directly:
 - **v0.1**: colour modes with a measured colour check, cleaner studio sweeps, softer top-down lighting.
 - **v1**: a local LLM (Ollama, `qwen3:8b`) turns a sentence into the spec, with a schema generated from the validator, a repair loop, GPU hand-off and evals. Fully offline.
 - **v1.1**: stricter frozen evals (30 cases, colour definitions, style pairs), a bevel limit in the validator, and grounding tables retrieved per sentence: 76% → 100% of eval runs.
-- **v1.2 (this)**: 7 more eval cases (5 colour names in no table, 2 named backdrops), stricter emerald, sage, gloss and backdrop checks, new emerald and sage hexes, glossy and the backdrop set by code: 59% → 85% of eval runs on the new checks. The out-of-table score stays 0/15.
-- **Next**: the out-of-table colours (the model's own colour knowledge, or a bigger model via `--model`), harder lighting so glossy reads as glossy, conflicting instructions, a second backend behind `llm_backend.py`.
+- **v1.2**: 7 more eval cases (5 colour names in no table, 2 named backdrops), stricter emerald, sage, gloss and backdrop checks, new emerald and sage hexes, glossy and the backdrop set by code: 59% → 85% of eval runs on the new checks. The out-of-table score stays 0/15.
+- **v1.3 (this)**: a near-grey backdrop check (saved results re-scored), no real colour in the schema, the backdrop left to code unless named, stale prompt lines removed: 92% of eval runs, out-of-table 6/15 (back to v1's level).
+- **Next**: the floating-point edge in the colour checks (ochre), the out-of-table colours (the model's own colour knowledge, or a bigger model via `--model`), harder lighting so glossy reads as glossy, a second backend behind `llm_backend.py`.
