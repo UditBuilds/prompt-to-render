@@ -95,15 +95,49 @@ def hue_in(hue, low, high):
     return low <= hue <= high if low <= high else (hue >= low or hue <= high)
 
 
+def shape_of(spec):
+    """The spec's shape. A spec without one (v1.3 and earlier) is a box, the default."""
+    return spec.get("shape", "box")
+
+
+def product_of(spec):
+    """The fields of the spec's own shape: spec["box"] for a box, spec["cylinder"] for a cylinder, ..."""
+    return spec[shape_of(spec)]
+
+
+def box_of(result):
+    """The box's fields, or None if the spec's shape isn't a box (then there are none)."""
+    return result.spec["box"] if shape_of(result.spec) == "box" else None
+
+
+def not_a_box(result):
+    return False, f"shape {shape_of(result.spec)}, not a box: no box sides to check"
+
+
+# The field holding the cap or lid colour, per shape. Other shapes have none.
+CAP_FIELDS = {"bottle": "cap_colour", "jar": "lid_colour"}
+
+
 def colour_of(check, result):
-    """The box colour, or the backdrop colour with "target": "background"."""
+    """(where, colour): the product's colour, the backdrop's with "target": "background",
+    or the cap's or lid's with "target": "cap" (colour None if the shape has no cap)."""
     if check.get("target") == "background":
         return "backdrop", result.spec["background_colour"]
-    return "box", result.spec["box"]["colour"]
+    shape = shape_of(result.spec)
+    if check.get("target") == "cap":
+        field = CAP_FIELDS.get(shape)
+        return f"{shape} {field or 'cap'}", product_of(result.spec).get(field) if field else None
+    return shape, product_of(result.spec)["colour"]
+
+
+def no_colour(where):
+    return False, f"no {where}: this shape has none"
 
 
 def check_hue(check, result, done):
     where, colour = colour_of(check, result)
+    if colour is None:
+        return no_colour(where)
     hue = hex_to_hsv(colour)[0]
     return (hue_in(hue, check["min"], check["max"]),
             f"hue {hue:.0f} deg of {where} {colour} (want {check['min']}..{check['max']})")
@@ -111,12 +145,16 @@ def check_hue(check, result, done):
 
 def check_saturation(check, result, done):
     where, colour = colour_of(check, result)
+    if colour is None:
+        return no_colour(where)
     saturation = hex_to_hsv(colour)[1]
     return in_range(saturation, check), f"saturation {saturation:.2f} of {where} {colour} (want {describe_range(check)})"
 
 
 def check_lightness(check, result, done):
     where, colour = colour_of(check, result)
+    if colour is None:
+        return no_colour(where)
     lightness = hex_to_lab(colour)[0]
     return in_range(lightness, check), f"L* {lightness:.0f} of {where} {colour} (want {describe_range(check)})"
 
@@ -130,6 +168,8 @@ def check_named_colour(check, result, done):
     name = check["name"]
     definition = COLOUR_DEFINITIONS[name]
     where, colour = colour_of(check, result)
+    if colour is None:
+        return no_colour(where)
     if definition.get("space") == "hsl":
         hue, saturation, lightness = hex_to_hsl(colour)
         names = ("HSL saturation", "HSL lightness")
@@ -169,11 +209,13 @@ def check_neutral_backdrop(check, result, done):
 
 def check_hex(check, result, done):
     where, colour = colour_of(check, result)
+    if colour is None:
+        return no_colour(where)
     return colour.upper() == check["equals"].upper(), f"{where} colour {colour} (want {check['equals']})"
 
 
 def check_roughness(check, result, done):
-    roughness = result.spec["box"]["roughness"]
+    roughness = product_of(result.spec)["roughness"]
     return in_range(roughness, check), f"roughness {roughness:g} (want {describe_range(check)})"
 
 
@@ -183,27 +225,36 @@ def check_camera(check, result, done):
 
 
 def check_ratio(check, result, done):
-    box = result.spec["box"]
+    box = box_of(result)
+    if box is None:
+        return not_a_box(result)
     ratio = box[check["num"]] / box[check["den"]]
     return in_range(ratio, check), (f"{check['num']}/{check['den']} = {box[check['num']]:g}/{box[check['den']]:g} "
                                     f"= {ratio:.2f} (want {describe_range(check)})")
 
 
 def check_size(check, result, done):
-    box = result.spec["box"]
+    box = box_of(result)
+    if box is None:
+        return not_a_box(result)
     sides = [box["width_cm"], box["height_cm"], box["depth_cm"]]
     side = max(sides) if check["side"] == "longest" else min(sides)
     return in_range(side, check), f"{check['side']} side {side:g} cm (want {describe_range(check)})"
 
 
 def check_dimension(check, result, done):
-    value = result.spec["box"][check["field"]]
+    box = box_of(result)
+    if box is None:
+        return not_a_box(result)
+    value = box[check["field"]]
     return in_range(value, check), f"{check['field']} {value:g} cm (want {describe_range(check)})"
 
 
 def check_top_aspect(check, result, done):
     """Long side / short side of the top face (width x depth)."""
-    box = result.spec["box"]
+    box = box_of(result)
+    if box is None:
+        return not_a_box(result)
     width, depth = box["width_cm"], box["depth_cm"]
     aspect = max(width, depth) / min(width, depth)
     return (in_range(aspect, check),
@@ -228,6 +279,40 @@ def check_model_unsupported_mentions(check, result, done):
                 f"(want a mention of {' or '.join(check['any'])})")
 
 
+def check_model_unsupported_excludes(check, result, done):
+    """The model must not list these as unsupported (e.g. a cap or lid, which v2 draws)."""
+    text = " | ".join(result.model_unsupported).lower()
+    found = [word for word in check["any"] if word in text]
+    return not found, (f"model's own unsupported list {json.dumps(result.model_unsupported)} "
+                       f"(want no mention of {' or '.join(check['any'])})")
+
+
+def check_shape(check, result, done):
+    """The shape the spec draws (box, cylinder, bottle or jar), not the model's free-text shape."""
+    shape = shape_of(result.spec)
+    return shape == check["equals"], f"spec shape {shape} (want {check['equals']})"
+
+
+def check_shape_size(check, result, done):
+    """A size field of the spec's own shape. A shape without that field fails: a box has no diameter_cm."""
+    shape, fields = shape_of(result.spec), product_of(result.spec)
+    if check["field"] not in fields:
+        return False, f"shape {shape} has no {check['field']} (want {describe_range(check)})"
+    value = fields[check["field"]]
+    return in_range(value, check), f"{shape} {check['field']} {value:g} cm (want {describe_range(check)})"
+
+
+def check_shape_ratio(check, result, done):
+    shape, fields = shape_of(result.spec), product_of(result.spec)
+    missing = [f for f in (check["num"], check["den"]) if f not in fields]
+    if missing:
+        return False, (f"shape {shape} has no {' or '.join(missing)} "
+                       f"(want {check['num']}/{check['den']} {describe_range(check)})")
+    ratio = fields[check["num"]] / fields[check["den"]]
+    return in_range(ratio, check), (f"{shape} {check['num']}/{check['den']} = {fields[check['num']]:g}/"
+                                    f"{fields[check['den']]:g} = {ratio:.2f} (want {describe_range(check)})")
+
+
 def check_unsupported_empty(check, result, done):
     return not result.unsupported, f"unsupported {json.dumps(result.unsupported)} (want [])"
 
@@ -236,16 +321,17 @@ def check_style_shift(check, result, done):
     """Compare the box colour with another case's (e.g. "a luxury red box" vs "a red box").
 
     The reference is the mean L* and saturation over that case's valid runs.
+    The colour is the product's, whatever its shape.
     The colour must move in the given direction by at least min_lightness L*
     OR by min_saturation of saturation.
     """
     reference = done.get(check["than"])
-    colours = [r["spec"]["box"]["colour"] for r in reference["runs"] if r["valid"]] if reference else []
+    colours = [product_of(r["spec"])["colour"] for r in reference["runs"] if r["valid"]] if reference else []
     if not colours:
         return False, f"no valid spec from {check['than']} to compare with"
     ref_lightness = sum(hex_to_lab(c)[0] for c in colours) / len(colours)
     ref_saturation = sum(hex_to_hsv(c)[1] for c in colours) / len(colours)
-    colour = result.spec["box"]["colour"]
+    colour = product_of(result.spec)["colour"]
     lightness, saturation = hex_to_lab(colour)[0], hex_to_hsv(colour)[1]
     if check["direction"] == "darker_or_less_saturated":
         light_shift, sat_shift = ref_lightness - lightness, ref_saturation - saturation
@@ -275,7 +361,11 @@ CHECKS = {
     "is_box": check_is_box,
     "shape_contains": check_shape_contains,
     "model_unsupported_mentions": check_model_unsupported_mentions,
+    "model_unsupported_excludes": check_model_unsupported_excludes,
     "unsupported_empty": check_unsupported_empty,
+    "shape": check_shape,
+    "shape_size": check_shape_size,
+    "shape_ratio": check_shape_ratio,
     "style_shift": check_style_shift,
 }
 
@@ -473,7 +563,8 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
     # distinct specs shows how much the runs actually varied.
     distinct = len({json.dumps(r["spec"], sort_keys=True) for r in case_runs if r["valid"]})
     return {"id": case["id"], "sentence": case["sentence"], "covers": case.get("covers", ""),
-            "colour_group": case.get("colour_group"), "checks": case["checks"], "passed_runs": passes,
+            "colour_group": case.get("colour_group"), "added": case.get("added"),
+            "checks": case["checks"], "passed_runs": passes,
             "total_runs": len(case_runs), "distinct_specs": distinct, "runs": case_runs}
 
 
@@ -482,12 +573,13 @@ COLOUR_GROUPS = {"in_table": "In-table colours", "out_of_table": "Out-of-table c
 
 
 def box_colour_passed(case, run):
-    """Did the run pass the case's named-colour check on the box? None if the case has none.
+    """Did the run pass the case's named-colour check on the box (the product, not its
+    backdrop or cap)? None if the case has none.
 
     An invalid spec has no colour, so it counts as a fail.
     """
     index = next((i for i, c in enumerate(case["checks"])
-                  if c["type"] == "named_colour" and c.get("target") != "background"), None)
+                  if c["type"] == "named_colour" and c.get("target") is None), None)
     if index is None:
         return None
     return run["valid"] and run["checks"][index]["passed"]
@@ -515,11 +607,58 @@ def summarise_groups(results):
     return groups
 
 
+# The check types behind the shape scores: the shape chosen, and the sizes of that shape.
+SHAPE_SCORES = {"choice": ("shape",), "sizes": ("shape_size", "shape_ratio")}
+SHAPE_SCORE_NAMES = {"choice": "Shape choice", "sizes": "Shape sizes"}
+
+
+def checks_passed(case, run, types):
+    """Did the run pass every check of these types? None if the case has none.
+
+    An invalid spec counts as a fail.
+    """
+    indexes = [i for i, c in enumerate(case["checks"]) if c["type"] in types]
+    if not indexes:
+        return None
+    return run["valid"] and all(run["checks"][i]["passed"] for i in indexes)
+
+
+def summarise_shapes(results):
+    """The shape checks alone, and the size checks alone, over the cases that have them.
+
+    Counted like the named-colour check of the colour groups: the other
+    checks of these cases (e.g. the neutral backdrop) are set by code.
+    """
+    scores = {}
+    for name, types in SHAPE_SCORES.items():
+        runs = [(c, r) for c in results for r in c["runs"] if checks_passed(c, r, types) is not None]
+        if runs:
+            scores[name] = {"cases": len({c["id"] for c, _ in runs}), "total_runs": len(runs),
+                            "passed_runs": sum(bool(checks_passed(c, r, types)) for c, r in runs)}
+    return scores
+
+
+def summarise_added(results):
+    """Every check, for the cases from before v2 and for the cases v2 added, separately.
+
+    The cases from before v2 are the regression gate: they must not get worse.
+    """
+    groups = {}
+    for name, added in (("before_v2", None), ("v2", "v2")):
+        cases = [c for c in results if c.get("added") == added]
+        if cases:
+            groups[name] = {"cases": len(cases), "total_runs": sum(c["total_runs"] for c in cases),
+                            "passed_runs": sum(c["passed_runs"] for c in cases)}
+    return groups
+
+
 def summarise(results):
     runs = [r for case in results for r in case["runs"]]
     total = len(runs)
     return {
         "colour_groups": summarise_groups(results),
+        "shape_scores": summarise_shapes(results),
+        "added_groups": summarise_added(results),
         "passed_runs": sum(r["passed"] for r in runs),
         "total_runs": total,
         "pass_rate": round(sum(r["passed"] for r in runs) / total, 3) if total else None,
@@ -580,10 +719,19 @@ def markdown_table(report):
         f"({percent(s['passed_runs'], s['total_runs'])}); "
         f"{s['cases_passing_all_runs']}/{s['total_cases']} cases passed every run.",
     ]
+    added = s.get("added_groups", {})
+    if "v2" in added:
+        for name, title in (("before_v2", "Cases from before v2"), ("v2", "Cases added in v2")):
+            g = added[name]
+            lines.append(f"- **{title}** ({g['cases']} cases): {g['passed_runs']}/{g['total_runs']} runs passed "
+                         f"({percent(g['passed_runs'], g['total_runs'])}).")
     for group, g in s.get("colour_groups", {}).items():
         lines.append(f"- **{COLOUR_GROUPS[group]}** ({g['cases']} cases): the named-colour check passed in "
                      f"{g['colour_passed_runs']}/{g['total_runs']} runs; every check in "
                      f"{g['passed_runs']}/{g['total_runs']}.")
+    for name, g in s.get("shape_scores", {}).items():
+        lines.append(f"- **{SHAPE_SCORE_NAMES[name]}** ({g['cases']} cases): passed in "
+                     f"{g['passed_runs']}/{g['total_runs']} runs ({percent(g['passed_runs'], g['total_runs'])}).")
     lines += [
         f"- **Retry loop fired:** {s['retry_runs']}/{s['total_runs']} runs "
         f"({percent(s['retry_runs'], s['total_runs'])}); "

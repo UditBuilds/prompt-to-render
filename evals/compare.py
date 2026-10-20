@@ -21,7 +21,7 @@ EVALS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(EVALS_DIR))
 
 from grounding import load_tables  # noqa: E402
-from run_evals import COLOUR_GROUPS, percent  # noqa: E402
+from run_evals import COLOUR_GROUPS, SHAPE_SCORE_NAMES, load_cases, percent, product_of, shape_of  # noqa: E402
 
 
 def load(path):
@@ -48,15 +48,21 @@ def how_values_came(case, tables):
         rows = run.get("grounding_rows", [])
         if not run["valid"]:
             continue
-        box = run["spec"]["box"]
-        colour = box["colour"].upper()
+        shape, product = shape_of(run["spec"]), product_of(run["spec"])
+        colour = product["colour"].upper()
         before_shift = run["style_changes"][0]["from"] if run.get("style_changes") else colour
         if any(r["table"] == "colours" and tables["colours"][r["name"]]["hex"] == before_shift for r in rows):
             copied += 1
         if run.get("style_changes"):
             shifted += 1
-        size = [box["width_cm"], box["height_cm"], box["depth_cm"]]
-        if any(r["table"] == "products" and tables["products"][r["name"]]["typical"] == size for r in rows):
+        if shape == "box":
+            size = [product["width_cm"], product["height_cm"], product["depth_cm"]]
+            typicals = [tables["products"][r["name"]]["typical"] for r in rows if r["table"] == "products"]
+        else:
+            size = [product["diameter_cm"], product["height_cm"]]
+            typicals = [tables["products"][r["name"]].get(shape, {}).get("typical")
+                        for r in rows if r["table"] == "products"]
+        if size in typicals:
             typical += 1
     parts = []
     if copied:
@@ -94,6 +100,16 @@ def main(paths):
 
     row("Runs passed", [f"{r['summary']['passed_runs']}/{r['summary']['total_runs']} "
                         f"({percent(r['summary']['passed_runs'], r['summary']['total_runs'])})" for r in reports])
+    # Split by the current cases.json, so a report from before v2 (all of
+    # whose cases are from before v2) is counted the same way.
+    added = {c["id"]: c.get("added") for c in load_cases()}
+    for title, which in (("Runs passed, cases from before v2", None), ("Runs passed, cases added in v2", "v2")):
+        cells = []
+        for r in reports:
+            cases = [c for c in r["cases"] if added.get(c["id"]) == which]
+            passed, total = sum(c["passed_runs"] for c in cases), sum(c["total_runs"] for c in cases)
+            cells.append(f"{passed}/{total} ({percent(passed, total)})" if total else "n/a")
+        row(title, cells)
     for group, title in COLOUR_GROUPS.items():
         cells = []
         for r in reports:
@@ -101,6 +117,13 @@ def main(paths):
             cells.append(f"{g['colour_passed_runs']}/{g['total_runs']} "
                          f"({percent(g['colour_passed_runs'], g['total_runs'])})" if g else "n/a")
         row(f"{title}: named colour right", cells)
+    for name, title in SHAPE_SCORE_NAMES.items():
+        cells = []
+        for r in reports:
+            g = r["summary"].get("shape_scores", {}).get(name)
+            cells.append(f"{g['passed_runs']}/{g['total_runs']} ({percent(g['passed_runs'], g['total_runs'])})"
+                         if g else "n/a")
+        row(f"{title} right", cells)
     row("Cases passing every run", [f"{r['summary']['cases_passing_all_runs']}/{r['summary']['total_cases']}"
                                     for r in reports])
     row("Retry loop fired", [f"{r['summary']['retry_runs']}/{r['summary']['total_runs']}" for r in reports])

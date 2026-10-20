@@ -143,6 +143,100 @@ class Checks(unittest.TestCase):
         self.assertFalse(outcomes[0]["passed"])
 
 
+def shaped(shape, background="#F5F5F5", **fields):
+    """A result whose spec has a v2 shape. Built by hand, not validated, so these
+    tests don't depend on spec.py."""
+    result = FakeResult(background=background)
+    result.spec = dict(result.spec, shape=shape)
+    del result.spec["box"]
+    result.spec[shape] = dict({"colour": "#C8102E", "roughness": 0.5}, **fields)
+    return result
+
+
+class ShapeChecks(unittest.TestCase):
+    """The v2 checks. On a spec from v1.3 (no shape field: a box) they must fail, never raise."""
+
+    def test_shape_of_a_spec_without_one_is_box(self):
+        self.assertTrue(passes({"type": "shape", "equals": "box"}, FakeResult()))
+        self.assertFalse(passes({"type": "shape", "equals": "cylinder"}, FakeResult()))
+        self.assertTrue(passes({"type": "shape", "equals": "cylinder"}, shaped("cylinder", diameter_cm=2)))
+
+    def test_shape_size_reads_the_shapes_own_fields(self):
+        diameter = {"type": "shape_size", "field": "diameter_cm", "min": 1.5, "max": 2.5}
+        self.assertTrue(passes(diameter, shaped("cylinder", diameter_cm=2, height_cm=8)))
+        self.assertFalse(passes(diameter, shaped("cylinder", diameter_cm=3, height_cm=8)))
+        # A box has no diameter, whatever its width: the v1.3 lipstick box fails.
+        lipstick_box = FakeResult({"width_cm": 2, "height_cm": 8.5, "depth_cm": 2})
+        self.assertFalse(passes(diameter, lipstick_box))
+        height = {"type": "shape_size", "field": "height_cm", "min": 7, "max": 9}
+        self.assertTrue(passes(height, lipstick_box))
+
+    def test_shape_ratio(self):
+        wider = {"type": "shape_ratio", "num": "height_cm", "den": "diameter_cm", "lt": 1}
+        self.assertTrue(passes(wider, shaped("jar", diameter_cm=7, height_cm=5)))
+        self.assertFalse(passes(wider, shaped("jar", diameter_cm=5, height_cm=5)))  # exactly 1
+        self.assertFalse(passes(wider, FakeResult({"width_cm": 7, "height_cm": 5, "depth_cm": 7})))
+
+    def test_box_checks_fail_on_other_shapes(self):
+        cylinder = shaped("cylinder", diameter_cm=2, height_cm=8)
+        for check in ({"type": "dimension", "field": "height_cm", "min": 6, "max": 10},
+                      {"type": "ratio", "num": "height_cm", "den": "width_cm", "gt": 1.5},
+                      {"type": "size", "side": "longest", "min": 5, "max": 60},
+                      {"type": "top_aspect", "max": 1.6}):
+            with self.subTest(check=check["type"]):
+                self.assertFalse(passes(check, cylinder))
+
+    def test_colour_and_finish_are_the_products(self):
+        jar = shaped("jar", diameter_cm=7, height_cm=5, colour="#9CAF88", roughness=0.8, lid_colour="#D4AF37")
+        self.assertTrue(passes({"type": "named_colour", "name": "sage"}, jar))
+        self.assertTrue(passes({"type": "roughness", "min": 0.6}, jar))
+        self.assertTrue(passes({"type": "named_colour", "name": "gold", "target": "cap"}, jar))
+        self.assertFalse(passes({"type": "named_colour", "name": "sage", "target": "cap"}, jar))
+        done = {"plain": finished_case("#D32F2F")}
+        darker = {"type": "style_shift", "than": "plain", "direction": "darker_or_less_saturated",
+                  "min_lightness": 5, "min_saturation": 0.1}
+        self.assertTrue(passes(darker, shaped("cylinder", colour="#7A1F2B"), done))
+
+    def test_cap_colour(self):
+        gold_cap = {"type": "named_colour", "name": "gold", "target": "cap"}
+        self.assertTrue(passes(gold_cap, shaped("bottle", diameter_cm=3, height_cm=10, cap_colour="#D4AF37")))
+        self.assertFalse(passes(gold_cap, shaped("bottle", diameter_cm=3, height_cm=10, cap_colour="#1C1C1C")))
+        # Shapes without a cap, and v1.3 specs, fail.
+        self.assertFalse(passes(gold_cap, shaped("cylinder", diameter_cm=2, height_cm=8)))
+        self.assertFalse(passes(gold_cap, FakeResult({"colour": "#D4AF37"})))
+
+    def test_model_unsupported_excludes(self):
+        check = {"type": "model_unsupported_excludes", "any": ["lid", "cap"]}
+        self.assertTrue(passes(check, FakeResult(unsupported=["metallic finish"])))
+        self.assertFalse(passes(check, FakeResult(unsupported=["Gold Lid"])))
+        # Only the model's own list counts.
+        self.assertTrue(passes(check, FakeResult(unsupported=["gold lid"], model_unsupported=[])))
+
+    def test_shape_scores_count_their_checks_alone(self):
+        checks = [{"type": "shape", "equals": "jar"},
+                  {"type": "shape_size", "field": "diameter_cm", "min": 5, "max": 9},
+                  {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}]
+
+        def run(shape_ok, size_ok, backdrop_ok=True, valid=True):
+            outcomes = [{"passed": shape_ok}, {"passed": size_ok}, {"passed": backdrop_ok}] if valid else [
+                {"passed": False}]
+            return {"valid": valid, "passed": valid and shape_ok and size_ok and backdrop_ok, "checks": outcomes}
+
+        results = [{"id": "jar", "checks": checks,
+                    "runs": [run(True, True, False), run(True, False), run(False, True), run(True, True, valid=False)]},
+                   {"id": "other", "checks": checks[2:], "runs": [run(True, True)]}]
+        self.assertEqual(run_evals.summarise_shapes(results),
+                         {"choice": {"cases": 1, "total_runs": 4, "passed_runs": 2},
+                          "sizes": {"cases": 1, "total_runs": 4, "passed_runs": 2}})
+
+    def test_cases_added_in_v2_are_counted_apart(self):
+        results = [{"id": "old", "total_runs": 3, "passed_runs": 3},
+                   {"id": "new", "added": "v2", "total_runs": 3, "passed_runs": 1}]
+        self.assertEqual(run_evals.summarise_added(results),
+                         {"before_v2": {"cases": 1, "total_runs": 3, "passed_runs": 3},
+                          "v2": {"cases": 1, "total_runs": 3, "passed_runs": 1}})
+
+
 class ColourDefinitions(unittest.TestCase):
     def test_every_reference_is_inside_its_range(self):
         for name, definition in run_evals.COLOUR_DEFINITIONS.items():
@@ -182,9 +276,14 @@ class ColourDefinitions(unittest.TestCase):
 class Cases(unittest.TestCase):
     def test_cases_use_known_checks_and_colours(self):
         cases = run_evals.load_cases()
-        self.assertEqual(len(cases), 37)  # 30 from v1.1, 7 added in v1.2
-        self.assertEqual(len({c["id"] for c in cases}), 37)
-        self.assertEqual(len({c["sentence"] for c in cases}), 37)
+        self.assertEqual(len(cases), 52)  # 30 from v1.1, 7 added in v1.2, 15 in v2
+        self.assertEqual(sum(c.get("added") == "v2" for c in cases), 15)
+        self.assertEqual(len({c["id"] for c in cases}), 52)
+        # One sentence on purpose twice: shape_lipstick_box checks only the shape of red_lipstick's.
+        sentences = [c["sentence"] for c in cases]
+        repeated = {s for s in sentences if sentences.count(s) > 1}
+        self.assertEqual(repeated, {"a red lipstick box"})
+        self.assertEqual(len(set(sentences)), 51)
         for case in cases:
             for check in case["checks"]:
                 self.assertIn(check["type"], run_evals.CHECKS, case["id"])

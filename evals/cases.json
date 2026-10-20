@@ -1,5 +1,5 @@
 {
-  "about": "Eval cases for the spec writer. The first 30 were frozen in v1.1 before the grounding tables existed; v1.2 tightened some of their checks and added 7 cases, all before any v1.2 fix was written (see the git history). Each sentence goes through the same LLM + validation loop as prompt.py; the checks run on the final spec. Checks are ranges, not exact values, except where the sentence gives an exact hex. Colour checks use HSV hue (degrees) and saturation (0-1) and CIE L* lightness (0-100); named_colour checks use evals/colour_definitions.json (some of those are in HSL). neutral_backdrop (v1.3) wants a near-grey, light backdrop: R, G and B within max_spread of each other (0-255) and HSL lightness in %: every sentence that names no backdrop has it. colour_group marks the cases whose box colour name is in data/colours.json (in_table) and the 5 whose name is deliberately not (out_of_table: never add these names to the table). model_unsupported_mentions only looks at the model's own unsupported list, never at items the code added. style_shift compares a case's colour with an earlier case's (mean over its runs). A run also fails if no valid spec came back within 2 attempts. None of these sentences may be used to tune the prompt or the tables.",
+  "about": "Eval cases for the spec writer. The first 30 were frozen in v1.1 before the grounding tables existed; v1.2 tightened some of their checks and added 7 cases, all before any v1.2 fix was written (see the git history). Each sentence goes through the same LLM + validation loop as prompt.py; the checks run on the final spec. Checks are ranges, not exact values, except where the sentence gives an exact hex. Colour checks use HSV hue (degrees) and saturation (0-1) and CIE L* lightness (0-100); named_colour checks use evals/colour_definitions.json (some of those are in HSL). neutral_backdrop (v1.3) wants a near-grey, light backdrop: R, G and B within max_spread of each other (0-255) and HSL lightness in %: every sentence that names no backdrop has it. colour_group marks the cases whose box colour name is in data/colours.json (in_table) and the 5 whose name is deliberately not (out_of_table: never add these names to the table). model_unsupported_mentions only looks at the model's own unsupported list, never at items the code added. style_shift compares a case's colour with an earlier case's (mean over its runs). A run also fails if no valid spec came back within 2 attempts. None of these sentences may be used to tune the prompt or the tables. v2 (shapes) added 15 cases, marked \"added\": \"v2\", committed before any v2 code: the shape chosen (shape reads spec.shape; a spec without one is a box, the default), the sizes of round shapes (shape_size and shape_ratio read the fields of the spec's own shape, so a box, which has no diameter_cm, fails them), unsupported items in the model's own list, and cap or lid colours (target \"cap\"; model_unsupported_excludes: the model must not list the cap or lid as unsupported). Their size ranges were written from general product knowledge before any size table had round shapes, for the product with its cap or lid on: lipstick 1.5-2.5 cm across and 7-9 cm tall (given in the brief); mascara 1.2-2.8 across, 10-16 tall (slim to chunky tubes); perfume bottle 3.5-9 across, 8-16 tall (30-100 ml), at least as tall as wide; serum bottle 2.5-4.5 across, 7-13 tall with its dropper (15-50 ml); face cream jar 5-9 across, 3-7 tall (30-100 ml), wider than tall. shape_lipstick_box repeats red_lipstick's sentence on purpose, to check only its shape and leave the 37 earlier cases untouched.",
   "cases": [
     {
       "id": "red_lipstick",
@@ -387,6 +387,185 @@
       "checks": [
         {"type": "lightness", "target": "background", "max": 20},
         {"type": "hue", "min": 15, "max": 45}
+      ]
+    },
+    {
+      "id": "shape_lipstick",
+      "added": "v2",
+      "covers": "shape: lipstick = cylinder; lipstick size",
+      "sentence": "a red lipstick",
+      "checks": [
+        {"type": "shape", "equals": "cylinder"},
+        {"type": "shape_size", "field": "diameter_cm", "min": 1.5, "max": 2.5},
+        {"type": "shape_size", "field": "height_cm", "min": 7, "max": 9},
+        {"type": "hue", "min": 345, "max": 15},
+        {"type": "saturation", "min": 0.5},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "shape_lipstick_box",
+      "added": "v2",
+      "covers": "shape: the word box wins (same sentence as red_lipstick, checked here for the shape only)",
+      "sentence": "a red lipstick box",
+      "checks": [
+        {"type": "shape", "equals": "box"},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "shape_perfume_bottle",
+      "added": "v2",
+      "covers": "shape: bottle; perfume bottle size",
+      "sentence": "a perfume bottle",
+      "checks": [
+        {"type": "shape", "equals": "bottle"},
+        {"type": "shape_size", "field": "diameter_cm", "min": 3.5, "max": 9},
+        {"type": "shape_size", "field": "height_cm", "min": 8, "max": 16},
+        {"type": "shape_ratio", "num": "height_cm", "den": "diameter_cm", "min": 1},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "shape_serum_bottle",
+      "added": "v2",
+      "covers": "shape: bottle; serum bottle size",
+      "sentence": "a serum bottle",
+      "checks": [
+        {"type": "shape", "equals": "bottle"},
+        {"type": "shape_size", "field": "diameter_cm", "min": 2.5, "max": 4.5},
+        {"type": "shape_size", "field": "height_cm", "min": 7, "max": 13},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "shape_cream_jar",
+      "added": "v2",
+      "covers": "shape: jar; cream jar size, wider than tall",
+      "sentence": "a face cream jar",
+      "checks": [
+        {"type": "shape", "equals": "jar"},
+        {"type": "shape_size", "field": "diameter_cm", "min": 5, "max": 9},
+        {"type": "shape_size", "field": "height_cm", "min": 3, "max": 7},
+        {"type": "shape_ratio", "num": "height_cm", "den": "diameter_cm", "lt": 1},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "shape_mascara",
+      "added": "v2",
+      "covers": "shape: mascara = cylinder; mascara size",
+      "sentence": "a mascara",
+      "checks": [
+        {"type": "shape", "equals": "cylinder"},
+        {"type": "shape_size", "field": "diameter_cm", "min": 1.2, "max": 2.8},
+        {"type": "shape_size", "field": "height_cm", "min": 10, "max": 16},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "shape_gift_box",
+      "added": "v2",
+      "covers": "shape: the word box wins; gift box shape",
+      "sentence": "a gift box",
+      "checks": [
+        {"type": "shape", "equals": "box"},
+        {"type": "top_aspect", "max": 1.6},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "unsup_glass",
+      "added": "v2",
+      "covers": "unsupported: glass, on a bottle that is drawn (opaque)",
+      "sentence": "a clear glass serum bottle",
+      "checks": [
+        {"type": "shape", "equals": "bottle"},
+        {"type": "model_unsupported_mentions", "any": ["glass", "clear", "transparen"]},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "unsup_pump",
+      "added": "v2",
+      "covers": "unsupported: pump",
+      "sentence": "a white lotion bottle with a pump",
+      "checks": [
+        {"type": "shape", "equals": "bottle"},
+        {"type": "model_unsupported_mentions", "any": ["pump"]},
+        {"type": "lightness", "min": 85},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "unsup_spray",
+      "added": "v2",
+      "covers": "unsupported: spray",
+      "sentence": "a pink body mist spray bottle",
+      "checks": [
+        {"type": "shape", "equals": "bottle"},
+        {"type": "model_unsupported_mentions", "any": ["spray", "nozzle", "atomi"]},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "unsup_squeeze_tube",
+      "added": "v2",
+      "covers": "unsupported: squeeze tube, drawn as the closest shape (cylinder)",
+      "sentence": "a sunscreen squeeze tube",
+      "checks": [
+        {"type": "shape", "equals": "cylinder"},
+        {"type": "model_unsupported_mentions", "any": ["tube", "squeeze"]},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "unsup_logo",
+      "added": "v2",
+      "covers": "unsupported: logo, on a jar",
+      "sentence": "a black face cream jar with a white logo",
+      "checks": [
+        {"type": "shape", "equals": "jar"},
+        {"type": "model_unsupported_mentions", "any": ["logo"]},
+        {"type": "lightness", "max": 20},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "unsup_text",
+      "added": "v2",
+      "covers": "unsupported: text, on a cylinder",
+      "sentence": "a lipstick with the brand name printed on it",
+      "checks": [
+        {"type": "shape", "equals": "cylinder"},
+        {"type": "model_unsupported_mentions", "any": ["text", "name", "brand", "print", "letter"]},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "cap_jar_lid",
+      "added": "v2",
+      "covers": "lid colour: drawn, so not unsupported; the body keeps its own colour",
+      "sentence": "a white body butter jar with a gold lid",
+      "checks": [
+        {"type": "shape", "equals": "jar"},
+        {"type": "named_colour", "name": "gold", "target": "cap"},
+        {"type": "lightness", "min": 85},
+        {"type": "model_unsupported_excludes", "any": ["lid", "cap"]},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "cap_bottle",
+      "added": "v2",
+      "covers": "cap colour: drawn, so not unsupported; the body keeps its own colour",
+      "sentence": "a navy blue serum bottle with a gold cap",
+      "checks": [
+        {"type": "shape", "equals": "bottle"},
+        {"type": "named_colour", "name": "gold", "target": "cap"},
+        {"type": "named_colour", "name": "navy"},
+        {"type": "model_unsupported_excludes", "any": ["lid", "cap"]},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
       ]
     }
   ]
