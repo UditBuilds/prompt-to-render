@@ -7,8 +7,8 @@ Columns follow the order of the files. The last file is also checked for
 how its runs got their values: a box colour copied from a colour table row,
 a colour shifted by code for a style word, a box size equal to a product's
 typical size, a roughness clamped by code for "glossy", or a backdrop made
-neutral by code. Those are passes the tables and code make easy, so they
-are counted, not hidden. A backdrop is counted whenever the code changed
+neutral by code, or a cap or lid colour set by code. Those are passes the
+tables and code make easy, so they are counted, not hidden. A backdrop is counted whenever the code changed
 it, even from another neutral grey; one the model had already set to the
 code's #F5F5F5 isn't.
 """
@@ -41,10 +41,11 @@ def max_prompt_tokens(report):
 
 def how_values_came(case, tables):
     """Counts, over a case's runs, of values taken straight from the tables or set by code."""
-    copied = shifted = typical = glossy = backdrop = 0
+    copied = shifted = typical = glossy = backdrop = cap = 0
     for run in case["runs"]:
         glossy += bool(run.get("finish_change"))
         backdrop += bool(run.get("backdrop_change"))
+        cap += bool(run.get("cap_change"))
         rows = run.get("grounding_rows", [])
         if not run["valid"]:
             continue
@@ -75,6 +76,8 @@ def how_values_came(case, tables):
         parts.append(f"gloss by code {glossy}")
     if backdrop:
         parts.append(f"neutral backdrop by code {backdrop}")
+    if cap:
+        parts.append(f"default cap by code {cap}")
     return ", ".join(parts) or "-"
 
 
