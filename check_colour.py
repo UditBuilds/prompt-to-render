@@ -1,14 +1,15 @@
 """
-Measure how close a render's box colour is to the colour in its spec.
+Measure how close a render's product colour is to the colour in its spec.
 
 Usage:
     python check_colour.py specs/pink_three_quarter.json renders/pink_three_quarter_20261017_211532.png
 
-It finds the centre of the box's main lit face in the image (the front face
-for the "front" and "three_quarter" cameras, the top face for "top_down"),
-averages a small patch of pixels there, and reports:
+It finds the centre of the product's main lit face in the image (the front
+face for the "front" and "three_quarter" cameras, the top face for
+"top_down", which on a bottle or jar is its cap or lid), averages a small
+patch of pixels there, and reports:
 
-    spec hex, measured hex, and Delta E (CIE76): the distance between the two
+    spec hex (of that part), measured hex, and Delta E (CIE76): the distance between the two
     colours. Rough guide: under 2 hard to see, 2-5 small, 5-10 noticeable,
     over 10 obvious.
 
@@ -101,7 +102,7 @@ def check(spec_path, png_path):
     scene = render_scene.build_scene(spec)
     patch = render_scene.hero_patch(scene, spec)
     measured, size = measure_patch(png_path, patch)
-    target = spec["box"]["colour"].upper()
+    target = render_scene.hero_face(spec)[4].upper()
     return {"spec": target, "measured": measured, "delta_e": delta_e76(target, measured),
             "patch_px": size, "face": render_scene.CAMERA_PRESETS[spec["camera"]]["hero_face"]}
 

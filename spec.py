@@ -18,6 +18,9 @@ import json
 import math
 import re
 
+# What the product is drawn as. Each shape has its own fields in the spec,
+# under its own name; only the one the spec's "shape" names may be given.
+SHAPES = ("box", "cylinder", "bottle", "jar")
 CAMERA_PRESETS = ("front", "three_quarter", "top_down")
 LIGHTING_PRESETS = ("studio_soft",)
 # accurate:  the box colour matches the spec hex as closely as possible.
@@ -36,6 +39,12 @@ MIN_SAMPLES, MAX_SAMPLES = 1, 8192
 # rigid boxes but rules out a "bar of soap" (1.5 cm on an 8 cm side is 19%).
 BEVEL_MAX_SHARE = 0.10
 
+# The cap or lid colour when none is given: black on a light body, a light
+# silver-grey on a dark one, as is common in cosmetics. Both are flat colours:
+# the renderer doesn't do metallic. Light means CIE L* of at least 50.
+CAP_ON_LIGHT, CAP_ON_DARK = "#1A1A1A", "#C0C0C0"
+CAP_LIGHTNESS_SPLIT = 50
+
 
 class SpecError(Exception):
     """Raised when a spec is invalid. Holds a list of human-readable problems."""
@@ -52,6 +61,9 @@ class SpecError(Exception):
 # ---------------------------------------------------------------------------
 
 class Field:
+    # An optional field may be left out of the LLM's reply; code then sets it.
+    optional = False
+
     def __init__(self, default, doc):
         self.default = default
         self.doc = doc
@@ -106,6 +118,14 @@ class Colour(Field):
         return {"type": "string", "pattern": HEX_COLOUR.pattern, "description": self.doc}
 
 
+class CapColour(Colour):
+    """A cap or lid colour. Left out (or null), it is worked out from the body colour."""
+    optional = True
+
+    def __init__(self, doc):
+        super().__init__(None, doc)
+
+
 class Choice(Field):
     def __init__(self, default, choices, doc):
         super().__init__(default, doc)
@@ -149,6 +169,8 @@ class Resolution(Field):
 
 FIELDS = {
     "description": Text("", "One short sentence describing the shot. A note for humans, not used for rendering."),
+    "shape": Choice("box", SHAPES, "What the product is drawn as. Fill in only the object of the same name, "
+                                   "and leave the other shapes out."),
     "box": {
         "width_cm": Number(6.0, MIN_SIZE_CM, MAX_SIZE_CM, "Left-to-right size in cm, as seen from the front."),
         "height_cm": Number(12.0, MIN_SIZE_CM, MAX_SIZE_CM, "Bottom-to-top size in cm."),
@@ -159,6 +181,30 @@ FIELDS = {
         "bevel_cm": Number(0.15, 0.0, MAX_SIZE_CM,
                            "Radius of the rounded edges in cm (0 = razor sharp). "
                            f"At most {BEVEL_MAX_SHARE:.0%} of the smallest box side."),
+    },
+    # Round shapes stand upright. The renderer rounds their edges itself, and
+    # works out a bottle's shoulder, neck and cap, and a jar's lid, from the
+    # diameter and height.
+    "cylinder": {
+        "diameter_cm": Number(4.0, MIN_SIZE_CM, MAX_SIZE_CM, "Width across in cm."),
+        "height_cm": Number(10.0, MIN_SIZE_CM, MAX_SIZE_CM, "Bottom-to-top size in cm."),
+        "colour": Colour("#D9D9D9", 'Colour as a hex code, "#RRGGBB".'),
+        "roughness": Number(0.5, 0.0, 1.0, "Surface finish: 0 = mirror-glossy, 1 = fully matte."),
+    },
+    "bottle": {
+        "diameter_cm": Number(5.0, MIN_SIZE_CM, MAX_SIZE_CM, "Width of the body across in cm, at its widest."),
+        "height_cm": Number(12.0, MIN_SIZE_CM, MAX_SIZE_CM,
+                            "Bottom-to-top size in cm, with the cap on. At least the diameter."),
+        "colour": Colour("#D9D9D9", 'Body colour as a hex code, "#RRGGBB".'),
+        "roughness": Number(0.5, 0.0, 1.0, "Surface finish: 0 = mirror-glossy, 1 = fully matte."),
+        "cap_colour": CapColour('Cap colour as a hex code, "#RRGGBB". Only if the sentence names one.'),
+    },
+    "jar": {
+        "diameter_cm": Number(7.0, MIN_SIZE_CM, MAX_SIZE_CM, "Width across in cm."),
+        "height_cm": Number(5.0, MIN_SIZE_CM, MAX_SIZE_CM, "Bottom-to-top size in cm, with the lid on."),
+        "colour": Colour("#D9D9D9", 'Jar colour as a hex code, "#RRGGBB".'),
+        "roughness": Number(0.5, 0.0, 1.0, "Surface finish: 0 = mirror-glossy, 1 = fully matte."),
+        "lid_colour": CapColour('Lid colour as a hex code, "#RRGGBB". Only if the sentence names one.'),
     },
     "background_colour": Colour("#EDEDED", 'Studio backdrop colour as a hex code, "#RRGGBB".'),
     "colour_mode": Choice("accurate", COLOUR_MODES,
@@ -179,24 +225,30 @@ def _defaults(fields):
 
 DEFAULTS = _defaults(FIELDS)
 
+# The field holding the cap or lid colour, for the shapes that have one.
+CAP_FIELDS = {"bottle": "cap_colour", "jar": "lid_colour"}
 
-def json_schema(fields=FIELDS, only=None, optional=()):
+
+def json_schema(fields=FIELDS, only=None, optional=SHAPES):
     """The JSON schema for a spec, built from FIELDS.
 
     `only` limits it to some top-level fields. Every field in the schema is
     required, so whoever fills it in has to choose each value, except the
-    top-level fields named in `optional`. One rule can't be written as JSON
-    schema (the bevel must suit the box); it is in the bevel's description
-    and validate_spec() checks it.
+    top-level fields named in `optional` (by default the shapes' objects:
+    only the spec's own shape is given) and the cap and lid colours. Three
+    rules can't be written as JSON schema (only the spec's own shape may be
+    given, the bevel must suit the box, a bottle is at least as tall as it is
+    wide); they are in the descriptions and validate_spec() checks them.
     """
     properties = {}
     for key, field in fields.items():
         if only is None or key in only:
-            properties[key] = json_schema(field) if isinstance(field, dict) else field.schema()
+            properties[key] = json_schema(field, optional=()) if isinstance(field, dict) else field.schema()
     return {
         "type": "object",
         "properties": properties,
-        "required": [key for key in properties if key not in optional],
+        "required": [key for key in properties
+                     if key not in optional and not getattr(fields[key], "optional", False)],
         "additionalProperties": False,
     }
 
@@ -224,29 +276,47 @@ def load_spec(path):
 
 
 def validate_spec(raw):
-    """Merge a spec dict with DEFAULTS, check every value, return the full spec."""
+    """Merge a spec dict with DEFAULTS, check every value, return the full spec.
+
+    The full spec holds the fields of its own shape only (a box spec has
+    "box", a jar spec has "jar"), and a cap or lid colour that was left out
+    is filled in from the body colour (default_cap_colour).
+    """
     problems = []
 
     if not isinstance(raw, dict):
         raise SpecError(["The spec must be a JSON object, i.e. { ... }"])
 
     _check_unknown_keys(raw, FIELDS, "", problems)
-    if isinstance(raw.get("box"), dict):
-        _check_unknown_keys(raw["box"], FIELDS["box"], "box.", problems)
-    elif "box" in raw:
-        problems.append('box: must be an object like { "width_cm": 6, ... }')
+    shape = raw.get("shape", DEFAULTS["shape"])
+    shape_ok = FIELDS["shape"].check(shape, "shape", problems)
+    for key in SHAPES:
+        if key not in raw:
+            continue
+        if not isinstance(raw[key], dict):
+            example = '{ "width_cm": 6, ... }' if key == "box" else '{ "diameter_cm": ..., ... }'
+            problems.append(f"{key}: must be an object like {example}")
+            continue
+        _check_unknown_keys(raw[key], FIELDS[key], f"{key}.", problems)
+        if shape_ok and key != shape:
+            problems.append(f'{key}: only used when shape is "{key}", but shape is "{shape}". '
+                            f'Remove {key}, or set shape to "{key}".')
 
-    spec = copy.deepcopy(DEFAULTS)
-    for key, value in raw.items():
-        if key == "box" and isinstance(value, dict):
-            spec["box"].update(value)
-        elif key in spec and key != "box":
-            spec[key] = value
+    spec = {}
+    for key in FIELDS:
+        if key in SHAPES:
+            if shape_ok and key == shape:
+                spec[key] = copy.deepcopy(DEFAULTS[key])
+                if isinstance(raw.get(key), dict):
+                    spec[key].update(raw[key])
+        else:
+            spec[key] = copy.deepcopy(raw[key]) if key in raw else copy.deepcopy(DEFAULTS[key])
 
     for key, field in FIELDS.items():
-        if key == "box":
-            _check_box(spec["box"], problems)
-        else:
+        if key in SHAPES:
+            if key in spec:
+                _check_product(key, spec[key], problems)
+        elif key != "shape":  # checked above
             field.check(spec[key], key, problems)
 
     if problems:
@@ -254,10 +324,30 @@ def validate_spec(raw):
     return spec
 
 
-def _check_box(box, problems):
-    ok = {key: field.check(box[key], f"box.{key}", problems)
-          for key, field in FIELDS["box"].items()}
+def _check_product(shape, fields, problems):
+    """Check the fields of the spec's own shape, and fill in a cap colour that was left out."""
+    cap = CAP_FIELDS.get(shape)
+    if cap and fields[cap] is None and _is_colour(fields["colour"]):
+        fields[cap] = default_cap_colour(fields["colour"])
+    ok = {key: field.check(fields[key], f"{shape}.{key}", problems)
+          for key, field in FIELDS[shape].items() if not (key == cap and fields[key] is None)}
+    if shape == "box":
+        _check_box(fields, ok, problems)
+    elif shape == "bottle" and ok["diameter_cm"] and ok["height_cm"]:
+        # Shorter than it is wide, it would be a jar.
+        if fields["height_cm"] < fields["diameter_cm"]:
+            problems.append(
+                f"bottle.height_cm: a bottle is at least as tall as it is wide (diameter_cm "
+                f"{fields['diameter_cm']:g}), got {fields['height_cm']:g}. A shorter, wider container is a jar."
+            )
 
+
+def default_cap_colour(body_colour):
+    """The cap or lid colour for a body colour, when none is given: CAP_ON_LIGHT or CAP_ON_DARK."""
+    return CAP_ON_LIGHT if lightness(body_colour) >= CAP_LIGHTNESS_SPLIT else CAP_ON_DARK
+
+
+def _check_box(box, ok, problems):
     # The bevel can only be checked against the box once all sizes are valid
     # numbers. This is the one rule the JSON schema can't express.
     sizes = [box[f] for f in ("width_cm", "height_cm", "depth_cm")]
@@ -276,6 +366,10 @@ def _check_box(box, problems):
 
 def _show(value):
     return json.dumps(value)
+
+
+def _is_colour(value):
+    return isinstance(value, str) and bool(HEX_COLOUR.match(value))
 
 
 def _is_number(value):
@@ -313,6 +407,18 @@ def _check_unknown_keys(given, allowed, prefix, problems):
             hint = difflib.get_close_matches(key, list(allowed), n=1)
             suggestion = f' Did you mean "{prefix}{hint[0]}"?' if hint else ""
             problems.append(f'{prefix}{key}: unknown field.{suggestion}')
+
+
+def product(spec):
+    """The fields of a full spec's own shape, e.g. spec["jar"] for a jar."""
+    return spec[spec["shape"]]
+
+
+def lightness(hex_colour):
+    """CIE L* (0 = black, 100 = white) of "#RRGGBB"."""
+    r, g, b = hex_to_linear_rgb(hex_colour)
+    y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return 116 * y ** (1 / 3) - 16 if y > (6 / 29) ** 3 else y * (29 / 3) ** 3
 
 
 def hex_to_linear_rgb(hex_colour):

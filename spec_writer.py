@@ -13,8 +13,8 @@ Used by prompt.py and by the evals, so both run the same loop.
 
 import json
 
-from grounding import Grounding, apply_finish, lookup, neutral_backdrop, style_box_colour
-from spec import SpecError, validate_spec
+from grounding import Grounding, apply_finish, default_cap, lookup, neutral_backdrop, style_box_colour
+from spec import CAP_FIELDS, SHAPES, SpecError, validate_spec
 
 MAX_ATTEMPTS = 2
 
@@ -45,18 +45,21 @@ class Attempt:
 class SpecResult:
     def __init__(self, attempts, spec=None, unsupported=None, model_unsupported=None,
                  is_box=None, shape=None, shape_added=False, grounding=None, style_changes=None,
-                 backdrop_change=None, finish_change=None, backdrop_given=None):
+                 backdrop_change=None, finish_change=None, backdrop_given=None, cap_change=None,
+                 cap_given=None):
         self.attempts = attempts
         self.grounding = grounding or Grounding([])  # the table rows the model was given
         self.style_changes = style_changes or []   # style-word colour shifts applied by code
         self.backdrop_change = backdrop_change     # {"from", "to"} if code set the neutral backdrop
         self.backdrop_given = backdrop_given       # False if the model left the backdrop out
         self.finish_change = finish_change         # {"finish", "from", "to"} if code clamped the roughness
+        self.cap_change = cap_change               # {"field", "from", "to"} if code set the cap or lid colour
+        self.cap_given = cap_given                 # False if the model left the cap or lid colour out
         self.spec = spec                    # full validated spec, or None
         self.unsupported = unsupported or []  # what the user is told was ignored
         self.model_unsupported = model_unsupported or []  # the model's own list, before the code added anything
         self.is_box = is_box
-        self.shape = shape
+        self.shape = shape                  # the model's word for the real shape; spec["shape"] is what is drawn
         self.shape_added = shape_added      # True if the code added the shape to `unsupported`
 
     @property
@@ -79,16 +82,21 @@ class SpecResult:
 
 def parse_reply(text):
     """Turn the model's reply into a dict: spec, unsupported, model_unsupported,
-    is_box, shape, shape_added, backdrop_given.
+    is_box, shape, shape_added, backdrop_given, cap_given.
 
     The spec is validated by spec.validate_spec, with defaults filled in. The
     rest is kept apart from it: it is reported to the user and never reaches
     the renderer. Raises SpecError listing every problem found.
 
-    When the object isn't a box, its shape always goes first in the
-    unsupported list. The model names the shape in its own field; a small
-    model often forgets to also list it once something else (a logo, a
-    label) is unsupported, so the code adds it.
+    Two rules apply to the model's reply only, not to a spec file: the spec
+    must give the object of its own shape (a spec file may leave it out and
+    get the defaults; the model must choose the sizes), and a box (is_box
+    true) is drawn as a box.
+
+    When the real shape isn't the one drawn (a squeeze tube drawn as a
+    cylinder), it always goes first in the unsupported list. The model names
+    the shape in its own field; a small model often forgets to also list it
+    once something else (a logo, a label) is unsupported, so the code adds it.
     """
     try:
         data = json.loads(text)
@@ -118,6 +126,13 @@ def parse_reply(text):
 
     spec = None
     if raw_spec is not None:
+        drawn = raw_spec.get("shape", "box")
+        if drawn in SHAPES and drawn not in raw_spec:
+            problems.append(f'{drawn}: missing. The shape is "{drawn}", so its size, colour and finish '
+                            f'go in "{drawn}".')
+        if is_box is True and drawn in SHAPES and drawn != "box":
+            problems.append(f'shape: is_box is true, so the shape is "box", got "{drawn}". '
+                            "If the product isn't a box, set is_box to false.")
         try:
             spec = validate_spec(raw_spec)
         except SpecError as e:
@@ -134,15 +149,19 @@ def parse_reply(text):
 
     final = list(cleaned)
     shape_added = False
-    if not is_box:
+    if not is_box and spec["shape"] not in shape:  # "perfume bottle" is drawn as a bottle
         named = shape if shape and shape != "box" else "non-box"
         if not any(named in item.lower() for item in final):
             final.insert(0, f"{named} shape")
             shape_added = True
-    # The model may leave the backdrop out (when the sentence names none).
+    # The model may leave the backdrop out (when the sentence names none),
+    # and the cap or lid colour (when the sentence names none).
     backdrop_given = "background_colour" in raw_spec
+    cap = CAP_FIELDS.get(spec["shape"])
+    cap_given = cap in raw_spec[spec["shape"]] if cap else None
     return {"spec": spec, "unsupported": final, "model_unsupported": cleaned, "is_box": is_box,
-            "shape": shape, "shape_added": shape_added, "backdrop_given": backdrop_given}
+            "shape": shape, "shape_added": shape_added, "backdrop_given": backdrop_given,
+            "cap_given": cap_given}
 
 
 def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, grounding=True, tables=None):
@@ -150,8 +169,8 @@ def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, ground
 
     With grounding on, the rows of the data/ tables that match the
     sentence's words are added to the request, and code then applies the
-    style shift, the glossy finish and the neutral backdrop (see
-    grounding.py). With it off, the model decides everything on its own.
+    style shift, the glossy finish, the neutral backdrop and the default cap
+    or lid colour (see grounding.py). With it off, the model decides everything on its own.
     `tables` replaces the data/ tables (e.g. without the colour table).
 
     report(event, attempt) is called with "start" before each LLM call and
@@ -177,11 +196,12 @@ def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, ground
         if not errors:
             # Code sets what the model can't be relied on for (see grounding.py).
             changes = style_box_colour(sentence, parsed["spec"], found)
-            backdrop = finish = None
+            backdrop = finish = cap = None
             if grounding:
                 backdrop = neutral_backdrop(sentence, parsed["spec"], parsed["backdrop_given"])
                 finish = apply_finish(sentence, parsed["spec"], tables)
+                cap = default_cap(sentence, parsed["spec"], parsed["cap_given"])
             return SpecResult(attempts, grounding=found, style_changes=changes,
-                              backdrop_change=backdrop, finish_change=finish, **parsed)
+                              backdrop_change=backdrop, finish_change=finish, cap_change=cap, **parsed)
         previous_output, previous_errors = reply.text, errors
     return SpecResult(attempts, grounding=found)

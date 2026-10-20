@@ -1,5 +1,6 @@
 """
-Builds a studio product shot of a box from a JSON spec and renders it to PNG.
+Builds a studio product shot of a product (a box, cylinder, bottle or jar)
+from a JSON spec and renders it to PNG.
 
 This script runs INSIDE Blender. You normally don't call it yourself; run.py
 does, roughly like this:
@@ -7,13 +8,16 @@ does, roughly like this:
     blender --background --factory-startup --python render_scene.py -- \
             --spec specs/pink_three_quarter.json --output renders/out.png
 
-Everything is built from scratch on every run (box, backdrop, lights, camera),
-so the result depends only on the spec file, never on Blender's saved settings.
+Everything is built from scratch on every run (product, backdrop, lights,
+camera), so the result depends only on the spec file, never on Blender's
+saved settings.
 
 Conventions:
   * 1 Blender unit = 1 metre. The spec is in cm, so sizes are divided by 100.
-  * The box stands on the floor (z = 0), centred on the origin.
-  * The FRONT of the box faces -Y (towards the "front" camera).
+  * The product stands on the floor (z = 0), centred on the origin.
+  * The FRONT of the product faces -Y (towards the "front" camera).
+  * The round shapes come from shapes.py as profiles, spun round the
+    vertical axis here.
 """
 
 import argparse
@@ -29,19 +33,21 @@ from bpy_extras.object_utils import world_to_camera_view
 from mathutils import Matrix, Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import shapes  # noqa: E402
 from check_colour import delta_e76, describe_delta_e, measure_patch  # noqa: E402
 from spec import SpecError, hex_to_linear_rgb, load_spec  # noqa: E402
 
 # ---------------------------------------------------------------------------
-# Presets. Distances and sizes are multiples of the box's "radius" (half its
-# diagonal), so a tiny lipstick box and a big gift box get the same framing
-# and the same exposure.
+# Presets. Distances and sizes are multiples of the product's "radius" (half
+# the diagonal of a box, the farthest point from the centre of any shape), so
+# a tiny lipstick box and a big gift box get the same framing and the same
+# exposure.
 # ---------------------------------------------------------------------------
 
 # azimuth: degrees around the box (0 = straight in front, + = towards the right)
 # elevation: degrees above the floor (90 = looking straight down)
-# hero_face: the box face the key light hits; used by the light meter and the
-#            colour check.
+# hero_face: the face the key light hits; used by the light meter and the
+#            colour check. "front" on a round shape: the front of its body.
 # light_overrides: per-camera changes to the lighting preset (see below).
 CAMERA_PRESETS = {
     "front":         {"azimuth": 0,  "elevation": 8,  "lens_mm": 85, "hero_face": "front"},
@@ -99,6 +105,10 @@ BACKDROP_ROUGHNESS = 0.7
 BACKDROP_CURVE_START = 3
 BACKDROP_CURVE_RADIUS = 6
 BEVEL_SEGMENTS = 6
+# Faces round the axis of a round shape: enough for a smooth outline.
+ROUND_SEGMENTS = 128
+# Framing a round shape looks at every FRAMING_STEP-th vertex: plenty for its outline.
+FRAMING_STEP = 4
 
 # How each colour_mode turns rendered light into image colours.
 COLOUR_MODES = {
@@ -227,6 +237,68 @@ def add_object(scene, name, data):
     return obj
 
 
+def build_product(scene, spec):
+    """The product, standing on the floor. Returns its objects, the body first.
+
+    A box is one object. A round shape is a body, plus a cap or lid for a
+    bottle or jar, each with its own colour and the shape's roughness.
+    Every part is tagged "product_part" for the light meter.
+    """
+    shape = spec["shape"]
+    fields = spec[shape]
+    if shape == "box":
+        objects = [build_box(scene, fields)]
+    else:
+        objects = []
+        for part in shapes.parts(shape, fields):
+            obj = add_object(scene, part.name, lathe(part.name, part.profile))
+            obj.data.materials.append(
+                new_principled_material(f"{part.name}Material", fields[part.colour], fields["roughness"]))
+            objects.append(obj)
+    for obj in objects:
+        obj["product_part"] = True
+    return objects
+
+
+def product_parts():
+    return [obj for obj in bpy.data.objects if obj.get("product_part")]
+
+
+def lathe(name, profile):
+    """A closed, smooth-shaded mesh: an (r, z) profile spun round the vertical axis.
+
+    The profile starts and ends on the axis (r = 0); every point off the axis
+    becomes a ring of ROUND_SEGMENTS vertices. Like the box, it is lifted a
+    hair above the floor so the two don't overlap.
+    """
+    angles = [2 * math.pi * i / ROUND_SEGMENTS for i in range(ROUND_SEGMENTS)]
+    bm = bmesh.new()
+    rings = []
+    for r, z in profile:
+        z += 0.00001
+        if r <= 1e-9:
+            rings.append([bm.verts.new((0.0, 0.0, z))])
+        else:
+            rings.append([bm.verts.new((r * math.cos(a), r * math.sin(a), z)) for a in angles])
+    for lower, upper in zip(rings, rings[1:]):
+        for i in range(ROUND_SEGMENTS):
+            j = (i + 1) % ROUND_SEGMENTS
+            if len(lower) == 1:
+                bm.faces.new((lower[0], upper[j], upper[i]))
+            elif len(upper) == 1:
+                bm.faces.new((lower[i], lower[j], upper[0]))
+            else:
+                bm.faces.new((lower[i], lower[j], upper[j], upper[i]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    # Every corner of the profile is rounded, so smooth shading is right everywhere.
+    for poly in mesh.polygons:
+        poly.use_smooth = True
+    return mesh
+
+
 def build_box(scene, box):
     """A bevelled box standing on the floor, with a Principled BSDF material."""
     w, h, d = box["width_cm"] / 100, box["height_cm"] / 100, box["depth_cm"] / 100
@@ -350,8 +422,8 @@ def build_lights(scene, target, radius, preset_name, camera_preset):
         obj.visible_camera = False
 
 
-def build_camera(scene, box_obj, preset_name, resolution):
-    """Place the camera for a preset and auto-frame it tightly on the box."""
+def build_camera(scene, objects, shape, preset_name, resolution):
+    """Place the camera for a preset and auto-frame it tightly on the product."""
     preset = CAMERA_PRESETS[preset_name]
     scene.render.resolution_x, scene.render.resolution_y = resolution
     scene.render.resolution_percentage = 100
@@ -363,16 +435,23 @@ def build_camera(scene, box_obj, preset_name, resolution):
     cam = add_object(scene, "Camera", cam_data)
     scene.camera = cam
 
-    # The 8 corners of the (un-bevelled) box; the bevel only ever cuts inwards.
-    corners = [box_obj.matrix_world @ v.co for v in box_obj.data.vertices]
-    target = sum(corners, Vector()) / 8
+    if shape == "box":
+        # The 8 corners of the (un-bevelled) box; the bevel only ever cuts inwards.
+        corners = [objects[0].matrix_world @ v.co for v in objects[0].data.vertices]
+        target = sum(corners, Vector()) / 8
+    else:
+        # A round shape's own vertices: there is no modifier, so they are its surface.
+        corners = [obj.matrix_world @ v.co for obj in objects
+                   for i, v in enumerate(obj.data.vertices) if i % FRAMING_STEP == 0]
+        target = (Vector([min(c[k] for c in corners) for k in range(3)])
+                  + Vector([max(c[k] for c in corners) for k in range(3)])) / 2
     radius = max((c - target).length for c in corners)
 
     # Camera axes: forward (looking at the box), right, and up in the image.
     to_camera = direction_from_angles(preset["azimuth"], preset["elevation"])
     forward = -to_camera
-    # Looking straight down, "up" is ambiguous: use the back of the box (+Y),
-    # so the front of the box is at the bottom of the frame.
+    # Looking straight down, "up" is ambiguous: use the back of the product
+    # (+Y), so its front is at the bottom of the frame.
     world_up = Vector((0, 1, 0)) if preset["elevation"] >= 89.9 else Vector((0, 0, 1))
     right = forward.cross(world_up).normalized()
     up = right.cross(forward).normalized()
@@ -386,7 +465,7 @@ def build_camera(scene, box_obj, preset_name, resolution):
         half_x, half_y = half_long * res_x / res_y, half_long
 
     def projected_extent(distance):
-        """Box corners as seen from a camera this far away: (min_x, max_x, min_y, max_y)."""
+        """The corners as seen from a camera this far away: (min_x, max_x, min_y, max_y)."""
         position = target + distance * to_camera
         xs, ys = [], []
         for c in corners:
@@ -400,7 +479,7 @@ def build_camera(scene, box_obj, preset_name, resolution):
         x0, x1, y0, y1 = projected_extent(distance)
         return (x1 - x0) / 2 <= FRAME_FILL * half_x and (y1 - y0) / 2 <= FRAME_FILL * half_y
 
-    # Binary search for the closest distance where the box still fits.
+    # Binary search for the closest distance where the product still fits.
     near, far = radius * 1.01, radius * 1000
     for _ in range(60):
         mid = (near + far) / 2
@@ -413,7 +492,7 @@ def build_camera(scene, box_obj, preset_name, resolution):
     cam.matrix_world = Matrix.Translation(target + distance * to_camera) @ \
         Matrix((right, up, to_camera)).transposed().to_4x4()
 
-    # Perspective makes the box sit slightly off-centre; shift the lens to recentre it.
+    # Perspective makes the product sit slightly off-centre; shift the lens to recentre it.
     x0, x1, y0, y1 = projected_extent(distance)
     cam_data.shift_x = ((x0 + x1) / 2) / (2 * half_long)
     cam_data.shift_y = ((y0 + y1) / 2) / (2 * half_long)
@@ -426,8 +505,8 @@ def build_camera(scene, box_obj, preset_name, resolution):
 def build_scene(spec):
     """Build the whole set from the spec. Returns the scene, ready to render."""
     scene = clear_scene()
-    box = build_box(scene, spec["box"])
-    _, target, radius = build_camera(scene, box, spec["camera"], spec["resolution"])
+    objects = build_product(scene, spec)
+    _, target, radius = build_camera(scene, objects, spec["shape"], spec["camera"], spec["resolution"])
     build_backdrop(scene, spec["background_colour"], radius, CAMERA_PRESETS[spec["camera"]]["azimuth"])
     build_world(scene, spec["background_colour"])
     build_lights(scene, target, radius, spec["lighting"], CAMERA_PRESETS[spec["camera"]])
@@ -438,19 +517,34 @@ def build_scene(spec):
 # Colour accuracy: hero patch and light meter
 # ---------------------------------------------------------------------------
 
+def hero_face(spec):
+    """The product's main lit face: (centre, u, v, face_sides, colour).
+
+    u and v are the face's directions, face_sides its size along them (m),
+    colour the spec colour of the part the face is on. From above, a bottle
+    or jar shows its cap or lid; from the front, every shape shows its body.
+    """
+    shape = spec["shape"]
+    fields = spec[shape]
+    face = CAMERA_PRESETS[spec["camera"]]["hero_face"]
+    if shape == "box":
+        w, h, d = fields["width_cm"] / 100, fields["height_cm"] / 100, fields["depth_cm"] / 100
+        if face == "top":
+            return Vector((0, 0, h)), Vector((1, 0, 0)), Vector((0, 1, 0)), (w, d), fields["colour"]
+        return Vector((0, -d / 2, h / 2)), Vector((1, 0, 0)), Vector((0, 0, 1)), (w, h), fields["colour"]
+    hero = shapes.hero(shape, fields, face)
+    v = Vector((0, 1, 0)) if face == "top" else Vector((0, 0, 1))
+    return Vector(hero.centre), Vector((1, 0, 0)), v, hero.sides, fields[hero.colour]
+
+
 def hero_patch(scene, spec):
-    """Where the centre of the box's main lit face lands in the image.
+    """Where the centre of the product's main lit face lands in the image.
 
     Returns (min_x, max_x, min_y, max_y) in 0-1 image coordinates, origin at
     the bottom-left. The patch is a square on the face, PATCH_FRACTION of the
     face's shorter side.
     """
-    box = spec["box"]
-    w, h, d = box["width_cm"] / 100, box["height_cm"] / 100, box["depth_cm"] / 100
-    if CAMERA_PRESETS[spec["camera"]]["hero_face"] == "top":
-        centre, u, v, face_sides = Vector((0, 0, h)), Vector((1, 0, 0)), Vector((0, 1, 0)), (w, d)
-    else:  # front face
-        centre, u, v, face_sides = Vector((0, -d / 2, h / 2)), Vector((1, 0, 0)), Vector((0, 0, 1)), (w, h)
+    centre, u, v, face_sides, _ = hero_face(spec)
 
     half = PATCH_FRACTION * min(face_sides) / 2
     points = [world_to_camera_view(scene, scene.camera, centre + su * half * u + sv * half * v)
@@ -478,23 +572,26 @@ def white_card_material():
 def meter_exposure(scene, spec):
     """Accurate mode's light meter. Sets the exposure; returns it in stops.
 
-    Like a photographer holding a white card where the product is: the box is
-    briefly made pure matte white, and only a small patch at the centre of its
-    main lit face is rendered, to a linear EXR file. The brightness of a white
-    matte card measures how much light falls on it. Exposure is then set so
-    that this brightness maps to exactly 1.0, which makes a matte box show
-    (very nearly) its own colour. The card also sets the white balance.
+    Like a photographer holding a white card where the product is: the
+    product (every part of it) is briefly made pure matte white, and only a
+    small patch at the centre of its main lit face is rendered, to a linear
+    EXR file. The brightness of a white matte card measures how much light
+    falls on it. Exposure is then set so that this brightness maps to exactly
+    1.0, which makes a matte product show (very nearly) its own colour. The
+    card also sets the white balance.
     """
     render = scene.render
-    box = bpy.data.objects["Box"]
-    real_material = box.data.materials[0]
+    parts = product_parts()
+    real_materials = [obj.data.materials[0] for obj in parts]
     saved = {name: getattr(render, name) for name in (
         "use_border", "use_crop_to_border", "border_min_x", "border_max_x",
         "border_min_y", "border_max_y", "filepath")}
     saved_samples = scene.cycles.samples
     meter_path = render.filepath + ".meter.exr"
 
-    box.data.materials[0] = white_card_material()
+    white = white_card_material()
+    for obj in parts:
+        obj.data.materials[0] = white
     render.use_border = render.use_crop_to_border = True
     (render.border_min_x, render.border_max_x,
      render.border_min_y, render.border_max_y) = hero_patch(scene, spec)
@@ -514,15 +611,16 @@ def meter_exposure(scene, spec):
             setattr(render, name, value)
         scene.cycles.samples = saved_samples
         set_png_output(scene, saved["filepath"])
-        box.data.materials[0] = real_material
+        for obj, material in zip(parts, real_materials):
+            obj.data.materials[0] = material
 
     card = pixels.mean(axis=0)
     brightness = 0.2126 * card[0] + 0.7152 * card[1] + 0.0722 * card[2]
     if brightness <= 1e-6 or min(card) <= 1e-6:
-        log("WARNING: light meter saw no light on the box; exposure left at 0")
+        log("WARNING: light meter saw no light on the product; exposure left at 0")
         return 0.0
 
-    # White balance: light bouncing off a coloured backdrop tints the box (a
+    # White balance: light bouncing off a coloured backdrop tints the product (a
     # pink floor makes everything near it pinker). Tint every light source by
     # the opposite amount so the white card reads neutral again. This is
     # exactly what a camera's white balance does.
@@ -571,7 +669,8 @@ def main():
     scene = build_scene(spec)
     device = setup_render(scene, spec, output_path)
     log(f"device: {device}")
-    log(f"camera: {spec['camera']}, lighting: {spec['lighting']}, colour mode: {spec['colour_mode']}, "
+    log(f"shape: {spec['shape']}, camera: {spec['camera']}, lighting: {spec['lighting']}, "
+        f"colour mode: {spec['colour_mode']}, "
         f"{spec['resolution'][0]}x{spec['resolution'][1]}, {spec['samples']} samples")
 
     if spec["colour_mode"] == "accurate":
@@ -586,7 +685,7 @@ def main():
     log(f"saved: {output_path}")
 
     measured, _ = measure_patch(output_path, hero_patch(scene, spec))
-    target = spec["box"]["colour"].upper()
+    target = hero_face(spec)[4].upper()
     delta_e = delta_e76(target, measured)
     log(f"colour check: spec {target}, measured {measured}, "
         f"Delta E {delta_e:.1f} ({describe_delta_e(delta_e)})")

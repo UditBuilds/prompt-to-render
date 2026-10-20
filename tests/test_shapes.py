@@ -1,0 +1,92 @@
+"""
+The round shapes' profiles (shapes.py), checked without Blender.
+
+Run all tests with:  python -m unittest discover tests
+"""
+
+import math
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import shapes  # noqa: E402
+from spec import validate_spec  # noqa: E402
+
+SIZES = {  # cm: a lipstick, a mascara, a perfume and a serum bottle, a cream jar, and extremes
+    "cylinder": [(2, 8), (1.7, 13.5), (10, 3), (0.5, 200)],
+    "bottle": [(5.5, 11.5), (3.2, 10), (6, 6), (0.5, 200)],
+    "jar": [(6.5, 4.5), (8, 10), (12, 2), (0.5, 0.5)],
+}
+
+
+def fields(shape, diameter, height):
+    return validate_spec({"shape": shape, shape: {"diameter_cm": diameter, "height_cm": height}})[shape]
+
+
+def every_shape():
+    for shape, sizes in SIZES.items():
+        for diameter, height in sizes:
+            yield shape, diameter, height, fields(shape, diameter, height)
+
+
+class Profiles(unittest.TestCase):
+    def test_parts_are_closed_and_fit_the_spec(self):
+        for shape, diameter, height, f in every_shape():
+            with self.subTest(shape=shape, size=(diameter, height)):
+                parts = shapes.parts(shape, f)
+                self.assertEqual(parts[0].name, "Body")
+                self.assertEqual(parts[0].colour, "colour")
+                for part in parts:
+                    first, last = part.profile[0], part.profile[-1]
+                    # Starts and ends on the axis, bottom to top, so the spun mesh is closed.
+                    self.assertEqual((first[0], last[0]), (0.0, 0.0))
+                    self.assertLess(first[1], last[1])
+                    self.assertTrue(all(r >= 0 for r, _ in part.profile))
+                    # No repeated points: they would make faces of zero size.
+                    for (r0, z0), (r1, z1) in zip(part.profile, part.profile[1:]):
+                        self.assertGreater(math.hypot(r1 - r0, z1 - z0), 1e-9)
+                points = [p for part in parts for p in part.profile]
+                # The body is the spec's diameter (a jar's lid overhangs it a little),
+                # and the whole product the spec's height, standing on the floor.
+                self.assertAlmostEqual(max(r for r, _ in parts[0].profile), diameter / 200)
+                self.assertLessEqual(max(r for r, _ in points), diameter / 200 * shapes.JAR_LID_OVERHANG + 1e-12)
+                self.assertAlmostEqual(min(z for _, z in points), 0.0)
+                self.assertAlmostEqual(max(z for _, z in points), height / 100)
+
+    def test_caps_and_lids(self):
+        bottle = shapes.parts("bottle", fields("bottle", 5.5, 11.5))
+        self.assertEqual([(p.name, p.colour) for p in bottle], [("Body", "colour"), ("Cap", "cap_colour")])
+        cap_radius = max(r for r, _ in bottle[1].profile)
+        self.assertLess(cap_radius, 5.5 / 200)  # narrower than the body
+        jar = shapes.parts("jar", fields("jar", 6.5, 4.5))
+        self.assertEqual([(p.name, p.colour) for p in jar], [("Body", "colour"), ("Lid", "lid_colour")])
+        self.assertGreater(max(r for r, _ in jar[1].profile), 6.5 / 200)  # a little wider: the seam shows
+        self.assertEqual(len(shapes.parts("cylinder", fields("cylinder", 2, 8))), 1)
+
+    def test_a_bottle_has_a_neck(self):
+        body, cap = (p.profile for p in shapes.parts("bottle", fields("bottle", 5.5, 11.5)))
+        cap_bottom = min(z for _, z in cap)
+        # The body runs on up into the cap as the neck, much narrower than the body.
+        neck = [r for r, z in body if z >= cap_bottom and r > 0]
+        self.assertEqual(neck, [shapes.BOTTLE_NECK_RADIUS * 5.5 / 200])
+
+    def test_hero_faces(self):
+        for shape, diameter, height, f in every_shape():
+            with self.subTest(shape=shape, size=(diameter, height)):
+                front = shapes.hero(shape, f, "front")
+                # On the front of the body, half way up its straight wall.
+                self.assertEqual(front.colour, "colour")
+                self.assertAlmostEqual(front.centre[1], -diameter / 200)
+                self.assertGreater(front.centre[2], 0)
+                self.assertTrue(all(side > 0 for side in front.sides))
+                top = shapes.hero(shape, f, "top")
+                # From above: the top of the topmost part, the cap or lid of a bottle or jar.
+                self.assertAlmostEqual(top.centre[2], height / 100)
+                self.assertEqual(top.colour, {"bottle": "cap_colour", "jar": "lid_colour"}.get(shape, "colour"))
+                self.assertTrue(all(side > 0 for side in top.sides))
+
+
+if __name__ == "__main__":
+    unittest.main()

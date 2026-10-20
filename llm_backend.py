@@ -31,10 +31,12 @@ DEFAULT_MODEL = "qwen3:8b"
 
 # The spec fields the LLM writes: what is in the shot. The render settings
 # (colour_mode, lighting, resolution, samples) keep their defaults.
-LLM_FIELDS = ("description", "box", "background_colour", "camera")
+LLM_FIELDS = ("description", "shape", *spec.SHAPES, "background_colour", "camera")
 # The LLM may leave these out. It sets the backdrop only when the sentence
 # names one; otherwise code sets a neutral one (grounding.neutral_backdrop).
-LLM_OPTIONAL = ("background_colour",)
+# Of the shapes' objects it writes only its own shape's (spec_writer checks
+# that one is there).
+LLM_OPTIONAL = ("background_colour", *spec.SHAPES)
 
 # Sent back to the model when its spec fails validation.
 FIX_REQUEST = (
@@ -73,12 +75,12 @@ def output_schema():
         "properties": {
             "is_box": {
                 "type": "boolean",
-                "description": "false if the main object is clearly not a box (a bottle, jar, tube, ...).",
+                "description": "false if the main object is not a box, carton, case or package.",
             },
             "shape": {
                 "type": "string",
-                "description": 'The real shape of the main object, in one or two words: "box" for any '
-                               'box, carton or case; otherwise e.g. "bottle", "jar", "tube", "can".',
+                "description": 'The real shape of the main object, in one or two words: "box", "cylinder", '
+                               '"bottle" or "jar" when it is one of those; otherwise e.g. "tube", "pouch", "can".',
             },
             "unsupported": {
                 "type": "array",
@@ -288,9 +290,10 @@ class BrokenFirstReply(LLMBackend):
     """For testing the repair loop with a real model (prompt.py --break-first-reply).
 
     Wraps a real backend. The model's first reply is corrupted before it is
-    validated: roughness is set out of range and the bevel is made far too
-    big for the box. The validator rejects it, and the real model receives
-    its own (corrupted) reply plus the real error messages, and must fix them.
+    validated: roughness is set out of range, and the bevel is made far too
+    big for a box, or the diameter far too big for a round shape. The
+    validator rejects it, and the real model receives its own (corrupted)
+    reply plus the real error messages, and must fix them.
     """
 
     def __init__(self, inner):
@@ -304,9 +307,13 @@ class BrokenFirstReply(LLMBackend):
         reply = self.inner.generate_spec(sentence, previous_errors, previous_output, reference)
         if self.calls == 1:
             data = json.loads(reply.text)
-            box = data["spec"]["box"]
-            box["roughness"] = 1.4
-            box["bevel_cm"] = box["width_cm"]
+            shape = data["spec"].get("shape", "box")
+            product = data["spec"][shape]
+            product["roughness"] = 1.4
+            if shape == "box":
+                product["bevel_cm"] = product["width_cm"]
+            else:
+                product["diameter_cm"] = spec.MAX_SIZE_CM * 2
             reply.text = json.dumps(data, indent=2)
             reply.note = "first reply corrupted on purpose (--break-first-reply)"
         return reply

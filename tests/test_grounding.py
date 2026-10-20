@@ -138,6 +138,49 @@ class Lookup(unittest.TestCase):
                 self.assertIsNone(apply_finish(sentence, spec))
                 self.assertEqual(spec["box"]["roughness"], 0.5)
 
+    def test_a_box_sentence_reads_as_in_v1_3(self):
+        # Word for word what v1.3 sent for this sentence: the box size only.
+        self.assertEqual(lookup("a red lipstick box").text, "\n".join([
+            "Reference data for words in this sentence (from Prompt-to-Render's tables):",
+            "Product sizes: the usual box for that product, width x height x depth in cm.",
+            "- lipstick: typically 2.5 x 8.5 x 2.5; width 2-3, height 7.5-9.5, depth 2-3",
+            "Use these values. Anything not listed here is up to you."]))
+        self.assertIn("for: the box, the backdrop", lookup("a luxury crimson perfume box").text)
+
+    def test_other_sentences_get_the_round_shape(self):
+        text = lookup("a red lipstick").text
+        self.assertIn("- lipstick: a cylinder, typically 2 x 8; diameter 1.8-2.3, height 7.5-8.5", text)
+        self.assertNotIn("2.5 x 8.5 x 2.5", text)
+        self.assertIn("for: the product, its cap or lid, the backdrop", lookup("an emerald perfume bottle").text)
+        # A product without a round shape keeps its box size.
+        self.assertIn("typically 33 x 12 x 20", lookup("a pair of shoes").text)
+        # "cream jar" is the product, not the colour cream.
+        self.assertEqual(names("a cream jar"), [("products", "face cream")])
+
+    def test_box_words(self):
+        from grounding import names_a_box
+        for sentence in ("a gift box", "a perfume carton", "a lipstick case", "luxury packaging"):
+            self.assertTrue(names_a_box(sentence), sentence)
+        for sentence in ("a boxy bottle", "a red lipstick", "a jar"):
+            self.assertFalse(names_a_box(sentence), sentence)
+
+    def test_cap_colour_words(self):
+        from grounding import cap_colour_words
+        self.assertEqual(cap_colour_words("a glossy black perfume bottle with a gold cap"), ["gold"])
+        self.assertEqual(cap_colour_words("a white jar with a lid in rose gold"), ["rose", "gold"])
+        self.assertEqual(cap_colour_words("a white jar with a matte black lid"), ["black"])
+        for sentence in ("a blush pink serum bottle", "a serum bottle with a dropper cap",
+                         "a jar with a matching lid", "a gold bottle cap"):  # the last: the bottle's colour
+            self.assertEqual(cap_colour_words(sentence), [], sentence)
+
+    def test_default_cap_only_for_bottles_and_jars(self):
+        from grounding import default_cap
+        spec = {"shape": "cylinder", "cylinder": {"colour": "#FFFFFF"}}
+        self.assertIsNone(default_cap("a white lipstick", spec))
+        spec = {"shape": "jar", "jar": {"colour": "#9CAF88", "lid_colour": "#9CAF88"}}
+        self.assertEqual(default_cap("a sage green face cream jar", spec),
+                         {"field": "lid_colour", "from": "#9CAF88", "to": "#1A1A1A"})
+
     def test_finish_words_never_reach_the_model(self):
         # Code only: no row, so the request the model gets is unchanged.
         self.assertEqual(names("a glossy black box"), [])

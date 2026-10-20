@@ -554,6 +554,8 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
             "finish_change": result.finish_change,
             "backdrop_change": result.backdrop_change,
             "backdrop_given": result.backdrop_given,
+            "cap_change": result.cap_change,
+            "cap_given": result.cap_given,
             "spec": result.spec,
             "validation_errors": [a.errors for a in result.attempts],
             "outputs": [a.reply.text for a in result.attempts],
