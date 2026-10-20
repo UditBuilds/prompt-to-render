@@ -113,8 +113,19 @@ class SchemaMatchesValidator(unittest.TestCase):
 
     def test_llm_schema_is_the_spec_schema(self):
         llm_spec = llm_backend.output_schema()["properties"]["spec"]
-        self.assertEqual(llm_spec, spec.json_schema(only=llm_backend.LLM_FIELDS))
+        self.assertEqual(llm_spec, spec.json_schema(only=llm_backend.LLM_FIELDS, optional=llm_backend.LLM_OPTIONAL))
         self.assertEqual(set(llm_spec["properties"]), set(llm_backend.LLM_FIELDS))
+        # The model may leave the backdrop out; everything else it must fill in.
+        self.assertEqual(set(llm_spec["required"]), set(llm_backend.LLM_FIELDS) - {"background_colour"})
+
+    def test_no_real_colour_in_what_the_model_reads(self):
+        # An example hex in the schema was copied for a colour the model didn't know.
+        prompt = llm_backend.system_prompt()
+        self.assertEqual(re.findall(r"#[0-9A-Fa-f]{6}\b", prompt), [])
+        self.assertIn("#RRGGBB", prompt)
+        problems = []
+        spec.Colour("#000000", "").check("pinkish", "box.colour", problems)
+        self.assertEqual(re.findall(r"#[0-9A-Fa-f]{6}\b", problems[0]), [])
 
     def test_system_prompt_contains_schema(self):
         prompt = llm_backend.system_prompt()

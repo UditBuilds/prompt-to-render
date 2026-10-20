@@ -212,7 +212,7 @@ def show_spec(sentence, result):
     if result.backdrop_change:
         change = result.backdrop_change
         print(f"[grounding] the sentence gives the backdrop no colour, so it is neutral: "
-              f"{change['from']} -> {change['to']}")
+              f"{change['from'] or '(left out by the model)'} -> {change['to']}")
     box = result.spec["box"]
     print()
     print("Spec:")
@@ -292,6 +292,7 @@ def log_llm(log, result):
         style_changes=result.style_changes,
         finish_change=result.finish_change,
         backdrop_change=result.backdrop_change,
+        backdrop_given=result.backdrop_given,
         llm_calls=[a.to_log() for a in result.attempts],
     )
 

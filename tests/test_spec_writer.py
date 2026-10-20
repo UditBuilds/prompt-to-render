@@ -84,6 +84,13 @@ class Grounded(unittest.TestCase):
         result = write_spec("a red lipstick box on a blush backdrop", FakeBackend([GOOD]))
         self.assertEqual(result.spec["background_colour"], "#F2E6E6")
         self.assertIsNone(result.backdrop_change)
+        # The model may leave the backdrop out; code then sets the neutral one.
+        no_backdrop = json.loads(json.dumps(GOOD))
+        del no_backdrop["spec"]["background_colour"]
+        result = write_spec("a red lipstick box", FakeBackend([no_backdrop]))
+        self.assertFalse(result.backdrop_given)
+        self.assertEqual(result.spec["background_colour"], "#F5F5F5")
+        self.assertEqual(result.backdrop_change, {"from": None, "to": "#F5F5F5"})
         # Without grounding the model decides everything.
         result = write_spec("a glossy red lipstick box", FakeBackend([glossy]), grounding=False)
         self.assertEqual(result.spec["box"]["roughness"], 0.1)

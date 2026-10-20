@@ -636,7 +636,7 @@ The spec is checked **before** Blender starts. Every problem is listed in plain 
 ```
 > python run.py tests/broken_colour.json
 Spec error in tests/broken_colour.json:
-  - box.colour: must be a hex colour like "#F4B6C2", got "pinkish"
+  - box.colour: must be a hex colour in the form "#RRGGBB", got "pinkish"
 Nothing was rendered. Fix the spec and try again.
 
 > python run.py tests/broken_colour_mode.json

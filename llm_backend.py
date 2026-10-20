@@ -32,6 +32,9 @@ DEFAULT_MODEL = "qwen3:8b"
 # The spec fields the LLM writes: what is in the shot. The render settings
 # (colour_mode, lighting, resolution, samples) keep their defaults.
 LLM_FIELDS = ("description", "box", "background_colour", "camera")
+# The LLM may leave these out. It sets the backdrop only when the sentence
+# names one; otherwise code sets a neutral one (grounding.neutral_backdrop).
+LLM_OPTIONAL = ("background_colour",)
 
 # Sent back to the model when its spec fails validation.
 FIX_REQUEST = (
@@ -82,7 +85,7 @@ def output_schema():
                 "items": {"type": "string"},
                 "description": "Everything requested that the renderer can't draw, a few words each.",
             },
-            "spec": spec.json_schema(only=LLM_FIELDS),
+            "spec": spec.json_schema(only=LLM_FIELDS, optional=LLM_OPTIONAL),
         },
         "required": ["is_box", "shape", "unsupported", "spec"],
         "additionalProperties": False,

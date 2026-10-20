@@ -453,6 +453,7 @@ def run_case(case, backend, runs, done=None, grounding=True):
             "style_changes": result.style_changes,
             "finish_change": result.finish_change,
             "backdrop_change": result.backdrop_change,
+            "backdrop_given": result.backdrop_given,
             "spec": result.spec,
             "validation_errors": [a.errors for a in result.attempts],
             "outputs": [a.reply.text for a in result.attempts],

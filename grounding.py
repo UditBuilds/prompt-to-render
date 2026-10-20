@@ -300,14 +300,15 @@ def backdrop_colour_words(sentence):
     return [w for w in words if w not in _PLAIN_BACKDROP]
 
 
-def neutral_backdrop(sentence, spec):
+def neutral_backdrop(sentence, spec, given=True):
     """Unless the sentence gives the backdrop a colour, make it NEUTRAL_BACKDROP.
 
-    Returns {"from", "to"}, or None if the backdrop is the sentence's (or
-    already the neutral one).
+    `given` is False when the model left the backdrop out. Returns
+    {"from", "to"} ("from" is None if it was left out), or None if the
+    backdrop is the sentence's (or already the neutral one).
     """
     if backdrop_colour_words(sentence):
         return None
-    before = spec["background_colour"].upper()
+    before = spec["background_colour"].upper() if given else None
     spec["background_colour"] = NEUTRAL_BACKDROP
     return {"from": before, "to": NEUTRAL_BACKDROP} if before != NEUTRAL_BACKDROP else None
