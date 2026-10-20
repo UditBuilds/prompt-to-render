@@ -230,9 +230,11 @@ class Cases(unittest.TestCase):
     def test_rescore_runs_the_current_checks_on_saved_specs(self):
         spec = validate_spec({"box": {"colour": "#1B4D3E"}, "background_colour": "#FAF9F6"})
         run = {"valid": True, "spec": spec, "validation_errors": [[]], "is_box": True, "shape": "box",
-               "unsupported": [], "model_unsupported": [], "passed": False,
+               "unsupported": [], "model_unsupported": [], "passed": False, "retried": False,
+               "llm_seconds": 2.0, "prompt_tokens": 100, "output_tokens": 50, "call_prompt_tokens": [100],
                "checks": [{"check": "neutral_backdrop", "passed": False, "found": "an older check"}]}
-        report = {"cases": [{"id": "hex_exact", "checks": [], "runs": [run]}]}
+        report = {"cases": [{"id": "hex_exact", "checks": [], "runs": [run], "passed_runs": 0,
+                             "total_runs": 1, "distinct_specs": 1}]}
         rescored = rescore.rescore(report, run_evals.load_cases())
         self.assertEqual([o["check"] for o in run["checks"]], ["hex", "neutral_backdrop"])
         self.assertTrue(run["passed"])
