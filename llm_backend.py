@@ -34,9 +34,9 @@ DEFAULT_MODEL = "qwen3:8b"
 LLM_FIELDS = ("description", "shape", *spec.SHAPES, "background_colour", "camera")
 # The LLM may leave these out. It sets the backdrop only when the sentence
 # names one; otherwise code sets a neutral one (grounding.neutral_backdrop).
-# Of the shapes' objects it writes only its own shape's (spec_writer checks
-# that one is there).
-LLM_OPTIONAL = ("background_colour", *spec.SHAPES)
+# Of the shapes' objects it writes exactly one, its own shape's: see
+# spec_schema().
+LLM_OPTIONAL = ("background_colour",)
 
 # Sent back to the model when its spec fails validation.
 FIX_REQUEST = (
@@ -87,11 +87,27 @@ def output_schema():
                 "items": {"type": "string"},
                 "description": "Everything requested that the renderer can't draw, a few words each.",
             },
-            "spec": spec.json_schema(only=LLM_FIELDS, optional=LLM_OPTIONAL),
+            "spec": spec_schema(),
         },
         "required": ["is_box", "shape", "unsupported", "spec"],
         "additionalProperties": False,
     }
+
+
+def spec_schema():
+    """The "spec" part of the reply: one of four, one per shape.
+
+    Each requires its own shape's object and has no other shape's. With the
+    four objects merely optional in one schema, Ollama's grammar let the
+    model close the spec after "camera" without any (7 of 30 dev runs).
+    """
+    variants = []
+    for shape in spec.SHAPES:
+        fields = [f for f in LLM_FIELDS if f not in spec.SHAPES or f == shape]
+        variant = spec.json_schema(only=fields, optional=LLM_OPTIONAL)
+        variant["properties"]["shape"] = dict(variant["properties"]["shape"], enum=[shape])
+        variants.append(variant)
+    return {"anyOf": variants}
 
 
 def system_prompt():
@@ -160,8 +176,10 @@ class OllamaBackend(LLMBackend):
     TEMPERATURE = 0.2
     # Context window in tokens. Ollama silently drops the start of a prompt
     # that doesn't fit, which would cut off the system prompt, so it is set
-    # explicitly and every reply is checked against it.
-    NUM_CTX = 4096
+    # explicitly and every reply is checked against it. v2's four shapes
+    # took the prompt to about 3,900 tokens, past 4096 minus the reply's
+    # 512; 8192 costs about 0.6 GB more GPU memory while the model is loaded.
+    NUM_CTX = 8192
     # A spec is about 200 tokens. The cap stops a runaway reply.
     NUM_PREDICT = 512
     TIMEOUT = 300  # seconds; a cold start loads ~5 GB from disk

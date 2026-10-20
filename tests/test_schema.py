@@ -166,13 +166,20 @@ class SchemaMatchesValidator(unittest.TestCase):
         self.assertFalse(is_valid({"box": dict(box, bevel_cm=1.5)}))  # the "bar of soap" repair
 
     def test_llm_schema_is_the_spec_schema(self):
-        llm_spec = llm_backend.output_schema()["properties"]["spec"]
-        self.assertEqual(llm_spec, spec.json_schema(only=llm_backend.LLM_FIELDS, optional=llm_backend.LLM_OPTIONAL))
-        self.assertEqual(set(llm_spec["properties"]), set(llm_backend.LLM_FIELDS))
-        # The model may leave the backdrop out, and writes only its shape's
-        # object (the parser checks that one is there); the rest it must fill in.
-        self.assertEqual(set(llm_spec["required"]), {"description", "shape", "camera"})
-        self.assertEqual(set(llm_spec["properties"]) & set(spec.SHAPES), set(spec.SHAPES))
+        # One variant per shape, each the spec schema with that shape's object only.
+        variants = llm_backend.output_schema()["properties"]["spec"]["anyOf"]
+        self.assertEqual(len(variants), len(spec.SHAPES))
+        for shape, variant in zip(spec.SHAPES, variants):
+            with self.subTest(shape=shape):
+                fields = [f for f in llm_backend.LLM_FIELDS if f not in spec.SHAPES or f == shape]
+                expected = spec.json_schema(only=fields, optional=llm_backend.LLM_OPTIONAL)
+                self.assertEqual(variant["properties"]["shape"]["enum"], [shape])
+                expected["properties"]["shape"]["enum"] = [shape]
+                self.assertEqual(variant, expected)
+                # The model may leave the backdrop out; the rest, its own shape's
+                # object included, it must fill in.
+                self.assertEqual(variant["required"], ["description", "shape", shape, "camera"])
+                self.assertEqual(variant["properties"][shape], spec.json_schema()["properties"][shape])
 
     def test_no_real_size_in_the_schema(self):
         # Like the example hex, an example size in a description would be

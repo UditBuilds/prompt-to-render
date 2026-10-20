@@ -201,7 +201,8 @@ FIELDS = {
     },
     "jar": {
         "diameter_cm": Number(7.0, MIN_SIZE_CM, MAX_SIZE_CM, "Width across in cm."),
-        "height_cm": Number(5.0, MIN_SIZE_CM, MAX_SIZE_CM, "Bottom-to-top size in cm, with the lid on."),
+        "height_cm": Number(5.0, MIN_SIZE_CM, MAX_SIZE_CM,
+                            "Bottom-to-top size in cm, with the lid on. Usually less than the diameter."),
         "colour": Colour("#D9D9D9", 'Jar colour as a hex code, "#RRGGBB".'),
         "roughness": Number(0.5, 0.0, 1.0, "Surface finish: 0 = mirror-glossy, 1 = fully matte."),
         "lid_colour": CapColour('Lid colour as a hex code, "#RRGGBB". Only if the sentence names one.'),
