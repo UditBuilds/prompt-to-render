@@ -8,8 +8,9 @@ how its runs got their values: a box colour copied from a colour table row,
 a colour shifted by code for a style word, a box size equal to a product's
 typical size, a roughness clamped by code for "glossy", or a backdrop made
 neutral by code. Those are passes the tables and code make easy, so they
-are counted, not hidden. A backdrop the model had already made neutral
-isn't counted.
+are counted, not hidden. A backdrop is counted whenever the code changed
+it, even from another neutral grey; one the model had already set to the
+code's #F5F5F5 isn't.
 """
 
 import json
