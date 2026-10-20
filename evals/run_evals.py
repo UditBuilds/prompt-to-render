@@ -542,6 +542,15 @@ def summarise(results):
     }
 
 
+def percent(part, total):
+    """part/total as a whole percentage, rounded once from the counts (halves round up).
+
+    Not from the stored pass_rate: that is already rounded to 3 decimals, and
+    rounding it again turned 66/111 (59.46%) into 0.595 and then 60%.
+    """
+    return f"{(200 * part + total) // (2 * total)}%"
+
+
 def markdown_table(report):
     s = report["summary"]
     label = f"**{report['label']}**: " if report.get("label") else ""
@@ -568,14 +577,16 @@ def markdown_table(report):
     lines += [
         "",
         f"- **Overall:** {s['passed_runs']}/{s['total_runs']} runs passed "
-        f"({s['pass_rate']:.0%}); {s['cases_passing_all_runs']}/{s['total_cases']} cases passed every run.",
+        f"({percent(s['passed_runs'], s['total_runs'])}); "
+        f"{s['cases_passing_all_runs']}/{s['total_cases']} cases passed every run.",
     ]
     for group, g in s.get("colour_groups", {}).items():
         lines.append(f"- **{COLOUR_GROUPS[group]}** ({g['cases']} cases): the named-colour check passed in "
                      f"{g['colour_passed_runs']}/{g['total_runs']} runs; every check in "
                      f"{g['passed_runs']}/{g['total_runs']}.")
     lines += [
-        f"- **Retry loop fired:** {s['retry_runs']}/{s['total_runs']} runs ({s['retry_rate']:.0%}); "
+        f"- **Retry loop fired:** {s['retry_runs']}/{s['total_runs']} runs "
+        f"({percent(s['retry_runs'], s['total_runs'])}); "
         f"still invalid after {report['max_attempts']} attempts: {s['invalid_after_retries']}.",
         f"- **Consistency:** {s['cases_with_identical_runs']}/{s['total_cases']} cases gave the same spec "
         f"in every run (temperature {report['llm_settings']['temperature']}).",

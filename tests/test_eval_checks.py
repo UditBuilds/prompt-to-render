@@ -233,6 +233,13 @@ class Cases(unittest.TestCase):
         self.assertEqual(run_evals.summarise_groups(results),
                          {"in_table": {"cases": 1, "total_runs": 4, "colour_passed_runs": 2, "passed_runs": 1}})
 
+    def test_percentages_round_once_from_the_counts(self):
+        # 66/111 is 59.46%; rounding the stored pass_rate (0.595) again gave 60%.
+        self.assertEqual(run_evals.percent(66, 111), "59%")
+        self.assertEqual(run_evals.percent(1, 8), "13%")  # 12.5%: halves round up
+        self.assertEqual(run_evals.percent(0, 111), "0%")
+        self.assertEqual(run_evals.percent(30, 30), "100%")
+
     def test_rescore_runs_the_current_checks_on_saved_specs(self):
         spec = validate_spec({"box": {"colour": "#1B4D3E"}, "background_colour": "#FAF9F6"})
         run = {"valid": True, "spec": spec, "validation_errors": [[]], "is_box": True, "shape": "box",

@@ -37,7 +37,7 @@
 | `oot_sapphire` | 3/3 | 0/3 | 0/3 | 0/3 | typical size 3, neutral backdrop by code 3 |
 | `backdrop_pink` | 3/3 | 3/3 | 3/3 | 3/3 | - |
 | `backdrop_black` | 3/3 | 3/3 | 3/3 | 3/3 | typical size 3 |
-| **Runs passed** | 66/111 (60%) | 73/111 (66%) | 94/111 (85%) | 105/111 (95%) | |
+| **Runs passed** | 66/111 (59%) | 73/111 (66%) | 94/111 (85%) | 105/111 (95%) | |
 | **In-table colours: named colour right** | 13/30 (43%) | 18/30 (60%) | 30/30 (100%) | 30/30 (100%) | |
 | **Out-of-table colours: named colour right** | 6/15 (40%) | 0/15 (0%) | 0/15 (0%) | 9/15 (60%) | |
 | **Cases passing every run** | 21/37 | 23/37 | 30/37 | 35/37 | |
