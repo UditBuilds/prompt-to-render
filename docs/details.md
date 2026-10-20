@@ -1,0 +1,794 @@
+# Prompt-to-Render: the full write-up (v1.3)
+
+The short version is the [README](../README.md). This is everything else: how each version changed and why, every eval result, and the renderer's reference.
+
+Describe a box product shot in one sentence and get a clean studio render (cosmetics-packaging style). A **local** LLM writes the scene spec, grounded by small reference tables; code sets the few values the model gets wrong reliably; a validator checks it; Blender renders it on the GPU.
+
+```
+python prompt.py "luxury matte red lipstick box, three-quarter view"
+```
+
+**Runs fully offline. No API keys, no paid APIs, nothing leaves the machine.** The LLM is [Ollama](https://ollama.com) running `qwen3:8b` on the same laptop GPU that renders.
+
+| luxury matte red lipstick box, three-quarter view (v1.2) | a glossy emerald perfume box (v1.3) | a sage green gift box (v1.3) |
+|---|---|---|
+| <img src="v1.2_luxury_matte_red_lipstick.png" width="260"> | <img src="v1.3_glossy_emerald_perfume.png" width="260"> | <img src="v1.3_sage_green_gift_box.png" width="260"> |
+
+The lipstick is the v1.2 render: v1.3's came out a warmer brick red (see [v1.3](#v13-a-clean-prompt-and-the-out-of-table-score)).
+
+## The pipeline
+
+```
+sentence -> table lookup -> local LLM -> spec -> validator -> Blender -> PNG
+```
+
+In more detail:
+
+```
+"luxury matte red lipstick box, three-quarter view"
+      |
+      v
++----------------------+   whole-word lookup in data/: colours, product sizes, style words
+| grounding.py         |   -> only the matching rows, e.g. "lipstick: typically 2.5 x 8.5 x 2.5 cm",
++----------------------+      "luxury: deeper and richer"   (nothing matched -> nothing added)
+      |
+      v
++----------------------+   system prompt: prompts/spec_writer.md
+| local LLM            |   + a JSON schema generated from spec.py
+| qwen3:8b via Ollama  |   + the sentence and its table rows
++----------------------+   (structured output, thinking off, temperature 0.2)
+      |  JSON: is_box, shape, unsupported[], spec{...}
+      v
++----------------------+   invalid? the validator's exact error messages
+| spec.py validator    | ----------------------------------------------> back to the LLM
++----------------------+                                                (2 attempts in total)
+      |  valid spec          unsupported[] -> printed and logged, never rendered
+      v
+code sets three values after the model (grounding.py, all logged):
+  - style words shift the box colour            (data/style_words.json)
+  - glossy -> roughness clamped into 0.03-0.05  (data/finishes.json)
+  - no backdrop colour named -> backdrop #F5F5F5
+      |
+      v
+unload the LLM from GPU memory (Ollama keep_alive 0, checked with nvidia-smi)
+      |
+      v
++----------------------+
+| Blender, Cycles      |   the v0.1 renderer, unchanged
+| OptiX on the GPU     |
++----------------------+
+      |
+      v
+runs/<timestamp>_<slug>/   render.png, spec.json, prompt.txt, log.json
+```
+
+The design choices that matter:
+
+- **One source of truth for the schema.** Every spec field is declared once, in `spec.FIELDS` (default, allowed values, description). `validate_spec()` checks against that table, and `json_schema()` turns the same table into the JSON schema the LLM must follow. They can't drift apart, and `tests/test_schema.py` checks that every value at the edge of the schema's ranges passes the validator and every value just outside fails.
+- **Structured output, then validation anyway.** Ollama's `format` field turns the schema into a grammar that constrains decoding. In practice the grammar enforces the hex pattern, the camera names and the JSON structure. It does **not** enforce number ranges (asked for `roughness: 7.5`, the model wrote 7.5), and one rule can't be written as JSON schema at all: the bevel may be at most 10% of the box's smallest side. `spec.py` catches those, and that is where the retry loop earns its place.
+- **A repair loop with the real error messages.** If validation fails, the model gets its own reply back plus the validator's messages, word for word, and tries once more. After 2 attempts it stops with a clear error.
+- **Grounding with small tables, not a bigger prompt.** The words of the sentence are looked up in three small tables in `data/`, and only the matching rows are added to the request (see [Grounding](#grounding)). In v1.1 this took the eval from 76% to 100% of runs; prompt edits alone didn't move it. It doesn't make the model know more colours, though: see [the out-of-table score](#v12-colour-fixes-neutral-backdrops-an-honest-score).
+- **Unsupported requests are never faked.** The renderer draws one box with one colour. Logos, text, patterns, materials and other shapes go into an `unsupported` list that is printed and saved in `log.json`, but never passed to the renderer. A non-box (`"a pink perfume bottle"`) still renders as the closest box, with a clear warning.
+- **The model judges, the code does arithmetic.** Things an 8B model got wrong reliably are done in code from what the model decides: listing a non-box's shape (from its `shape` field), shifting a colour for a style word like "luxury" (from `data/style_words.json`), clamping "glossy" to a roughness that renders glossy, and giving the backdrop a neutral grey unless the sentence names a backdrop colour. All are logged, and all are counted separately in the evals.
+- **Shared GPU, one at a time.** `qwen3:8b` takes about 5.5 GB of the 8 GB card. Once the spec is accepted, the model is unloaded and nvidia-smi confirms the memory came back before Blender starts.
+- **Measured, not assumed.** 37 frozen eval sentences with range checks, run 3 times each, before and after every change (see [Evals](#evals)). Five of them use colour names that are deliberately in no table, to measure the model on its own.
+
+## Setup
+
+| | |
+|---|---|
+| **Windows 11** | Tested on Windows 11, native (not WSL), Windows PowerShell. |
+| **Python 3** | Any recent version. Only the standard library is used, so there's nothing to `pip install` and no venv. |
+| **Ollama** | From [ollama.com](https://ollama.com). Then download the model once: `ollama pull qwen3:8b` (about 5 GB). |
+| **Blender 5.2** | Expected at `C:\Program Files\Blender Foundation\Blender 5.2\blender.exe`. Other installed versions are found automatically. |
+| **NVIDIA RTX GPU** | 8 GB is enough, because the LLM and Blender never hold the GPU at the same time. Without a GPU, Ollama and Blender both fall back to the CPU (much slower). |
+
+## How to run
+
+Make sure Ollama is running (it starts with Windows and sits in the system tray), then:
+
+```
+python prompt.py "luxury matte red lipstick box, three-quarter view"
+```
+
+Output:
+
+```
+Sentence: luxury matte red lipstick box, three-quarter view
+Model:    qwen3:8b via Ollama (local, http://127.0.0.1:11434)
+Run:      runs\20261018_145027_luxury-matte-red-lipstick-box-three
+
+[grounding] table rows for this sentence: style luxury, product lipstick
+[llm] attempt 1 of 2: asking qwen3:8b for a spec ...
+[llm]   reply in 5.9 s, 2.7 s of it loading the model; 2445 prompt + 138 output tokens
+[llm]   valid: spec.py accepted the spec
+[grounding] style "luxury" applied to the box colour: #C51E2A -> #841B22
+
+Spec:
+  box        2.5 x 8.5 x 2.5 cm (width x height x depth)
+  finish     colour #841B22, roughness 0.8, bevel 0.15 cm
+  backdrop   #F5F5F5
+  camera     three_quarter
+  about      Luxury matte red lipstick box, three-quarter view
+
+[gpu] unloading qwen3:8b from GPU memory before rendering ...
+[gpu] GPU memory: 5826 MiB with the model loaded -> 341 MiB after unloading (5485 MiB freed)
+
+Rendering with C:\Program Files\Blender Foundation\Blender 5.2\blender.exe
+[render] device: GPU (OptiX) - NVIDIA GeForce RTX 5060 Laptop GPU
+[...]
+[render] render time: 3.1 s
+[render] colour check: spec #841B22, measured #82171E, Delta E 1.7 (hard to see)
+
+Done.
+  Run folder:   runs\20261018_145027_luxury-matte-red-lipstick-box-three
+  Image:        runs\20261018_145027_luxury-matte-red-lipstick-box-three\render.png
+  LLM:          qwen3:8b, 1 attempt, 5.9 s (incl. 2.7 s loading the model), 2445 prompt + 138 output tokens
+  GPU memory:   5826 MiB with the model loaded -> 341 MiB after unloading -> 1172 MiB peak while rendering
+  Device:       GPU (OptiX) - NVIDIA GeForce RTX 5060 Laptop GPU
+  Render time:  3.1 s (total incl. Blender start-up: 5.6 s)
+  Colour check: spec #841B22, measured #82171E, Delta E 1.7 (hard to see)
+```
+
+The whole run takes about 15 s: loading the model about 3 s (more on the very first run after a reboot), writing the spec about 2–3 s, then Blender.
+
+Options:
+
+| Option | What it does |
+|---|---|
+| `--model NAME` | Use another Ollama model, e.g. `--model llama3.1:8b`. Default `qwen3:8b`. |
+| `--no-grounding` | Don't add the table rows, and don't let code set any value (style shift, gloss, backdrop); the model decides everything on its own. |
+| `--verbose` | Show the table rows sent, the model's raw JSON replies and Blender's full output. |
+| `--blender "C:\path\to\blender.exe"` | Use a specific Blender (or set `BLENDER_PATH`). |
+| `--break-first-reply` | For testing: corrupt the model's first reply, to watch the repair loop work (see [The repair loop](#the-repair-loop)). |
+
+You can also point it at Ollama on another port or machine with the `OLLAMA_URL` environment variable (default `http://127.0.0.1:11434`). It uses `127.0.0.1` rather than `localhost` on purpose: on Windows, `localhost` tries IPv6 first and added about 2 s to every request.
+
+### What a run saves
+
+Every run gets its own folder, `runs/<timestamp>_<short-slug>/` (ignored by git):
+
+| File | What's in it |
+|---|---|
+| `prompt.txt` | The sentence. |
+| `spec.json` | The validated spec that was rendered. Re-render it any time with `python run.py runs\...\spec.json`. |
+| `render.png` | The image. |
+| `log.json` | Model and settings; whether grounding was on and **which table rows were used** (`grounding_rows`); any style colour shift (`style_changes`), glossy roughness clamp (`finish_change`) and neutral backdrop (`backdrop_change`) set by code, each with the model's value before; number of attempts and validation errors per attempt; `is_box`, `shape`; the unsupported list, and the model's own list before the code added anything (`model_unsupported`); prompt/output token counts (from Ollama's reply); LLM time (and how much of it was loading the model); render time; device; colour check; GPU memory with the model loaded, after unloading and at peak while rendering. Also every raw model reply. |
+
+### Things it can't draw
+
+The renderer draws exactly one box with one colour. Anything else is listed, not faked:
+
+```
+> python prompt.py "a pink perfume bottle with gold logo"
+[grounding] table rows for this sentence: product perfume, colour gold #D4AF37
+[...]
+Spec:
+  box        7.5 x 13.5 x 5 cm (width x height x depth)
+  finish     colour #FFC0CB, roughness 0.4, bevel 0.15 cm
+  [...]
+
+========================================================================
+WARNING: this is a bottle, but the renderer can only draw a box.
+Rendering the closest box instead. Ignored:
+  - bottle shape
+  - gold logo
+========================================================================
+[...]
+  Not rendered: bottle shape, gold logo
+  WARNING:      not a box; the closest box was rendered instead.
+```
+
+The gold row was retrieved because "gold" is in the sentence, but it describes the logo, so the box stays pink: colour rows are given to the model as a glossary ("use it for whatever the sentence uses that name for"), not as the box colour.
+
+The model reports `is_box` and `shape` (e.g. `"bottle"`). When it isn't a box, the code makes sure the shape is the first item in the ignored list: without that, `qwen3:8b` named the shape in only 2 of 12 dev runs once something else (a logo, a label) was also unsupported. `log.json` records when the code added it (`shape_added_by_code`), and the evals only count the model's own list.
+
+### When Ollama isn't running
+
+```
+> python prompt.py "luxury matte red lipstick box, three-quarter view"
+Sentence: luxury matte red lipstick box, three-quarter view
+Model:    qwen3:8b via Ollama (local, http://127.0.0.1:11434)
+
+Can't reach Ollama at http://127.0.0.1:11434 ([WinError 10061] No connection could be made because the target machine actively refused it).
+Ollama doesn't seem to be running. To start it, either:
+  - open "Ollama" from the Start menu (it runs in the system tray), or
+  - run  ollama serve  in another terminal and leave it open.
+Then try again.
+Nothing was generated or rendered.
+```
+
+A model that isn't installed gets `The model qwen9:404b isn't installed in Ollama. Download it with: ollama pull qwen9:404b`.
+
+## Grounding
+
+**The problem.** The v1 renders worked, but the model picked bad values: "emerald" became plain web green, "sage" became mint, the luxury red was a fire-engine red no deeper than a plain red, the lipstick box was twice as wide as a real one, and the gift box was a 3:1 slab. A small model knows roughly what these words mean, but not precisely, and not consistently.
+
+**The fix: three small tables, retrieved per sentence.**
+
+| Table | Rows | What a row says |
+|---|---|---|
+| `data/colours.json` | 44 specific colour names common in cosmetics and packaging (emerald, sage, wine, blush, champagne, rose gold, nude, charcoal, ...) | the hex, from CSS or Wikipedia |
+| `data/product_sizes.json` | 17 products (lipstick, perfume, serum, gift box, eyeshadow palette, lash box, candle, ...) | typical box size and ranges in cm |
+| `data/style_words.json` | 5 styles (luxury, minimal, playful, natural, bold, with synonyms) | a colour shift (lightness, saturation) and a finish |
+| `data/finishes.json` (v1.2, code only) | 3 finishes (glossy, satin, matte, with synonyms) | for glossy, the roughness range code clamps to; never sent to the model |
+
+`grounding.py` matches the sentence against every name and alias: whole words, case-insensitive, longest phrase first, each word used once ("rose gold" isn't also gold; "face cream" is a product, not the colour cream). Only the matching rows are added after the sentence in the user message, at most 4 colours, 2 products and 2 styles, so the system prompt stays the same for every sentence. A style word inside a backdrop phrase ("on a playful pink backdrop") describes the backdrop, not the box, so it is left out, and very common words (clean, simple, fun, kids) are not style aliases. A word that isn't in the tables is left to the model; a sentence with no match ("a nice box") gets nothing added. Basic colour words (red, blue, green, ...) are deliberately not in the colour table: the model handles them well, and a fixed hex would flatten style words.
+
+For "luxury matte red lipstick box, three-quarter view", the model receives:
+
+```
+luxury matte red lipstick box, three-quarter view
+
+Reference data for words in this sentence (from Prompt-to-Render's tables):
+Product sizes: the usual box for that product, width x height x depth in cm.
+- lipstick: typically 2.5 x 8.5 x 2.5; width 2-3, height 7.5-9.5, depth 2-3
+Style words: choose the plain box colour as usual (don't shift it yourself); the colour shift is applied to it automatically afterwards. Do apply the finish.
+- "luxury": colour becomes deeper and richer (30% darker, 10% less saturated, applied for you). Finish: matte 0.7-0.85, or high-gloss 0.03-0.08 if gloss is asked for; avoid the in-between.
+Use these values. Anything not listed here is up to you.
+```
+
+**Why the style shift is code.** On the dev sentences, `qwen3:8b` couldn't apply a style word to a colour itself. When the style table had example hex values, it copied the example verbatim ("a playful orange box" got the example's `#FF8C42`, darker than its own plain orange). Without examples, it didn't shift at all ("a luxury teal box" came back exactly teal). So the model picks the plain colour and the finish, and `grounding.apply_style()` shifts the box colour in HLS by the table's numbers. It skips the shift when the sentence gives an exact hex.
+
+### Before and after (v1.1, on the v1.1 checks)
+
+These are the v1.1 results, kept as they were. v1.2 tightened some of these checks and added cases; for v1 → v1.1 → v1.2 on the same, current checks, see [v1.2](#v12-colour-fixes-neutral-backdrops-an-honest-score).
+
+The same 30 frozen eval sentences, 3 runs each, `qwen3:8b`, temperature 0.2 (built with `python evals/compare.py`, also in `evals/results/comparison_v1.1.md`):
+
+- **baseline**: the v1 prompt, no tables.
+- **prompt-only**: the final v1.1 prompt with no table rows (`--no-grounding`). This separates the effect of the tables from the prompt edits made alongside them.
+- **grounded**: the final v1.1 prompt with table rows.
+
+| Case | baseline | prompt-only | grounded | grounded: values straight from tables or code |
+|---|---|---|---|---|
+| `red_lipstick` | 0/3 | 0/3 | 3/3 | typical size 3 |
+| `navy_serum` | 3/3 | 3/3 | 3/3 | table colour 3, typical size 3 |
+| `hex_exact` | 3/3 | 3/3 | 3/3 | typical size 3 |
+| `hex_glossy` | 3/3 | 3/3 | 3/3 | - |
+| `glossy_black` | 3/3 | 3/3 | 3/3 | - |
+| `shiny_gold` | 0/3 | 0/3 | 3/3 | table colour 3, typical size 3 |
+| `matte_white` | 3/3 | 3/3 | 3/3 | typical size 3 |
+| `camera_front` | 3/3 | 3/3 | 3/3 | typical size 3 |
+| `camera_top_down` | 3/3 | 3/3 | 3/3 | typical size 3 |
+| `camera_three_quarter` | 3/3 | 3/3 | 3/3 | typical size 3 |
+| `tall` | 3/3 | 3/3 | 3/3 | - |
+| `flat` | 3/3 | 3/3 | 3/3 | - |
+| `vague` | 3/3 | 3/3 | 3/3 | - |
+| `not_a_box` | 0/3 | 3/3 | 3/3 | - |
+| `logo` | 3/3 | 3/3 | 3/3 | - |
+| `bottle_logo` | 3/3 | 3/3 | 3/3 | - |
+| `doc_lipstick` | 0/3 | 0/3 | 3/3 | style shift by code 3, typical size 3 |
+| `doc_emerald` | 2/3 | 0/3 | 3/3 | table colour 3 |
+| `doc_sage` | 0/3 | 0/3 | 3/3 | table colour 3, typical size 3 |
+| `emerald_serum` | 3/3 | 0/3 | 3/3 | table colour 3, typical size 3 |
+| `sage_tea` | 0/3 | 0/3 | 3/3 | table colour 3, typical size 3 |
+| `crimson` | 3/3 | 3/3 | 3/3 | table colour 3 |
+| `wine_gift` | 0/3 | 0/3 | 3/3 | table colour 3, typical size 3 |
+| `blush` | 3/3 | 3/3 | 3/3 | table colour 3, typical size 3 |
+| `champagne` | 3/3 | 3/3 | 3/3 | table colour 3, typical size 3 |
+| `high_gloss_white` | 3/3 | 3/3 | 3/3 | - |
+| `plain_red` | 3/3 | 3/3 | 3/3 | - |
+| `luxury_red` | 3/3 | 3/3 | 3/3 | style shift by code 3 |
+| `plain_blue` | 3/3 | 3/3 | 3/3 | - |
+| `playful_blue` | 3/3 | 3/3 | 3/3 | style shift by code 3 |
+| **Runs passed** | 68/90 (76%) | 66/90 (73%) | **90/90 (100%)** | |
+| **Cases passing every run** | 22/30 | 22/30 | 30/30 | |
+| **Retry loop fired** | 0/90 | 0/90 | 0/90 | |
+| **Avg prompt tokens per run** | 1995 | 2256 | 2348 | |
+| **Largest prompt (one call)** | 2002 | 2263 | 2445 | |
+| **Avg LLM time per run** | 2.25 s | 2.28 s | 2.29 s | |
+
+**Why tables beat prompt tweaks here.** The prompt edits alone (prompt-only) didn't improve the score: 66/90 against the baseline's 68/90. They fixed one thing (the model now lists "glass" itself, `not_a_box` 0/3 → 3/3) and, without anyone intending it, broke another: emerald went from the `#208040` family of greens to plain web green `#008000` in all 6 emerald runs (5 of 6 had passed). A small model's guesses for vague words move around with any change to the prompt. The tables replace the guess with a fact for exactly the words in the sentence: every case that went from failing to passing did so by using a table row or the code's style shift (last column). The table rows add about 90 prompt tokens on average (2,348 vs 2,256 for the same prompt without them; about 350 over v1 including the prompt edits), and no measurable time.
+
+**What this does and doesn't show.**
+- Where an eval colour is in the table, the check mostly measures **whether the model copies the row**: the table hexes and the eval's reference colours come from the same public sources (e.g. Wikipedia's emerald `#50C878`). The same goes for sizes: the lipstick and gift-box size checks pass because the model used the table's typical size. That's the point of grounding, but it means a 100% here says the retrieval and copying work, not that the model got better at colour.
+- The two style pairs (`luxury_red`, `playful_blue`) and the luxury lipstick measure **the code's** style shift. Both pairs already passed in the baseline; `doc_lipstick`'s "luxury is darker than plain" check didn't.
+- Runs are close to deterministic (13 of 30 grounded cases gave the same spec in all 3 runs), so a case going 0/3 → 3/3 is usually one changed decision, not three.
+- **A regression found after the eval, and fixed.** Because code applies the style shift, the first version recoloured the box whenever a style alias appeared anywhere: "a red box on a clean white backdrop" came out dusty pink (`#FF0000` → `#C17E7E`), "a black box on a playful pink backdrop" came out grey-brown. No eval sentence contains such a phrase, so the eval didn't catch it. It was fixed in a separate commit (generic aliases removed; style words in a backdrop phrase skipped). None of the 30 eval sentences retrieve different rows or a different block after the fix (checked), so the results above still hold for the shipped code.
+- The table design and the prompt edits were settled on 15 separate dev sentences (`evals/dev_cases.json`), never on the eval sentences. The eval cases and colour definitions were committed before the tables existed, and the baseline results before the tables were written (see the git history).
+
+### The renders, before and after
+
+The same three sentences. The v1 images are in `docs/v1-before/`.
+
+| Sentence | v1 (no tables) | v1.1 (grounded) |
+|---|---|---|
+| `luxury matte red lipstick box, three-quarter view` | <img src="v1-before/v1_matte_red_lipstick.png" width="260"><br>5 x 12 x 3 cm, `#D32F2F` | <img src="v1.1_matte_red_lipstick.png" width="260"><br>2.5 x 8.5 x 2.5 cm (table), `#C51E2A` → luxury `#841B22` |
+| `a high-gloss emerald green perfume box on a pale blush backdrop` | <img src="v1-before/v1_glossy_emerald_perfume.png" width="260"><br>`#208040`, roughness 0.1, backdrop `#F8BBD0` | <img src="v1.1_glossy_emerald_perfume.png" width="260"><br>emerald `#50C878`, roughness 0.1, blush backdrop `#F4C2C2` (both table) |
+| `flat lay of a matte sage green skincare gift box, seen from above` | <img src="v1-before/v1_top_down_sage_gift_box.png" width="260"><br>15 x 10 x 5 cm, `#B5EAD7` (mint) | <img src="v1.1_top_down_sage_gift_box.png" width="260"><br>22 x 8 x 18 cm (table), sage `#BCB88A` (table) |
+
+What wasn't right in these images (all three were addressed in v1.2):
+- **"High-gloss" still looks satin.** The spec has roughness 0.1, which passed the v1.1 "high-gloss ≤ 0.1" check, but under the soft studio lights 0.1 still gives a broad, soft highlight.
+- **Emerald** is Wikipedia's emerald `#50C878`, which reads as bright grass green, not a deep jewel green. The pink backdrop was asked for by the sentence ("on a pale blush backdrop"), but it clashes.
+- **Sage** is Wikipedia's sage `#BCB88A`, which reads as olive/khaki rather than grey-green, and the top-down view hides the box's height.
+
+## v1.2: colour fixes, neutral backdrops, an honest score
+
+**The problem.** v1.1 scored 100%, but that score was partly circular: for colours in the table, the eval's colour ranges and the table's hexes came from the same public references, so the check mostly measured whether the model copied the row. And the renders showed three faults the evals passed: emerald too bright, sage too khaki, "high-gloss" too satin.
+
+**Evals first** (committed before any fix, then a baseline run on the unchanged v1.1 code; see the git history):
+- **5 colour names that are in no table:** rust, ochre, fuchsia, periwinkle, sapphire. (The first idea, teal, mauve, terracotta, mustard and lilac, turned out to be in the table already.) Their ranges are in HSL, from public references (Wikipedia, CSS, Pantone, Crayola, ISCC-NBS), and were written before the model saw the sentences. A test fails if any of these names is ever added to the colour table, or if their sentences ever retrieve a colour or style row.
+- **Emerald and sage**, set from the render review (HSL): emerald hue 150–180°, saturation ≥ 50%, lightness 20–40%; sage hue 75–130°, saturation 10–35%, lightness 45–75%. Wikipedia's `#50C878` and v1's `#208040` now fail as emerald, `#BCB88A` as sage; `#009473` and `#9CAF88` pass (a unit test on exactly these hexes).
+- **Glossy / high-gloss:** roughness ≤ 0.05 (was ≤ 0.2 and ≤ 0.1).
+- **Backdrops:** a sentence that names no backdrop must get a neutral one: HSL saturation ≤ 10% and lightness ≥ 80%. Two new sentences name one ("a white box on a pink background", "an orange candle box on a black backdrop"), which must be kept.
+
+**Fixes:**
+- Colour table: emerald → `#009473` (Pantone 17-5641 Emerald), sage → `#9CAF88`. Gold was already `#D4AF37`.
+- **Glossy is set by code:** glossy, gloss, high-gloss, shiny, lacquered and polished clamp the model's roughness into 0.03–0.05 (`data/finishes.json`, `grounding.apply_finish()`). Not inside a product name ("lip gloss") or a backdrop phrase, and left to the model when the sentence names two finishes ("a matte box with a glossy logo").
+- **The backdrop is set by code**, like the style shift: `#F5F5F5` unless the sentence gives the backdrop a colour (`grounding.neutral_backdrop()`). Any word next to "backdrop"/"background" other than plain ones like "clean" or "studio" counts as a colour, so even a colour the code has never heard of ("a periwinkle backdrop") keeps the model's choice: overriding a colour the user named is the worse mistake. `#F5F5F5` is the backdrop the model itself chose most often in v1.1 (73 of 90 runs), and the one in the v1.1 lipstick render.
+- **The system prompt was not touched.** The two code rules add nothing to the request, so for 33 of the 37 eval sentences, including every lipstick sentence, the model receives a byte-identical request to v1.1 (checked with a hash); only the 4 emerald and sage sentences differ, by their new hexes. The prompt's own lines asking for a "pale tint" backdrop and gloss 0.05–0.15 are now overridden by code. They were left in on purpose: any prompt edit moves a small model's other guesses (see below), and the lipstick was to stay as it was.
+
+### Results: v1 → v1.1 → v1.2
+
+The same 37 cases on the same checks, 3 runs each, `qwen3:8b`, temperature 0.2. "Named colour right" counts only the box's named-colour check, so code-set values can't lift it. (These are the v1.2 numbers, on v1.2's HSL backdrop check. v1.3 replaced that check and re-scored all three; see [v1.3](#v13-a-clean-prompt-and-the-out-of-table-score).)
+
+| Version | All checks (runs passed) | In-table colours: named colour right (10 cases) | Out-of-table colours: named colour right (5 cases) | Avg LLM time per run |
+|---|---|---|---|---|
+| v1: v1 prompt, no tables | 63/111 (57%) | 13/30 (43%) | 6/15 (40%) | 2.27 s |
+| v1.1: tables | 65/111 (59%) | 18/30 (60%) | 0/15 (0%) | 2.31 s |
+| v1.2: new hexes, gloss and backdrop by code | **94/111 (85%)** | **30/30 (100%)** | **0/15 (0%)** | 2.31 s |
+
+v1 is commit `41b9962` (the v1 prompt) run on today's cases, v1.1 is the unchanged v1.1 code. Per case: `evals/results/comparison_v1.2.md`.
+
+**Read the two colour scores differently.** The in-table score is high partly because the model copies the table. In all 30 in-table runs of v1.2 the box hex is the table's hex, character for character, and the eval ranges for those names were written from the same public references the table uses (for emerald and sage now even the same hex). So 30/30 says the lookup and the copying work; it doesn't say the model knows what "crimson" looks like. **The out-of-table score is the real measure of the model:** five common colour names that are in no table, checked against ranges written before any run. `qwen3:8b` gets none of them right in v1.1 or v1.2, and 2 of 5 with the v1 prompt. Grounding didn't make the model better at colour; it made the colours we wrote down come out right.
+
+What the model picks for the out-of-table names (every run identical unless listed):
+
+| Colour | Range (HSL hue, saturation, lightness) | v1 | v1.1 | v1.2 |
+|---|---|---|---|---|
+| rust | 8–30°, 40–100%, 22–48% | `#B85B2A` ✓ | `#B85B3E` ✗ lightness 48.2% | `#B85B3E` ✗ |
+| ochre | 25–50°, 40–90%, 35–60% | `#D2B48C` ✗ lightness 69% (CSS "tan") | same ✗ | same ✗ |
+| fuchsia | 290–348°, 31–100%, 40–65% | `#E8A3B5` ✗ lightness 77% | same ✗ | same ✗ |
+| periwinkle | 215–255°, 30–100%, 65–92% | `#B5A8D4` ×2, `#B5AEBE` ✗ hue 258–266° | `#B5A8D4` ×2, `#B8A7D8` ✗ | `#B8A9D6`, `#B5AEBE`, `#B8A7D8` ✗ |
+| sapphire | 192–232°, 70–100%, 11–50% | `#0F4C81` ✓ | `#4B8BBE` ✗ saturation 47%, lightness 52% | `#4B8BBE` ✗ |
+
+- The fuchsia `#E8A3B5` is the example hex in the schema's colour description (`e.g. "#E8A3B5"`): with no idea, the model copied the example. Periwinkle comes out lavender, ochre is CSS tan, and sapphire in v1.1/v1.2 is a mid steel blue.
+- The runs are nearly deterministic, so 15 runs are about 5 decisions per version. v1 → v1.1 lost two of them (rust and sapphire) from prompt edits alone, without any table row involved: the same lesson as v1.1's emerald. Rust misses by 0.2 points of lightness; the range was written before any run and isn't changed.
+
+What moved from v1.1 to v1.2, and why:
+- `hex_glossy`, `glossy_black`, `high_gloss_white` (0/3 → 3/3): code. The model still writes roughness 0.1 in all 15 glossy and shiny runs; code clamps it to 0.05.
+- `doc_emerald`, `emerald_serum`, `doc_sage`, `sage_tea` (0/3 → 3/3): the new table hexes (`doc_emerald` also needed the gloss clamp).
+- `blush`, `champagne`, `navy_serum`, `emerald_serum`: code replaced the model's backdrop in 10 of 111 runs, tints `#F5F0E6`, `#F0F4F8` and `#F0F8F5` in 7 and an already-neutral `#F0F0F0` in 3. In the other runs the model had picked `#F5F5F5` itself.
+- `vague` (1/3 → 3/3) and `doc_lipstick` (2/3 → 3/3) improved with no code rule involved: sampling.
+- **Worse:** `red_lipstick` and `plain_red` went 3/3 → 2/3, each losing one run to `#E3256B` (hue 338°, a pinkish red). Their requests are byte-identical to v1.1 and no code rule touches the box colour, so this is sampling at temperature 0.2 (the v1.1 baseline lost a `doc_lipstick` run the same way, to `#821741`). It is still real: a plain "red" sometimes comes out pinkish.
+- The 7 cases that still fail are the 5 out-of-table colours and these two reds.
+
+### The renders, v1.1 → v1.2
+
+v1.2: one render per sentence, no re-rolls, all three-quarter.
+
+| v1.1 | v1.2 |
+|---|---|
+| <img src="v1.1_glossy_emerald_perfume.png" width="260"><br>`a high-gloss emerald green perfume box on a pale blush backdrop`<br>`#50C878`, roughness 0.1, blush backdrop `#F4C2C2` (asked for) | <img src="v1.2_glossy_emerald_perfume.png" width="260"><br>`a glossy emerald perfume box`<br>`#009473` (table); roughness 0.1 → 0.05 and backdrop `#F0E6D6` → `#F5F5F5`, both by code |
+| <img src="v1.1_top_down_sage_gift_box.png" width="260"><br>`flat lay of a matte sage green skincare gift box, seen from above`<br>22 x 8 x 18 cm, `#BCB88A`, top-down | <img src="v1.2_sage_green_gift_box.png" width="260"><br>`a sage green gift box`<br>22 x 8 x 18 cm (table), `#9CAF88` (table), three-quarter, so the 8 cm height shows |
+| <img src="v1.1_matte_red_lipstick.png" width="260"><br>`luxury matte red lipstick box, three-quarter view`<br>`#C51E2A` → luxury `#841B22`, 2.5 x 8.5 x 2.5 cm | <img src="v1.2_luxury_matte_red_lipstick.png" width="260"><br>the same sentence: `#C31B3D` → luxury `#83192E`, 2.5 x 8.5 x 2.5 cm, roughness 0.8, backdrop `#F5F5F5`: unchanged |
+| | <img src="v1.2_matte_red_lipstick.png" width="260"><br>`a matte red lipstick box` (no "luxury")<br>`#E84A5F`, roughness 0.85, 2.5 x 8.5 x 2.5 cm |
+
+- **"A matte red lipstick box" is a different sentence from the v1.1 lipstick.** Without "luxury" nothing deepens the red, so it is the model's own bright red. This render's `#E84A5F` (a watermelon red) was an unusual pick: 9 more spec-only runs of the same sentence gave `#FF0000` five times, `#E81111` twice, `#C31B3D` and `#CC0000` once each. Its request is byte-identical to v1.1, so v1.1 would have picked from the same set.
+- **Glossy at 0.05** gives crisper highlights along the edges, but the big faces still look smooth rather than mirror-like: the soft studio has nothing sharp to reflect. Harder lighting would be the next step.
+
+## v1.3: a clean prompt, and the out-of-table score
+
+**The problem.** The out-of-table score went v1 6/15 → v1.1 0/15 → v1.2 0/15: the model got worse at the colours that aren't in the table. Three suspects: (a) the schema's example hex `#E8A3B5` (fuchsia came out exactly that), (b) the two prompt lines code had overridden since v1.2, (c) the colour table making the model copy instead of think.
+
+**Changes:**
+- **A fairer backdrop check** (evals only, committed first). "Neutral" is now: R, G and B within 20 of each other (0–255), and HSL lightness ≥ 80%. The v1.2 check used HSL saturation, which fails every warm off-white (`#FAF9F6` reads as 29% saturated). `#FAF9F6` and `#F5F5F5` pass, a pale pink like `#F8D7DA` fails. The saved v1, v1.1 and v1.2 results were re-scored on it with `evals/rescore.py` (no new model runs; only backdrop outcomes changed).
+- **No real colour in anything the model reads.** The schema said `e.g. "#E8A3B5"`; it now says `"#RRGGBB"`, and so does the validator's error message (the model reads it on a retry). A test keeps real hexes out of the system prompt.
+- **The model sets the backdrop only when the sentence names one**, and may leave `background_colour` out (it is no longer required in its schema); code then sets `#F5F5F5`. The "pale tint" backdrop line is gone.
+- **Lines code already handles were removed:** the gloss 0.05–0.15 line (code clamps glossy), "backdrop" in the mood-words line, and "A listed style word … Apply it", which told the model to shift the colour itself while the reference block told it not to.
+- **Kept, because no code rule covers them:** "choose a hex a packaging designer would use for that colour" (it may lean muted, but nothing replaces it), and "soft studio lighting" (it describes the lighting, not colours).
+
+### Results: v1 → v1.3
+
+The same 37 cases on the same checks, 3 runs each, `qwen3:8b`, temperature 0.2; v1, v1.1 and v1.2 re-scored on the v1.3 backdrop check, and all four on the final colour-check rounding. "Named colour right" counts only the box's named-colour check. Per case: `evals/results/comparison_v1.3.md`.
+
+| Version | All checks (runs passed) | In-table colours: named colour right (10 cases) | Out-of-table colours: named colour right (5 cases) | Avg LLM time per run |
+|---|---|---|---|---|
+| v1: v1 prompt, no tables | 66/111 (60%) | 13/30 (43%) | 6/15 (40%) | 2.27 s |
+| v1.1: tables | 73/111 (66%) | 18/30 (60%) | 0/15 (0%) | 2.31 s |
+| v1.2: new hexes, gloss and backdrop by code | 94/111 (85%) | 30/30 (100%) | 0/15 (0%) | 2.31 s |
+| **v1.3: clean prompt** | **105/111 (95%)** | **30/30 (100%)** | **9/15 (60%)** | **2.09 s** |
+| Diagnostic: v1.3 without the colour table (the 5 out-of-table cases only) | n/a | n/a | 9/15 (60%) | 2.1 s |
+
+These v1.3 numbers include one measurement fix made after the run: the colour checks now round H/S/L to 6 decimals, so ochre `#CC9966`, exactly on its range's edge, passes (see below). Before the fix, v1.3 scored 102/111 (92%) and 6/15, the diagnostic 6/15. The saved results were re-scored, not re-run, and no other outcome changed in any version.
+
+**In-table vs out-of-table, and what the diagnostic showed.** The in-table score is 30/30 because the model copies the table's hex for names the table knows; it measures the lookup, not the model. The out-of-table score is the model's own colour knowledge, and it is 9/15, above v1's 6/15, with a different set right (v1: rust and sapphire; v1.3: rust, ochre and fuchsia). Fuchsia is the one change with a clear cause: it left the schema's example `#E8A3B5` for `#E100FF` the moment the example was gone, so suspect (a) was real. The other changes came from editing several prompt lines at once, so they can't be pinned on (a) or (b). The diagnostic rules out (c) as it was posed: these 5 sentences never retrieve a colour row, so with the colour table switched off the request the model gets is byte-identical (checked with a hash), and it scored the same 9/15 (the few samples that differed, like one sapphire, are sampling). The table can only reach these sentences through the system prompt's "Reference data" paragraph, which every request contains; that was not tested.
+
+What the model picks for the out-of-table names in v1.3 (the diagnostic picked the same colours, with fuchsia's two hexes in a different mix and one sapphire sample `#66B2FF`, also too light):
+
+| Colour | Range (HSL hue, saturation, lightness) | v1.3, 3 runs | |
+|---|---|---|---|
+| rust | 8–30°, 40–100%, 22–48% | `#8B4513` ×3 (CSS "saddlebrown") | ✓ |
+| ochre | 25–50°, 40–90%, 35–60% | `#CC9966` ×3 | ✓ lightness exactly 60%, on the edge (see below) |
+| fuchsia | 290–348°, 31–100%, 40–65% | `#E100FF` ×2, `#E13FFF` | ✓ |
+| periwinkle | 215–255°, 30–100%, 65–92% | `#B59FC3` ×3 | ✗ hue 277°: lavender |
+| sapphire | 192–232°, 70–100%, 11–50% | `#6495ED` ×3 (CSS "cornflowerblue") | ✗ lightness 66%: too light |
+
+- **Ochre failed on floating point, not on colour.** `#CC9966` has an HSL lightness of exactly 60% (153/255), on the range's inclusive edge, but Python computed 60.00000000000001, which failed "≤ 60". Fixed after the v1.3 run: H/S/L are now rounded to 6 decimals before the range checks (unit-tested on `#CC9966`), and the saved results were re-scored. Ochre went 0/3 → 3/3 in v1.3 and in the diagnostic; nothing else changed in any version.
+- When the model doesn't know a colour it often reaches for a CSS named colour (saddlebrown for rust, cornflowerblue for sapphire, tan for ochre in v1.2). Each name is one near-deterministic decision, so the score moves in steps of 3 whenever the prompt's wording changes.
+
+What else moved:
+- **The model now leaves the backdrop out in 86 of 111 runs**, and set it in all 9 runs whose sentence names one (pink, black, blush: all kept). Shorter replies: 2.09 s per run instead of 2.31 s.
+- `red_lipstick` and `plain_red` are back to 3/3: every run picked `#FF0000`.
+- **Worse: the luxury lipstick.** For "luxury matte red lipstick box, three-quarter view" the model now picks `#D32F2F` before the luxury shift (all 3 eval runs), so the box comes out `#8F2525`, a warmer brick red, where v1.2 gave `#83192E`, a deeper crimson close to the v1.1 image. It still passes every check.
+
+### The renders, v1.2 → v1.3
+
+| v1.2 | v1.3 |
+|---|---|
+| <img src="v1.2_glossy_emerald_perfume.png" width="260"> | <img src="v1.3_glossy_emerald_perfume.png" width="260"><br>`a glossy emerald perfume box`: the same spec as v1.2 (the model left the backdrop out; code set it), pixel-identical within 1 level |
+| <img src="v1.2_sage_green_gift_box.png" width="260"> | <img src="v1.3_sage_green_gift_box.png" width="260"><br>`a sage green gift box`: the same spec as v1.2, pixel-identical within 1 level |
+| <img src="v1.2_luxury_matte_red_lipstick.png" width="260"><br>`luxury matte red lipstick box, three-quarter view`<br>`#C31B3D` → luxury `#83192E` | <img src="v1.3_luxury_matte_red_lipstick.png" width="260"><br>`a luxury matte red lipstick box` (no ", three-quarter view")<br>`#D32F2F` → luxury `#8F2525`: **worse**, a warmer brick red |
+
+## The repair loop
+
+If the spec fails validation, the loop sends the model's reply back to it with the validator's exact messages and asks for a corrected version. It allows 2 attempts in total.
+
+With structured output on, the loop **never fired naturally** in any eval run (0 of 270 runs across baseline, prompt-only and grounded): the model's numbers stayed in range. So it is tested two ways:
+
+1. **Offline, with a scripted fake model** (`tests/test_spec_writer.py`). Covers: bad then fixed, bad twice then give up, broken JSON, that the exact validator messages and the bad reply are what get sent back, and that the table rows go with every attempt.
+2. **With the real model** (`--break-first-reply`). The model's first reply is corrupted on purpose (roughness 1.4 and a bevel as wide as the box). The validator rejects it, and the real model has to repair it from the real error messages:
+
+```
+> python prompt.py "a satin teal tea box, three-quarter view" --break-first-reply
+[grounding] table rows for this sentence: colour teal #008080, product tea
+[llm] attempt 1 of 2: asking qwen3:8b for a spec ...
+[llm]   reply in 5.8 s, 2.7 s of it loading the model; 2388 prompt + 132 output tokens
+[llm]   note: first reply corrupted on purpose (--break-first-reply)
+[...]
+[llm]   INVALID: spec.py found 2 problem(s):
+[llm]     - box.roughness: must be between 0 and 1, got 1.4
+[llm]     - box.bevel_cm: must be at most 10% of the smallest box side (0.6 cm for this box), got 8
+[llm] attempt 2 of 2: sending the 2 validation error(s) back to the model ...
+[llm]   reply in 2.2 s; 2603 prompt + 131 output tokens
+[llm]   valid: spec.py accepted the spec
+
+Spec:
+  box        8 x 14 x 6 cm (width x height x depth)
+  finish     colour #008080, roughness 0.4, bevel 0.6 cm
+```
+
+The model fixed both values and kept everything else. It fixes just enough to pass: the bevel landed exactly on the limit. In v1 the limit was "under half the smallest side", and the same demo produced a 1.5 cm bevel on an 8 cm side that looked like a bar of soap. v1.1's validator caps the bevel at 10% of the smallest side, so a repair can't go that far (at 10% the edges are still soft, but it reads as a box).
+
+## Evals
+
+```
+python evals/run_evals.py                                  # 37 cases x 3 runs, specs only (about 4.5 minutes)
+python evals/run_evals.py --label grounded                 # name the results file
+python evals/run_evals.py --no-grounding --label prompt-only   # no table rows AND no code rules: the model alone
+python evals/run_evals.py --without-table colours          # leave one table out; code rules stay on
+python evals/run_evals.py --render                         # also render one spec per case (model unloaded first)
+python evals/run_evals.py --model llama3.1:8b              # compare models
+python evals/run_evals.py --runs 1 --cases luxury_red      # a referenced case (plain_red) comes along
+python evals/run_evals.py --cases-file evals/dev_cases.json  # the dev set; results go to runs/dev_evals/
+python evals/compare.py <a.json> <b.json> [...]            # side-by-side table
+python evals/rescore.py <results.json> [...]               # re-run today's checks on saved specs (no model calls)
+```
+
+The 37 sentences in `evals/cases.json` go through exactly the same LLM + validation loop as `prompt.py`. Checks run on the final spec and are **ranges, not exact values**. A run passes only if it produced a valid spec within 2 attempts **and** every check passes. Results go to `evals/results/<timestamp>_<label>.json` (every spec, every raw reply, the table rows used, every value code set, every check) and a Markdown summary beside it. The summary also gives the named-colour score of the in-table and the out-of-table colour cases separately (`colour_group` in `cases.json`).
+
+What the checks cover:
+
+| Check | Example |
+|---|---|
+| Named colours, in the table | "emerald", "sage", "crimson", "wine", "gold", "navy", "blush", "champagne" must fall inside hue/saturation/lightness ranges in `evals/colour_definitions.json`. The v1.1 ones were written from general colour definitions (Wikipedia, CSS, Pantone) **before** the colour table existed: where a colour has two or more standard references, the range is their span plus fixed tolerances (hue ±10°, saturation ±0.15, L\* ±10); navy and blush follow a written description. Emerald and sage were set in v1.2 from the render review, in HSL, and list the colours they must reject. |
+| Named colours, not in the table | "rust", "ochre", "fuchsia", "periwinkle", "sapphire", in HSL, written before any run: references plus tolerances (hue ±10°, saturation and lightness ±15 and ±10 points) where there are several, a written description where there is one. A test keeps these names out of `data/colours.json`. |
+| Finish | "glossy" and "high-gloss" roughness ≤ 0.05, "shiny" ≤ 0.2, "matte" ≥ 0.6. |
+| Backdrop | no backdrop named: neutral, meaning near-grey (R, G and B within 20 of each other, 0–255) and HSL lightness ≥ 80%; a named one is kept (pink, black, blush). Until v1.3 "near-grey" was HSL saturation ≤ 10%, which failed every warm off-white. |
+| Sizes and proportions | lipstick height 6–10 cm with width and depth 1.5–4 cm; gift box top face at most 1.6:1; "tall" height > 1.5 × width; "flat" height ≤ half the width and depth. |
+| Camera | front / top_down / three_quarter, including three-quarter when no angle is named. |
+| Non-box and unsupported | `shape` must contain "bottle"; glass and logos must be in the **model's own** unsupported list (items the code adds don't count). |
+| Style pairs | "a luxury red box" must be at least 5 L\* darker or 0.10 less saturated than "a red box" (mean over its runs); "a playful blue box" lighter or more saturated than "a blue box". |
+
+Rules:
+- The eval sentences and checks are frozen. The v1.1 ones were committed before any table existed, and the baseline results before the tables were written. The v1.2 changes were committed before any v1.2 fix, and the v1.1 baseline on them before any fix was written.
+- Tuning used only the dev sentences in `evals/dev_cases.json` (and, for the backdrop rule, dev sentences in `tests/test_grounding.py`).
+- No check was loosened to make a result pass. The v1.2 changes only tightened checks or added them. v1.3 replaced the neutral-backdrop check, on review, with a near-grey one that is looser for warm off-whites (which the HSL version wrongly failed); every saved result was re-scored on it, so all versions are compared on the same check. After v1.3, the colour checks round H/S/L to 6 decimals (a floating-point fix, no range changed), and every saved result was re-scored again.
+
+Things the checks don't catch (by design, these are not changed after the fact):
+- In-table colours mostly measure copying (see [v1.2](#v12-colour-fixes-neutral-backdrops-an-honest-score)); the out-of-table colours are the measure of the model.
+- "shiny" keeps the older ≤ 0.2 check, although code now clamps it like "glossy".
+- "glass" is matched as a substring of the model's own unsupported items, so an item like "glass perfume bottle" (restating the object) counts as flagging glass.
+- The gold range excludes CSS `gold` (`#FFD700`, a saturated golden yellow) because packaging gold is metallic gold (`#D4AF37`). That's a judgment call; it is written down in `evals/colour_definitions.json`.
+
+v1's 15-case results are kept in `evals/results/` (`20261018_132659`, `20261018_133949`) for history; they used the older, looser checks.
+
+## Tests
+
+```
+python -m unittest discover tests
+```
+
+Offline, no Ollama or Blender needed (68 tests):
+
+- `test_schema.py`: the generated JSON schema and the validator agree on every field (range edges, choices, colour pattern), the bevel rule, the LLM's schema is exactly the spec schema (with the backdrop optional), and no real hex appears in the system prompt or the colour error message.
+- `test_spec_writer.py`: the repair loop with a scripted fake model, parsing of the model's reply (including the non-box shape rule and the model's own unsupported list), that table rows reach every attempt, also through `--break-first-reply`, that code sets the gloss and backdrop after the model (also when the model leaves the backdrop out, and not with `--no-grounding`), and that a table can be left out.
+- `test_grounding.py`: the table lookup (longest phrase first, whole words, a product word isn't also a colour, style words for the backdrop left out, row caps), the style shift, the glossy clamp (not for semi-gloss, satin, matte, "lip gloss", a glossy backdrop, or two finishes), which sentences name a backdrop colour, and that the tables are well formed.
+- `test_eval_checks.py`: the eval checks themselves; every colour definition's references fall inside its range and its must-fail colours outside, the exact emerald and sage hexes, a colour exactly on a range's edge (ochre `#CC9966`), the near-grey backdrop check, that every sentence without a backdrop has it, that the out-of-table colours stay out of the colour table, and re-scoring saved runs.
+
+---
+
+# The renderer (v0.1)
+
+Everything below is the part that turns a spec into an image. It is unchanged since v0.1 except for one validator rule (the bevel limit, added in v1.1), and still works on its own with hand-written JSON:
+
+```
+python run.py specs/pink_three_quarter.json
+```
+
+One command builds the whole scene from scratch and saves a PNG to `renders/`. The scene has a bevelled box, a seamless curved backdrop, soft area lights and an auto-framed camera.
+
+## Examples (v0.1)
+
+All three are rendered in `accurate` colour mode, 1080×1080, 128 samples, about 3 seconds each on an RTX 5060 Laptop GPU.
+
+![Pink matte box, three-quarter view](pink_three_quarter.png)
+`specs/pink_three_quarter.json`: tall pink matte carton (`#E8A3B5`) on a blush sweep, three-quarter view.
+
+![Black glossy box, three-quarter view](black_glossy_three_quarter.png)
+`specs/black_glossy_three_quarter.json`: black glossy box (`#111111`, roughness 0.12) on a warm grey sweep, three-quarter view.
+
+![White matte box, top-down view](white_top_down.png)
+`specs/white_top_down.json`: flat white matte carton (`#F4F3EF`) on sage, seen from directly above.
+
+## Rendering a JSON spec
+
+Open a terminal in this folder and run:
+
+```
+python run.py specs/pink_three_quarter.json
+python run.py specs/black_glossy_three_quarter.json
+python run.py specs/white_top_down.json
+```
+
+You'll see something like:
+
+```
+Rendering specs/pink_three_quarter.json with C:\Program Files\Blender Foundation\Blender 5.2\blender.exe
+[render] device: GPU (OptiX) - NVIDIA GeForce RTX 5060 Laptop GPU
+[render] camera: three_quarter, lighting: studio_soft, colour mode: accurate, 1080x1080, 128 samples
+[cycles] Path tracing on: NVIDIA GeForce RTX 5060 Laptop GPU (OptiX) [...]
+[cycles] Denoising on: NVIDIA GeForce RTX 5060 Laptop GPU (OptiX) [...]
+[render] light meter: exposure -0.64 stops (0.3 s)
+[render] render time: 3.0 s
+[render] saved: C:\Projects\prompt-to-render\renders\pink_three_quarter_20261017_214802.png
+[render] colour check: spec #E8A3B5, measured #E29DAF, Delta E 2.2 (small)
+
+Done.
+  Spec:         specs/pink_three_quarter.json
+  Device:       GPU (OptiX) - NVIDIA GeForce RTX 5060 Laptop GPU
+  Cycles:       Path tracing on: NVIDIA GeForce RTX 5060 Laptop GPU (OptiX) [...]
+  Cycles:       Denoising on: NVIDIA GeForce RTX 5060 Laptop GPU (OptiX) [...]
+  Render time:  3.0 s (total incl. Blender start-up: 5.2 s)
+  Colour check: spec #E8A3B5, measured #E29DAF, Delta E 2.2 (small)
+  Saved:        renders\pink_three_quarter_20261017_214802.png
+```
+
+- The `[cycles] Path tracing on:` line comes from Blender's renderer itself. It shows which device really did the work.
+- The colour check line tells you how close the box came out to the colour in your spec (see [Checking colour](#checking-colour)).
+- The image is saved as `renders/<spec-name>_<date>_<time>.png`, so earlier renders are never overwritten.
+
+Options:
+
+| Option | What it does |
+|---|---|
+| `--verbose` | Show all of Blender's output (useful if something goes wrong). |
+| `--blender "C:\path\to\blender.exe"` | Use a specific Blender. You can also set the `BLENDER_PATH` environment variable. |
+
+## Make your own shot
+
+Copy one of the files in `specs/`, change the values, and run it. Every field is optional; anything you leave out uses the default.
+
+```json
+{
+  "description": "Tall pink matte serum carton on a blush backdrop, three-quarter view",
+  "box": {
+    "width_cm": 5,
+    "height_cm": 14,
+    "depth_cm": 5,
+    "colour": "#E8A3B5",
+    "roughness": 0.75,
+    "bevel_cm": 0.12
+  },
+  "background_colour": "#F5DCE1",
+  "colour_mode": "accurate",
+  "camera": "three_quarter",
+  "lighting": "studio_soft",
+  "resolution": [1080, 1080],
+  "samples": 128
+}
+```
+
+### Spec fields
+
+These are defined once, in `spec.FIELDS`. The LLM writes `description`, `box`, `background_colour` and `camera`; the render settings (`colour_mode`, `lighting`, `resolution`, `samples`) keep their defaults.
+
+| Field | Default | Allowed | What it means |
+|---|---|---|---|
+| `description` | `""` | any text | A note for humans. Not used for rendering. |
+| `box.width_cm` | `6` | 0.5 – 200 | Left-to-right size, seen from the front. |
+| `box.height_cm` | `12` | 0.5 – 200 | Bottom-to-top size. |
+| `box.depth_cm` | `4` | 0.5 – 200 | Front-to-back size. |
+| `box.colour` | `"#D9D9D9"` | hex, `"#RRGGBB"` or `"#RGB"` | Box colour. |
+| `box.roughness` | `0.5` | 0 – 1 | `0` = mirror-glossy, `1` = fully matte. Glossy packaging ≈ 0.1–0.2, matte card ≈ 0.6–0.8. |
+| `box.bevel_cm` | `0.15` | 0 to 10% of the smallest side | How rounded the edges are. `0` = razor sharp. Small values (0.1–0.3) look most realistic. The 10% cap keeps every face at least 80% flat, so it always reads as a box. A box with a side under 1.5 cm needs a bevel smaller than the default. |
+| `background_colour` | `"#EDEDED"` | hex | Colour of the studio backdrop. |
+| `colour_mode` | `"accurate"` | `"accurate"`, `"realistic"` | `accurate`: the box colour matches your hex as closely as possible. `realistic`: filmic AgX look; nice highlights, but colours come out paler. See below. |
+| `camera` | `"three_quarter"` | `"front"`, `"three_quarter"`, `"top_down"` | Camera angle (see below). |
+| `lighting` | `"studio_soft"` | `"studio_soft"` | Lighting setup. Only one for now. |
+| `resolution` | `[1080, 1080]` | each side 16 – 8192 | Image size in pixels, `[width, height]`. Non-square works too. |
+| `samples` | `128` | 1 – 8192 | Render quality. More is cleaner but slower. 128 is plenty with the denoiser on. |
+
+Size units are centimetres and the box always stands on the floor. The camera reframes itself for any size, so a lipstick box and a gift box both fill the frame the same way.
+
+### Colour modes
+
+**`accurate`** (default) is for when the brand colour matters.
+- **View transform:** Blender's *Khronos PBR Neutral*, which was designed for product images. Colours up to about 80% brightness come out nearly unchanged; it subtracts a small amount to cancel surface sheen, so matte colours can come out very slightly darker. Brighter highlights are gently compressed instead of clipping to flat white.
+- **Exposure:** set by a **light meter**. Before the real render, the box is briefly made pure matte white and a tiny patch at the centre of its main lit face is rendered (about 0.3 s). This is like a photographer holding a white card where the product is. Exposure is set so that card reads exactly 100%, which makes a matte box show its own colour.
+- **White balance:** the same card also sets it. Light bouncing off a coloured backdrop would otherwise tint the box. To counter that, all lights get a slight opposite tint.
+- **What it matches:** only the box colour is matched. The backdrop is lit more brightly than the box, so it usually comes out a bit lighter than its hex.
+
+**`realistic`** is the filmic look.
+- It uses AgX with the "Medium High Contrast" look. Light and shadow look more film-like, but colours shift: pastels come out noticeably paler, and blacks come out grey.
+- Exposure is fixed rather than metered.
+
+Measured colour of the box (see [Checking colour](#checking-colour)). Delta E is the colour difference: under 2 is hard to see, 2–5 small, 5–10 noticeable, over 10 obvious.
+
+| Example | Spec hex | `accurate` measured | ΔE | `realistic` measured | ΔE |
+|---|---|---|---|---|---|
+| Pink matte | `#E8A3B5` | `#E29DAF` | 2.2 | `#DEBEC5` | 16.6 |
+| Black glossy | `#111111` | `#242220` | 8.5 | `#474542` | 24.4 |
+| White matte | `#F4F3EF` | `#EBEAE7` | 3.2 | `#D5D5D3` | 10.6 |
+
+A glossy black box can never measure exactly `#111111`. Its shiny surface reflects the bright studio around it, just as it would in a real photo.
+
+### Camera presets
+
+| Preset | Angle |
+|---|---|
+| `front` | Straight on, from just above the box's middle (8° up). |
+| `three_quarter` | 35° to the right and 22° up: the classic packshot showing the front, right side and top. |
+| `top_down` | Directly overhead (flat lay). The front of the box is at the bottom of the image. |
+
+The backdrop sweep is always turned to face the camera, like in a real studio, so the camera looks straight into the curve.
+
+### Lighting preset: `studio_soft`
+
+Soft area lights (softboxes), placed relative to the camera so every angle gets the same look:
+
+- **Key**: front-left and above. The main light; sets the shadow direction.
+- **Fill**: low, straight in front. Softens shadows. On glossy boxes it also shows up as a softbox reflection on the front face.
+- **Rim**: behind the box on the opposite side. Lights the top and back edges so the box separates from the backdrop.
+- **Backdrop**: a big softbox behind the box, aimed away from it at the sweep. It lights the far backdrop evenly so it doesn't fall off into dark corners.
+
+For `top_down` the setup changes. From straight above, a rim light only adds a second shadow that crosses the first, and the backdrop light's edge would land in the frame. So top-down uses only the key and fill: a higher, larger key for a short soft shadow, and the fill moved overhead to lighten that shadow.
+
+The lights themselves are invisible to the camera; you only see their light and their reflections.
+
+## Checking colour
+
+`check_colour.py` measures how close a render's box colour is to its spec:
+
+```
+> python check_colour.py specs/pink_three_quarter.json renders/pink_three_quarter_20261017_214802.png
+Spec:          C:\Projects\prompt-to-render\specs\pink_three_quarter.json
+Image:         C:\Projects\prompt-to-render\renders\pink_three_quarter_20261017_214802.png
+Patch:         centre of the front face, 37x51 px
+Spec colour:   #E8A3B5
+Measured:      #E29DAF
+Delta E (76):  2.2  (small)
+```
+
+It rebuilds the scene from the spec to find exactly where the centre of the box's main lit face is in the image. That's the front face for `front` and `three_quarter`, and the top face for `top_down`. It then averages the pixels in a small patch there and compares them with the spec colour using CIE76 Delta E. It runs Blender in the background for you; nothing extra to install.
+
+`run.py` and `prompt.py` already run the same check after every render (the `colour check` line), so you only need this script to re-check an existing image.
+
+Note: in `accurate` mode the light meter and the colour check use the same patch. So the *brightness* of a matte box matches largely by design. The Delta E still catches everything else: wrong hue or saturation, reflections on glossy boxes, and the view transform's effect on colour.
+
+## When a spec is wrong
+
+The spec is checked **before** Blender starts. Every problem is listed in plain English and nothing is rendered:
+
+```
+> python run.py tests/broken_colour.json
+Spec error in tests/broken_colour.json:
+  - box.colour: must be a hex colour in the form "#RRGGBB", got "pinkish"
+Nothing was rendered. Fix the spec and try again.
+
+> python run.py tests/broken_colour_mode.json
+Spec error in tests/broken_colour_mode.json:
+  - colour_mode: must be one of "accurate", "realistic", got "vivid"
+Nothing was rendered. Fix the spec and try again.
+```
+
+The checks also catch:
+- numbers out of range;
+- text where a number should be;
+- unknown camera names;
+- bevels bigger than 10% of the box's smallest side;
+- broken JSON (with the line and column);
+- misspelled field names, with a suggestion such as `box.color: unknown field. Did you mean "box.colour"?`.
+
+These are the same messages the LLM receives when its spec fails.
+
+## GPU vs CPU
+
+`render_scene.py` forces Cycles onto the GPU itself, so it doesn't depend on the settings saved in Blender's UI (headless runs don't reliably use them). It:
+
+1. sets the Cycles compute device to **OptiX** and enables only the RTX GPU (not the CPU, which would make a slower hybrid render);
+2. uses the **OptiX denoiser**;
+3. if no OptiX GPU is found, falls back to the **CPU** with the OpenImageDenoise denoiser. It also prints a loud `WARNING` banner, and repeats the warning in the final summary.
+
+On an RTX 5060 Laptop GPU a 1080×1080, 128-sample render takes about 3 seconds, plus 0.3 s for the light meter in `accurate` mode. The same render on the CPU took about 24 seconds.
+
+## How it works
+
+| File | Job |
+|---|---|
+| `prompt.py` | **The entry point.** Sentence in, render out: table lookup, LLM + validation loop, unload the model, render, save the run folder. |
+| `grounding.py` | The table lookup: finds the rows of `data/` that match the sentence and writes the block added to the request. Also the values code sets after the model: style-word colour shifts, the glossy roughness, and the neutral backdrop. |
+| `data/` | The grounding tables: `colours.json`, `product_sizes.json`, `style_words.json`, and `finishes.json` (code only). |
+| `llm_backend.py` | The only code that talks to an LLM. Builds the system prompt and the JSON schema, and implements Ollama over its REST API (standard-library `urllib`). A new backend (e.g. a hosted API) only has to implement `_chat(messages, schema)`, `release()` and `check()`. |
+| `spec_writer.py` | The validation loop: look up the table rows, parse the model's reply, validate the spec, send errors back (2 attempts max), then let code set the style shift, gloss and backdrop. Shared by `prompt.py` and the evals. |
+| `prompts/spec_writer.md` | The system prompt: what the renderer can do, and the rules (sizes, colours, finish, camera, unsupported, non-box). |
+| `gpu.py` | GPU memory readings from nvidia-smi. |
+| `run.py` | Renders a JSON spec. Checks the spec, finds Blender, starts it in the background, shows the important lines, saves the PNG, prints the timing and colour check. |
+| `spec.py` | The spec's single source of truth: fields, defaults, validation, and the JSON schema. Used by everything, including Blender. |
+| `render_scene.py` | Runs inside Blender. Builds the box, backdrop, lights, world and camera from scratch, runs the light meter (`accurate` mode), renders, checks the colour. |
+| `check_colour.py` | Measures the box colour in a render against the spec (spec hex, measured hex, Delta E). |
+| `evals/` | `cases.json` (37 frozen eval sentences and their checks), `colour_definitions.json` (what each colour name must look like), `dev_cases.json` (the separate tuning set), `run_evals.py`, `compare.py`, `rescore.py`, and `results/`. |
+| `tests/` | Unit tests (`python -m unittest discover tests`) and deliberately broken specs. |
+| `specs/` | Example hand-written specs. |
+| `docs/` | The example images shown above, and this write-up (`details.md`). |
+| `runs/`, `renders/` | Output (ignored by git). |
+
+Scene details:
+
+- **Box**: a mesh with a Bevel modifier. "Harden normals" keeps the big faces perfectly flat, so glossy reflections don't smear. The material is a Principled BSDF with your colour and roughness.
+- **Backdrop**: a floor that curves smoothly up into a back wall, meeting both tangentially, so there is no horizon line. It is turned to face the camera.
+- **Camera**: an 85 mm lens. The distance is solved so the box fills about 62% of the frame on its tightest side. The lens is shifted so the box sits dead centre.
+- **Colour**: hex colours are converted from sRGB to Blender's linear colour space. The view transform depends on `colour_mode` (see above).
+
+LLM details:
+
+- **Structured output:** the schema goes in Ollama's `format` field, and also into the system prompt, as Ollama's docs recommend.
+- **Thinking off:** `qwen3` thinks out loud by default. The request sets `"think": false` (only for models that support thinking), and any stray `<think>` block would be stripped before parsing.
+- **Settings:** temperature 0.2, context 4096 tokens, at most 512 output tokens. Ollama silently cuts the start off a prompt that doesn't fit its context, which would remove the system prompt. So the context size is set explicitly, and every reply is checked: a prompt that used more than 4096 − 512 tokens is an error. The prompt is about 2,250 tokens plus up to about 200 for table rows; the largest single call seen was 2,603 tokens (a retry).
+- **Unloading:** `keep_alive: 0`, then wait until Ollama's `/api/ps` no longer lists the model, then wait until nvidia-smi shows the memory back. It also unloads when the spec is invalid, on errors and on Ctrl-C.
+
+You can also run the Blender part directly:
+
+```
+"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" --background --factory-startup --python render_scene.py -- --spec specs/pink_three_quarter.json --output renders/test.png
+```
+
+## Known limitations
+
+- **One box, one colour.** No logos, text, patterns, other shapes, materials or props. These are reported, never faked.
+- **Only what's in the tables is grounded.** A colour name or product that isn't in `data/` is the model's guess, and its guesses are often wrong: 3 of 5 out-of-table colours right in v1.3 (see [v1.3](#v13-a-clean-prompt-and-the-out-of-table-score)), often a CSS named colour. Which ones it gets right changes with the prompt's wording. Basic colour words (red, blue) are always the model's own choice.
+- **Backdrops** are a neutral `#F5F5F5`, set by code, unless the sentence names a backdrop colour. The rule only looks next to the words "backdrop" and "background": "a red box on pink" gets the neutral backdrop.
+- **`--no-grounding` turns off both the table rows and the code rules** (style shift, gloss, backdrop): the model alone. To leave out only one table, use `evals/run_evals.py --without-table`.
+- **Glossy** is clamped to 0.03–0.05, which gives crisper edge highlights, but under the soft studio lights the big faces still don't look mirror-like.
+- **Style words are arithmetic, not taste.** "Luxury" darkens by 30% in code; it doesn't pick a different colour family (e.g. red stays red, it doesn't become burgundy).
+- **Repairs pass, but sit at the limit** (see [The repair loop](#the-repair-loop)).
+- **Cold start.** The first run after a reboot loads about 5 GB from disk. Later runs load in about 3 s, because the model is unloaded after every run to free the GPU for Blender.
+
+## Troubleshooting
+
+- **"Can't reach Ollama"**: start Ollama from the Start menu, or run `ollama serve` in another terminal.
+- **"The model ... isn't installed"**: `ollama pull qwen3:8b`.
+- **"Could not find blender.exe"**: pass `--blender "C:\path\to\blender.exe"` or set `BLENDER_PATH`.
+- **The WARNING banner says it rendered on the CPU**: update the NVIDIA driver. In Blender, check *Edit → Preferences → System → Cycles Render Devices → OptiX* lists the RTX GPU.
+- **"RENDER FAILED"**: run again with `--verbose` to see Blender's full output.
+
+## Roadmap
+
+- **v0**: JSON spec → studio render of a box.
+- **v0.1**: colour modes with a measured colour check, cleaner studio sweeps, softer top-down lighting.
+- **v1**: a local LLM (Ollama, `qwen3:8b`) turns a sentence into the spec, with a schema generated from the validator, a repair loop, GPU hand-off and evals. Fully offline.
+- **v1.1**: stricter frozen evals (30 cases, colour definitions, style pairs), a bevel limit in the validator, and grounding tables retrieved per sentence: 76% → 100% of eval runs.
+- **v1.2**: 7 more eval cases (5 colour names in no table, 2 named backdrops), stricter emerald, sage, gloss and backdrop checks, new emerald and sage hexes, glossy and the backdrop set by code: 59% → 85% of eval runs on the new checks. The out-of-table score stays 0/15.
+- **v1.3 (this)**: a near-grey backdrop check (saved results re-scored), no real colour in the schema, the backdrop left to code unless named, stale prompt lines removed, and H/S/L rounded in the colour checks so ochre's exact-edge `#CC9966` passes: 95% of eval runs, out-of-table 9/15 (v1: 6/15).
+- **Next**: the out-of-table colours (the model's own colour knowledge, or a bigger model via `--model`), harder lighting so glossy reads as glossy, a second backend behind `llm_backend.py`.
