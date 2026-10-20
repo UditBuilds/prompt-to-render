@@ -1,0 +1,18 @@
+_Re-scored on 2026-10-20 from `20261020_172849_v1-3-no-colour-table.json` with the current checks; no new model runs._
+
+**v1.3-no-colour-table**: model `qwen3:8b` (Ollama, local), 3 runs per case, 2026-10-20.
+
+| Case | Sentence | Tests | Passed | Distinct specs | Failed checks |
+|---|---|---|---|---|---|
+| `oot_rust` | a rust coloured candle box | colour name not in the table: rust | 3/3 | 1 | - |
+| `oot_ochre` | an ochre soap box | colour name not in the table: ochre | 3/3 | 1 | - |
+| `oot_fuchsia` | a fuchsia nail polish box | colour name not in the table: fuchsia | 3/3 | 2 | - |
+| `oot_periwinkle` | a periwinkle tea box | colour name not in the table: periwinkle | 0/3 | 1 | run 1: box #b59fc3 as periwinkle: hue 277 not in 215..255; HSL saturation 23% not in 30..100<br>run 2: box #b59fc3 as periwinkle: hue 277 not in 215..255; HSL saturation 23% not in 30..100<br>run 3: box #b59fc3 as periwinkle: hue 277 not in 215..255; HSL saturation 23% not in 30..100 |
+| `oot_sapphire` | a sapphire blue serum box | colour name not in the table: sapphire | 0/3 | 2 | run 1: box #6495ED as sapphire: HSL lightness 66% not in 11..50<br>run 2: box #66b2ff as sapphire: HSL lightness 70% not in 11..50<br>run 3: box #6495ED as sapphire: HSL lightness 66% not in 11..50 |
+
+- **Overall:** 9/15 runs passed (60%); 3/5 cases passed every run.
+- **Out-of-table colours** (5 cases): the named-colour check passed in 9/15 runs; every check in 9/15.
+- **Retry loop fired:** 0/15 runs (0%); still invalid after 2 attempts: 0.
+- **Consistency:** 3/5 cases gave the same spec in every run (temperature 0.2).
+- **Non-box shape listed by code, not by the model:** 0 run(s). The model named the shape in its `shape` field; the code put it in the unsupported list.
+- **Average LLM time per run:** 2.1 s (2293 prompt + 118 output tokens), model already loaded. Largest prompt of any single call: 2298 tokens.

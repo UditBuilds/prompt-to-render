@@ -64,9 +64,14 @@ def hex_to_hsv(hex_colour):
 
 
 def hex_to_hsl(hex_colour):
-    """(hue in degrees, HSL saturation in %, HSL lightness in %)."""
+    """(hue in degrees, HSL saturation in %, HSL lightness in %), rounded to 6 decimals.
+
+    Rounded so a colour exactly on a range's edge isn't pushed past it by
+    floating point: #CC9966's lightness is exactly 60% (153/255), but
+    computes as 60.00000000000001.
+    """
     hue, lightness, saturation = colorsys.rgb_to_hls(*_rgb(hex_colour))
-    return hue * 360, saturation * 100, lightness * 100
+    return round(hue * 360, 6), round(saturation * 100, 6), round(lightness * 100, 6)
 
 
 def in_range(value, check):

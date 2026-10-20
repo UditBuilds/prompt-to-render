@@ -130,6 +130,12 @@ class Checks(unittest.TestCase):
         self.assertEqual([round(v, 1) for v in run_evals.hex_to_hsl("#009473")], [166.6, 100.0, 29.0])
         self.assertEqual([round(v, 1) for v in run_evals.hex_to_hsl("#9CAF88")], [89.2, 19.6, 61.0])
 
+    def test_hsl_on_a_range_edge(self):
+        # #CC9966: lightness exactly 60% (153/255), the top of ochre's range.
+        # Unrounded it computed as 60.00000000000001 and failed "<= 60".
+        self.assertEqual(run_evals.hex_to_hsl("#CC9966")[2], 60.0)
+        self.assertTrue(passes({"type": "named_colour", "name": "ochre"}, FakeResult({"colour": "#CC9966"})))
+
     def test_invalid_spec_fails_the_run(self):
         result = FakeResult()
         result.ok, result.errors = False, ["box.roughness: ..."]

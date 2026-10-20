@@ -9259,7 +9259,7 @@
     }
   ],
   "rescored": {
-    "on": "2026-10-20T17:19:39",
+    "on": "2026-10-20T17:39:48",
     "from": "20261020_165856_v1-2.json",
     "why": "re-scored on the current evals/cases.json checks, no new model runs"
   }

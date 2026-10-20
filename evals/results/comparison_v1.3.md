@@ -31,16 +31,16 @@
 | `plain_blue` | 3/3 | 3/3 | 3/3 | 3/3 | neutral backdrop by code 3 |
 | `playful_blue` | 3/3 | 3/3 | 3/3 | 3/3 | style shift by code 3, neutral backdrop by code 3 |
 | `oot_rust` | 3/3 | 0/3 | 0/3 | 3/3 | typical size 3, neutral backdrop by code 3 |
-| `oot_ochre` | 0/3 | 0/3 | 0/3 | 0/3 | typical size 3, neutral backdrop by code 3 |
+| `oot_ochre` | 0/3 | 0/3 | 0/3 | 3/3 | typical size 3, neutral backdrop by code 3 |
 | `oot_fuchsia` | 0/3 | 0/3 | 0/3 | 3/3 | typical size 3, neutral backdrop by code 3 |
 | `oot_periwinkle` | 0/3 | 0/3 | 0/3 | 0/3 | typical size 3, neutral backdrop by code 3 |
 | `oot_sapphire` | 3/3 | 0/3 | 0/3 | 0/3 | typical size 3, neutral backdrop by code 3 |
 | `backdrop_pink` | 3/3 | 3/3 | 3/3 | 3/3 | - |
 | `backdrop_black` | 3/3 | 3/3 | 3/3 | 3/3 | typical size 3 |
-| **Runs passed** | 66/111 (60%) | 73/111 (66%) | 94/111 (85%) | 102/111 (92%) | |
+| **Runs passed** | 66/111 (60%) | 73/111 (66%) | 94/111 (85%) | 105/111 (95%) | |
 | **In-table colours: named colour right** | 13/30 (43%) | 18/30 (60%) | 30/30 (100%) | 30/30 (100%) | |
-| **Out-of-table colours: named colour right** | 6/15 (40%) | 0/15 (0%) | 0/15 (0%) | 6/15 (40%) | |
-| **Cases passing every run** | 21/37 | 23/37 | 30/37 | 34/37 | |
+| **Out-of-table colours: named colour right** | 6/15 (40%) | 0/15 (0%) | 0/15 (0%) | 9/15 (60%) | |
+| **Cases passing every run** | 21/37 | 23/37 | 30/37 | 35/37 | |
 | **Retry loop fired** | 0/111 | 0/111 | 0/111 | 0/111 | |
 | **Avg prompt tokens per run** | 1995 | 2345 | 2345 | 2296 | |
 | **Largest prompt (one call)** | 2002 | 2445 | 2445 | 2396 | |
