@@ -1,5 +1,5 @@
 {
-  "about": "Eval cases for the spec writer (v1.1, frozen before the grounding tables existed). Each sentence goes through the same LLM + validation loop as prompt.py; the checks run on the final spec. Checks are ranges, not exact values, except where the sentence gives an exact hex. Colour checks use HSV hue (degrees) and saturation (0-1) and CIE L* lightness (0-100); named_colour checks use evals/colour_definitions.json. model_unsupported_mentions only looks at the model's own unsupported list, never at items the code added. style_shift compares a case's colour with an earlier case's (mean over its runs). A run also fails if no valid spec came back within 2 attempts. None of these sentences may be used to tune the prompt or the tables.",
+  "about": "Eval cases for the spec writer. The first 30 were frozen in v1.1 before the grounding tables existed; v1.2 tightened some of their checks and added 7 cases, all before any v1.2 fix was written (see the git history). Each sentence goes through the same LLM + validation loop as prompt.py; the checks run on the final spec. Checks are ranges, not exact values, except where the sentence gives an exact hex. Colour checks use HSV hue (degrees) and saturation (0-1) and CIE L* lightness (0-100); named_colour checks use evals/colour_definitions.json (some of those are in HSL). neutral_backdrop uses HSL saturation and lightness in %: every sentence that names no backdrop has it. colour_group marks the cases whose box colour name is in data/colours.json (in_table) and the 5 whose name is deliberately not (out_of_table: never add these names to the table). model_unsupported_mentions only looks at the model's own unsupported list, never at items the code added. style_shift compares a case's colour with an earlier case's (mean over its runs). A run also fails if no valid spec came back within 2 attempts. None of these sentences may be used to tune the prompt or the tables.",
   "cases": [
     {
       "id": "red_lipstick",
@@ -10,15 +10,18 @@
         {"type": "saturation", "min": 0.5},
         {"type": "dimension", "field": "height_cm", "min": 6, "max": 10},
         {"type": "dimension", "field": "width_cm", "min": 1.5, "max": 4},
-        {"type": "dimension", "field": "depth_cm", "min": 1.5, "max": 4}
+        {"type": "dimension", "field": "depth_cm", "min": 1.5, "max": 4},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
       "id": "navy_serum",
       "covers": "named colour: navy",
+      "colour_group": "in_table",
       "sentence": "a navy blue serum box",
       "checks": [
-        {"type": "named_colour", "name": "navy"}
+        {"type": "named_colour", "name": "navy"},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -26,7 +29,8 @@
       "covers": "exact hex",
       "sentence": "a perfume box in #1B4D3E",
       "checks": [
-        {"type": "hex", "equals": "#1B4D3E"}
+        {"type": "hex", "equals": "#1B4D3E"},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -35,7 +39,8 @@
       "sentence": "a glossy box in #F4B6C2",
       "checks": [
         {"type": "hex", "equals": "#F4B6C2"},
-        {"type": "roughness", "max": 0.2}
+        {"type": "roughness", "max": 0.05},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -43,17 +48,20 @@
       "covers": "glossy, named colour",
       "sentence": "a glossy black perfume box",
       "checks": [
-        {"type": "roughness", "max": 0.2},
-        {"type": "lightness", "max": 20}
+        {"type": "roughness", "max": 0.05},
+        {"type": "lightness", "max": 20},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
       "id": "shiny_gold",
       "covers": "shiny (= glossy), named colour: gold",
+      "colour_group": "in_table",
       "sentence": "a shiny gold candle box",
       "checks": [
         {"type": "roughness", "max": 0.2},
-        {"type": "named_colour", "name": "gold"}
+        {"type": "named_colour", "name": "gold"},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -62,7 +70,8 @@
       "sentence": "a matte white face cream carton",
       "checks": [
         {"type": "roughness", "min": 0.6},
-        {"type": "lightness", "min": 85}
+        {"type": "lightness", "min": 85},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -71,7 +80,8 @@
       "sentence": "front view of a yellow soap box",
       "checks": [
         {"type": "camera", "equals": "front"},
-        {"type": "hue", "min": 40, "max": 65}
+        {"type": "hue", "min": 40, "max": 65},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -81,7 +91,8 @@
       "checks": [
         {"type": "camera", "equals": "top_down"},
         {"type": "ratio", "num": "height_cm", "den": "width_cm", "max": 0.5},
-        {"type": "ratio", "num": "height_cm", "den": "depth_cm", "max": 0.5}
+        {"type": "ratio", "num": "height_cm", "den": "depth_cm", "max": 0.5},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -90,7 +101,8 @@
       "sentence": "a purple tea box, three-quarter view",
       "checks": [
         {"type": "camera", "equals": "three_quarter"},
-        {"type": "hue", "min": 255, "max": 315}
+        {"type": "hue", "min": 255, "max": 315},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -99,7 +111,8 @@
       "sentence": "a tall, slim grey box",
       "checks": [
         {"type": "ratio", "num": "height_cm", "den": "width_cm", "gt": 1.5},
-        {"type": "saturation", "max": 0.2}
+        {"type": "saturation", "max": 0.2},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -109,7 +122,8 @@
       "checks": [
         {"type": "ratio", "num": "height_cm", "den": "width_cm", "max": 0.5},
         {"type": "ratio", "num": "height_cm", "den": "depth_cm", "max": 0.5},
-        {"type": "ratio", "num": "width_cm", "den": "depth_cm", "min": 0.9, "max": 1.1}
+        {"type": "ratio", "num": "width_cm", "den": "depth_cm", "min": 0.9, "max": 1.1},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -119,7 +133,8 @@
       "checks": [
         {"type": "is_box", "equals": true},
         {"type": "unsupported_empty"},
-        {"type": "size", "side": "longest", "min": 5, "max": 60}
+        {"type": "size", "side": "longest", "min": 5, "max": 60},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -129,7 +144,8 @@
       "checks": [
         {"type": "is_box", "equals": false},
         {"type": "shape_contains", "any": ["bottle"]},
-        {"type": "model_unsupported_mentions", "any": ["glass", "transparen"]}
+        {"type": "model_unsupported_mentions", "any": ["glass", "transparen"]},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -140,7 +156,8 @@
         {"type": "model_unsupported_mentions", "any": ["logo"]},
         {"type": "is_box", "equals": true},
         {"type": "lightness", "min": 85},
-        {"type": "roughness", "min": 0.6}
+        {"type": "roughness", "min": 0.6},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -150,7 +167,8 @@
       "checks": [
         {"type": "is_box", "equals": false},
         {"type": "shape_contains", "any": ["bottle"]},
-        {"type": "model_unsupported_mentions", "any": ["logo"]}
+        {"type": "model_unsupported_mentions", "any": ["logo"]},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -164,16 +182,18 @@
         {"type": "camera", "equals": "three_quarter"},
         {"type": "dimension", "field": "height_cm", "min": 6, "max": 10},
         {"type": "dimension", "field": "width_cm", "min": 1.5, "max": 4},
-        {"type": "dimension", "field": "depth_cm", "min": 1.5, "max": 4}
+        {"type": "dimension", "field": "depth_cm", "min": 1.5, "max": 4},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
       "id": "doc_emerald",
       "covers": "docs render 2: emerald, high-gloss, blush backdrop",
+      "colour_group": "in_table",
       "sentence": "a high-gloss emerald green perfume box on a pale blush backdrop",
       "checks": [
         {"type": "named_colour", "name": "emerald"},
-        {"type": "roughness", "max": 0.1},
+        {"type": "roughness", "max": 0.05},
         {"type": "named_colour", "name": "blush", "target": "background"},
         {"type": "camera", "equals": "three_quarter"}
       ]
@@ -181,61 +201,75 @@
     {
       "id": "doc_sage",
       "covers": "docs render 3: sage, matte, top-down, gift box shape",
+      "colour_group": "in_table",
       "sentence": "flat lay of a matte sage green skincare gift box, seen from above",
       "checks": [
         {"type": "named_colour", "name": "sage"},
         {"type": "roughness", "min": 0.6},
         {"type": "camera", "equals": "top_down"},
-        {"type": "top_aspect", "max": 1.6}
+        {"type": "top_aspect", "max": 1.6},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
       "id": "emerald_serum",
       "covers": "named colour: emerald",
+      "colour_group": "in_table",
       "sentence": "an emerald green serum box",
       "checks": [
-        {"type": "named_colour", "name": "emerald"}
+        {"type": "named_colour", "name": "emerald"},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
       "id": "sage_tea",
       "covers": "named colour: sage",
+      "colour_group": "in_table",
       "sentence": "a sage green tea box",
       "checks": [
-        {"type": "named_colour", "name": "sage"}
+        {"type": "named_colour", "name": "sage"},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
       "id": "crimson",
       "covers": "named colour: crimson",
+      "colour_group": "in_table",
       "sentence": "a crimson perfume box",
       "checks": [
-        {"type": "named_colour", "name": "crimson"}
+        {"type": "named_colour", "name": "crimson"},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
       "id": "wine_gift",
       "covers": "named colour: wine, gift box shape",
+      "colour_group": "in_table",
       "sentence": "a wine coloured gift box",
       "checks": [
         {"type": "named_colour", "name": "wine"},
-        {"type": "top_aspect", "max": 1.6}
+        {"type": "top_aspect", "max": 1.6},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
       "id": "blush",
       "covers": "named colour: blush",
+      "colour_group": "in_table",
       "sentence": "a blush pink candle box",
       "checks": [
-        {"type": "named_colour", "name": "blush"}
+        {"type": "named_colour", "name": "blush"},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
       "id": "champagne",
       "covers": "named colour: champagne",
+      "colour_group": "in_table",
       "sentence": "a champagne coloured jewellery box",
       "checks": [
-        {"type": "named_colour", "name": "champagne"}
+        {"type": "named_colour", "name": "champagne"},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -243,8 +277,9 @@
       "covers": "high-gloss",
       "sentence": "a high-gloss white cosmetics box",
       "checks": [
-        {"type": "roughness", "max": 0.1},
-        {"type": "lightness", "min": 85}
+        {"type": "roughness", "max": 0.05},
+        {"type": "lightness", "min": 85},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -253,7 +288,8 @@
       "sentence": "a red box",
       "checks": [
         {"type": "hue", "min": 345, "max": 15},
-        {"type": "saturation", "min": 0.5}
+        {"type": "saturation", "min": 0.5},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -262,7 +298,8 @@
       "sentence": "a luxury red box",
       "checks": [
         {"type": "hue", "min": 345, "max": 15},
-        {"type": "style_shift", "than": "plain_red", "direction": "darker_or_less_saturated", "min_lightness": 5, "min_saturation": 0.1}
+        {"type": "style_shift", "than": "plain_red", "direction": "darker_or_less_saturated", "min_lightness": 5, "min_saturation": 0.1},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -270,7 +307,8 @@
       "covers": "style pair, reference",
       "sentence": "a blue box",
       "checks": [
-        {"type": "hue", "min": 190, "max": 250}
+        {"type": "hue", "min": 190, "max": 250},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
       ]
     },
     {
@@ -279,7 +317,76 @@
       "sentence": "a playful blue box",
       "checks": [
         {"type": "hue", "min": 190, "max": 250},
-        {"type": "style_shift", "than": "plain_blue", "direction": "lighter_or_more_saturated", "min_lightness": 5, "min_saturation": 0.1}
+        {"type": "style_shift", "than": "plain_blue", "direction": "lighter_or_more_saturated", "min_lightness": 5, "min_saturation": 0.1},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "oot_rust",
+      "covers": "colour name not in the table: rust",
+      "colour_group": "out_of_table",
+      "sentence": "a rust coloured candle box",
+      "checks": [
+        {"type": "named_colour", "name": "rust"},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "oot_ochre",
+      "covers": "colour name not in the table: ochre",
+      "colour_group": "out_of_table",
+      "sentence": "an ochre soap box",
+      "checks": [
+        {"type": "named_colour", "name": "ochre"},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "oot_fuchsia",
+      "covers": "colour name not in the table: fuchsia",
+      "colour_group": "out_of_table",
+      "sentence": "a fuchsia nail polish box",
+      "checks": [
+        {"type": "named_colour", "name": "fuchsia"},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "oot_periwinkle",
+      "covers": "colour name not in the table: periwinkle",
+      "colour_group": "out_of_table",
+      "sentence": "a periwinkle tea box",
+      "checks": [
+        {"type": "named_colour", "name": "periwinkle"},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "oot_sapphire",
+      "covers": "colour name not in the table: sapphire",
+      "colour_group": "out_of_table",
+      "sentence": "a sapphire blue serum box",
+      "checks": [
+        {"type": "named_colour", "name": "sapphire"},
+        {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "backdrop_pink",
+      "covers": "named backdrop: pink, kept",
+      "sentence": "a white box on a pink background",
+      "checks": [
+        {"type": "named_colour", "name": "pink", "target": "background"},
+        {"type": "lightness", "min": 85}
+      ]
+    },
+    {
+      "id": "backdrop_black",
+      "covers": "named backdrop: black, kept",
+      "sentence": "an orange candle box on a black backdrop",
+      "checks": [
+        {"type": "lightness", "target": "background", "max": 20},
+        {"type": "hue", "min": 15, "max": 45}
       ]
     }
   ]

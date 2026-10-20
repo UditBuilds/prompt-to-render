@@ -10,12 +10,13 @@ Evals for the spec writer: does the LLM turn sentences into the right specs?
 Every case in evals/cases.json goes through the same LLM + validation loop as
 prompt.py, several times (the model samples at temperature 0.2, so runs can
 differ). The checks are ranges, not exact values, e.g. "glossy" means
-roughness <= 0.2, and named colours must fit evals/colour_definitions.json.
+roughness <= 0.05, and named colours must fit evals/colour_definitions.json.
 A run passes when it produced a valid spec within 2 attempts AND every check
 passes.
 
-Reports the pass rate per case and overall, how often the retry loop fired,
-and the average LLM time. Results are saved to
+Reports the pass rate per case and overall, the named-colour score of the
+in-table and out-of-table colour cases separately, how often the retry loop
+fired, and the average LLM time. Results are saved to
 evals/results/<timestamp>_<label>.json, with a Markdown summary next to it.
 """
 
@@ -49,13 +50,22 @@ with open(COLOURS_PATH, encoding="utf-8") as _f:
 # `done` holds the cases finished so far, for checks that compare two cases.
 # ---------------------------------------------------------------------------
 
-def hex_to_hsv(hex_colour):
+def _rgb(hex_colour):
     h = hex_colour.lstrip("#")
     if len(h) == 3:
         h = "".join(c * 2 for c in h)
-    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
-    hue, saturation, value = colorsys.rgb_to_hsv(r, g, b)
+    return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+def hex_to_hsv(hex_colour):
+    hue, saturation, value = colorsys.rgb_to_hsv(*_rgb(hex_colour))
     return hue * 360, saturation, value
+
+
+def hex_to_hsl(hex_colour):
+    """(hue in degrees, HSL saturation in %, HSL lightness in %)."""
+    hue, lightness, saturation = colorsys.rgb_to_hls(*_rgb(hex_colour))
+    return hue * 360, saturation * 100, lightness * 100
 
 
 def in_range(value, check):
@@ -106,22 +116,42 @@ def check_lightness(check, result, done):
 
 
 def check_named_colour(check, result, done):
-    """The colour must fit evals/colour_definitions.json for that name."""
+    """The colour must fit evals/colour_definitions.json for that name.
+
+    A definition with "space": "hsl" is in HSL (saturation and lightness in
+    %); the others use HSV hue and saturation (0-1) and CIE L*.
+    """
     name = check["name"]
     definition = COLOUR_DEFINITIONS[name]
     where, colour = colour_of(check, result)
-    hue, saturation, _ = hex_to_hsv(colour)
-    lightness = hex_to_lab(colour)[0]
+    if definition.get("space") == "hsl":
+        hue, saturation, lightness = hex_to_hsl(colour)
+        names = ("HSL saturation", "HSL lightness")
+        show_s, show_l = f"{saturation:.0f}%", f"{lightness:.0f}%"
+    else:
+        hue, saturation, _ = hex_to_hsv(colour)
+        lightness = hex_to_lab(colour)[0]
+        names = ("saturation", "L*")
+        show_s, show_l = f"{saturation:.2f}", f"{lightness:.0f}"
     (h_lo, h_hi), (s_lo, s_hi), (l_lo, l_hi) = definition["hue"], definition["saturation"], definition["lightness"]
     misses = []
     if not hue_in(hue, h_lo, h_hi):
         misses.append(f"hue {hue:.0f} not in {h_lo}..{h_hi}")
     if not s_lo <= saturation <= s_hi:
-        misses.append(f"saturation {saturation:.2f} not in {s_lo:g}..{s_hi:g}")
+        misses.append(f"{names[0]} {show_s} not in {s_lo:g}..{s_hi:g}")
     if not l_lo <= lightness <= l_hi:
-        misses.append(f"L* {lightness:.0f} not in {l_lo}..{l_hi}")
-    detail = "; ".join(misses) if misses else f"hue {hue:.0f}, saturation {saturation:.2f}, L* {lightness:.0f}"
+        misses.append(f"{names[1]} {show_l} not in {l_lo}..{l_hi}")
+    detail = "; ".join(misses) if misses else f"hue {hue:.0f}, {names[0]} {show_s}, {names[1]} {show_l}"
     return not misses, f"{where} {colour} as {name}: {detail}"
+
+
+def check_neutral_backdrop(check, result, done):
+    """A sentence that names no backdrop must get a neutral one: light and (almost) colourless, in HSL."""
+    colour = result.spec["background_colour"]
+    _, saturation, lightness = hex_to_hsl(colour)
+    ok = saturation <= check["max_saturation"] and lightness >= check["min_lightness"]
+    return ok, (f"backdrop {colour}: HSL saturation {saturation:.0f}%, lightness {lightness:.0f}% "
+                f"(want saturation <= {check['max_saturation']}%, lightness >= {check['min_lightness']}%)")
 
 
 def check_hex(check, result, done):
@@ -221,6 +251,7 @@ CHECKS = {
     "saturation": check_saturation,
     "lightness": check_lightness,
     "named_colour": check_named_colour,
+    "neutral_backdrop": check_neutral_backdrop,
     "hex": check_hex,
     "roughness": check_roughness,
     "camera": check_camera,
@@ -421,14 +452,53 @@ def run_case(case, backend, runs, done=None, grounding=True):
     # distinct specs shows how much the runs actually varied.
     distinct = len({json.dumps(r["spec"], sort_keys=True) for r in case_runs if r["valid"]})
     return {"id": case["id"], "sentence": case["sentence"], "covers": case.get("covers", ""),
-            "checks": case["checks"], "passed_runs": passes, "total_runs": len(case_runs),
-            "distinct_specs": distinct, "runs": case_runs}
+            "colour_group": case.get("colour_group"), "checks": case["checks"], "passed_runs": passes,
+            "total_runs": len(case_runs), "distinct_specs": distinct, "runs": case_runs}
+
+
+# colour_group in cases.json -> how the summary names it.
+COLOUR_GROUPS = {"in_table": "In-table colours", "out_of_table": "Out-of-table colours"}
+
+
+def box_colour_passed(case, run):
+    """Did the run pass the case's named-colour check on the box? None if the case has none.
+
+    An invalid spec has no colour, so it counts as a fail.
+    """
+    index = next((i for i, c in enumerate(case["checks"])
+                  if c["type"] == "named_colour" and c.get("target") != "background"), None)
+    if index is None:
+        return None
+    return run["valid"] and run["checks"][index]["passed"]
+
+
+def summarise_groups(results):
+    """Per colour_group: the named-colour check on the box alone, and every check.
+
+    The named-colour check alone is the headline: the other checks of these
+    cases (e.g. the neutral backdrop) can be set by code, the colour of an
+    out-of-table name can't.
+    """
+    groups = {}
+    for group in COLOUR_GROUPS:
+        cases = [c for c in results if c.get("colour_group") == group]
+        runs = [(c, r) for c in cases for r in c["runs"]]
+        if not runs:
+            continue
+        groups[group] = {
+            "cases": len(cases),
+            "total_runs": len(runs),
+            "colour_passed_runs": sum(bool(box_colour_passed(c, r)) for c, r in runs),
+            "passed_runs": sum(r["passed"] for _, r in runs),
+        }
+    return groups
 
 
 def summarise(results):
     runs = [r for case in results for r in case["runs"]]
     total = len(runs)
     return {
+        "colour_groups": summarise_groups(results),
         "passed_runs": sum(r["passed"] for r in runs),
         "total_runs": total,
         "pass_rate": round(sum(r["passed"] for r in runs) / total, 3) if total else None,
@@ -478,6 +548,12 @@ def markdown_table(report):
         "",
         f"- **Overall:** {s['passed_runs']}/{s['total_runs']} runs passed "
         f"({s['pass_rate']:.0%}); {s['cases_passing_all_runs']}/{s['total_cases']} cases passed every run.",
+    ]
+    for group, g in s.get("colour_groups", {}).items():
+        lines.append(f"- **{COLOUR_GROUPS[group]}** ({g['cases']} cases): the named-colour check passed in "
+                     f"{g['colour_passed_runs']}/{g['total_runs']} runs; every check in "
+                     f"{g['passed_runs']}/{g['total_runs']}.")
+    lines += [
         f"- **Retry loop fired:** {s['retry_runs']}/{s['total_runs']} runs ({s['retry_rate']:.0%}); "
         f"still invalid after {report['max_attempts']} attempts: {s['invalid_after_retries']}.",
         f"- **Consistency:** {s['cases_with_identical_runs']}/{s['total_cases']} cases gave the same spec "

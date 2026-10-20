@@ -18,6 +18,7 @@ EVALS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(EVALS_DIR))
 
 from grounding import load_tables  # noqa: E402
+from run_evals import COLOUR_GROUPS  # noqa: E402
 
 
 def load(path):
@@ -84,6 +85,13 @@ def main(paths):
 
     row("Runs passed", [f"{r['summary']['passed_runs']}/{r['summary']['total_runs']} "
                         f"({r['summary']['pass_rate']:.0%})" for r in reports])
+    for group, title in COLOUR_GROUPS.items():
+        cells = []
+        for r in reports:
+            g = r["summary"].get("colour_groups", {}).get(group)
+            cells.append(f"{g['colour_passed_runs']}/{g['total_runs']} ({g['colour_passed_runs'] / g['total_runs']:.0%})"
+                         if g else "n/a")
+        row(f"{title}: named colour right", cells)
     row("Cases passing every run", [f"{r['summary']['cases_passing_all_runs']}/{r['summary']['total_cases']}"
                                     for r in reports])
     row("Retry loop fired", [f"{r['summary']['retry_runs']}/{r['summary']['total_runs']}" for r in reports])
