@@ -45,7 +45,7 @@ def main():
     # terminal can't show. Print a "?" for those instead of crashing.
     sys.stdout.reconfigure(errors="replace")
 
-    parser = argparse.ArgumentParser(description="Describe a box product shot in a sentence; get a render.")
+    parser = argparse.ArgumentParser(description="Describe a product shot (a box, cylinder, bottle or jar) in a sentence; get a render.")
     parser.add_argument("sentence", help='e.g. "luxury matte red lipstick box, three-quarter view"')
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Ollama model (default: {DEFAULT_MODEL})")
     parser.add_argument("--blender", help="path to blender.exe (normally found automatically)")

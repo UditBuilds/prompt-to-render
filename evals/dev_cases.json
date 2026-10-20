@@ -87,6 +87,18 @@
     {"id": "dev_eye_cream", "added": "v2", "sentence": "a luxury rose gold eye cream", "checks": [
       {"type": "shape", "equals": "jar"},
       {"type": "shape_ratio", "num": "height_cm", "den": "diameter_cm", "lt": 1}]},
+    {"id": "dev_transparent", "added": "v2", "sentence": "a transparent shampoo bottle", "checks": [
+      {"type": "shape", "equals": "bottle"},
+      {"type": "model_unsupported_mentions", "any": ["transparen", "clear", "see-through"]}]},
+    {"id": "dev_glass_oil", "added": "v2", "sentence": "an amber glass hair oil bottle", "checks": [
+      {"type": "shape", "equals": "bottle"},
+      {"type": "model_unsupported_mentions", "any": ["glass"]}]},
+    {"id": "dev_setting_spray", "added": "v2", "sentence": "a makeup setting spray bottle", "checks": [
+      {"type": "shape", "equals": "bottle"},
+      {"type": "model_unsupported_mentions", "any": ["spray", "nozzle", "mist"]}]},
+    {"id": "dev_room_spray", "added": "v2", "sentence": "a white room spray bottle", "checks": [
+      {"type": "shape", "equals": "bottle"},
+      {"type": "model_unsupported_mentions", "any": ["spray", "nozzle", "mist"]}]},
     {"id": "dev_backdrop", "sentence": "a white serum box on a mint backdrop", "checks": [
       {"type": "hex", "equals": "#3EB489", "target": "background"},
       {"type": "lightness", "min": 85}]}

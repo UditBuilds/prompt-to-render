@@ -78,6 +78,7 @@ A cap on a bottle and a lid on a jar are drawn: their colour goes in cap_colour 
 - is_box true: the product is a box (see "Shape"). Its shape is "box".
 - is_box false: anything else. Put its real shape in "shape": "cylinder", "bottle" or "jar" when it is one of those, otherwise its own shape in a word or two, e.g. "pouch".
 - The shape is not the only thing to report. Whatever the shape, everything else the renderer can't draw still goes in "unsupported": materials and effects (glass, frosted, transparent, metallic, glitter), pumps and sprays, labels, logos, text.
+- A drawn bottle or jar is plain and opaque. A material or a dispenser stays unsupported even when it is part of the product's name: for "a glass bottle" list "glass", for "a spray bottle" list "spray nozzle", for "a pump bottle" list "pump".
 
 # Reference data
 

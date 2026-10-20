@@ -127,7 +127,7 @@ def render(spec_path, output_path, blender, verbose=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Render a box product shot from a JSON spec.")
+    parser = argparse.ArgumentParser(description="Render a product shot from a JSON spec.")
     parser.add_argument("spec", help="path to a JSON spec, e.g. specs/pink_three_quarter.json")
     parser.add_argument("--blender", help="path to blender.exe (normally found automatically)")
     parser.add_argument("--verbose", action="store_true", help="show Blender's full output")
