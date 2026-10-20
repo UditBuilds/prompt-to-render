@@ -385,7 +385,7 @@ The same 37 cases on the same checks, 3 runs each, `qwen3:8b`, temperature 0.2; 
 
 | Version | All checks (runs passed) | In-table colours: named colour right (10 cases) | Out-of-table colours: named colour right (5 cases) | Avg LLM time per run |
 |---|---|---|---|---|
-| v1: v1 prompt, no tables | 66/111 (60%) | 13/30 (43%) | 6/15 (40%) | 2.27 s |
+| v1: v1 prompt, no tables | 66/111 (59%) | 13/30 (43%) | 6/15 (40%) | 2.27 s |
 | v1.1: tables | 73/111 (66%) | 18/30 (60%) | 0/15 (0%) | 2.31 s |
 | v1.2: new hexes, gloss and backdrop by code | 94/111 (85%) | 30/30 (100%) | 0/15 (0%) | 2.31 s |
 | **v1.3: clean prompt** | **105/111 (95%)** | **30/30 (100%)** | **9/15 (60%)** | **2.09 s** |
