@@ -14,6 +14,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "evals"))
 
+import rescore  # noqa: E402
 import run_evals  # noqa: E402
 from grounding import load_tables, lookup  # noqa: E402
 from spec import validate_spec  # noqa: E402
@@ -115,13 +116,15 @@ class Checks(unittest.TestCase):
         self.assertFalse(passes(lighter, FakeResult({"colour": "#7A1F2B"}), done))
 
     def test_neutral_backdrop(self):
-        neutral = {"type": "neutral_backdrop", "max_saturation": 10, "min_lightness": 80}
-        self.assertTrue(passes(neutral, FakeResult(background="#F5F5F5")))
+        neutral = {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+        self.assertTrue(passes(neutral, FakeResult(background="#F5F5F5")))   # the code's default
+        self.assertTrue(passes(neutral, FakeResult(background="#FAF9F6")))   # off-white, spread 4
+        self.assertFalse(passes(neutral, FakeResult(background="#F8D7DA")))  # pale pink, spread 33
+        self.assertFalse(passes(neutral, FakeResult(background="#F4C2C2")))  # blush
+        self.assertTrue(passes(neutral, FakeResult(background="#F5F5E1")))   # spread exactly 20
+        self.assertFalse(passes(neutral, FakeResult(background="#F5F5E0")))  # 21
         self.assertTrue(passes(neutral, FakeResult(background="#CCCCCC")))   # lightness exactly 80%
         self.assertFalse(passes(neutral, FakeResult(background="#C7C7C7")))  # 78%: too dark
-        self.assertFalse(passes(neutral, FakeResult(background="#F4C2C2")))  # blush
-        # HSL saturation is high for any tint near white: a warm off-white fails.
-        self.assertFalse(passes(neutral, FakeResult(background="#F5F0E6")))  # 43%
 
     def test_hsl(self):
         self.assertEqual([round(v, 1) for v in run_evals.hex_to_hsl("#009473")], [166.6, 100.0, 29.0])
@@ -223,6 +226,17 @@ class Cases(unittest.TestCase):
                     "runs": [run(False, True), run(True, True), run(True, False), run(True, True, valid=False)]}]
         self.assertEqual(run_evals.summarise_groups(results),
                          {"in_table": {"cases": 1, "total_runs": 4, "colour_passed_runs": 2, "passed_runs": 1}})
+
+    def test_rescore_runs_the_current_checks_on_saved_specs(self):
+        spec = validate_spec({"box": {"colour": "#1B4D3E"}, "background_colour": "#FAF9F6"})
+        run = {"valid": True, "spec": spec, "validation_errors": [[]], "is_box": True, "shape": "box",
+               "unsupported": [], "model_unsupported": [], "passed": False,
+               "checks": [{"check": "neutral_backdrop", "passed": False, "found": "an older check"}]}
+        report = {"cases": [{"id": "hex_exact", "checks": [], "runs": [run]}]}
+        rescored = rescore.rescore(report, run_evals.load_cases())
+        self.assertEqual([o["check"] for o in run["checks"]], ["hex", "neutral_backdrop"])
+        self.assertTrue(run["passed"])
+        self.assertEqual(rescored["summary"]["passed_runs"], 1)
 
     def test_selecting_a_case_brings_its_reference(self):
         ids = [c["id"] for c in run_evals.load_cases(["luxury_red"])]

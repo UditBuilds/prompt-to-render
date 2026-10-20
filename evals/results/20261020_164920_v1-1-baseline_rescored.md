@@ -1,0 +1,51 @@
+_Re-scored on 2026-10-20 from `20261020_164920_v1-1-baseline.json` with the current checks; no new model runs._
+
+**v1.1-baseline**: model `qwen3:8b` (Ollama, local), 3 runs per case, 2026-10-20.
+
+| Case | Sentence | Tests | Passed | Distinct specs | Failed checks |
+|---|---|---|---|---|---|
+| `red_lipstick` | a red lipstick box | named colour, realistic lipstick size | 3/3 | 2 | - |
+| `navy_serum` | a navy blue serum box | named colour: navy | 3/3 | 2 | - |
+| `hex_exact` | a perfume box in #1B4D3E | exact hex | 3/3 | 1 | - |
+| `hex_glossy` | a glossy box in #F4B6C2 | exact hex, glossy | 0/3 | 1 | run 1: roughness 0.1 (want <= 0.05)<br>run 2: roughness 0.1 (want <= 0.05)<br>run 3: roughness 0.1 (want <= 0.05) |
+| `glossy_black` | a glossy black perfume box | glossy, named colour | 0/3 | 2 | run 1: roughness 0.1 (want <= 0.05)<br>run 2: roughness 0.1 (want <= 0.05)<br>run 3: roughness 0.1 (want <= 0.05) |
+| `shiny_gold` | a shiny gold candle box | shiny (= glossy), named colour: gold | 3/3 | 1 | - |
+| `matte_white` | a matte white face cream carton | matte, named colour | 3/3 | 1 | - |
+| `camera_front` | front view of a yellow soap box | camera: front, named colour | 3/3 | 1 | - |
+| `camera_top_down` | overhead shot of a flat blue jewellery box | camera: top_down, flat proportions | 3/3 | 2 | - |
+| `camera_three_quarter` | a purple tea box, three-quarter view | camera: three_quarter, named colour | 3/3 | 1 | - |
+| `tall` | a tall, slim grey box | tall proportions, named colour | 3/3 | 1 | - |
+| `flat` | a flat square box for a silk scarf | flat proportions | 3/3 | 1 | - |
+| `vague` | a nice box | vague prompt | 2/3 | 3 | run 3: backdrop #F5F5DC: RGB spread 25, HSL lightness 91% (want spread <= 20, lightness >= 80%) |
+| `not_a_box` | a glass perfume bottle | non-box; material the renderer can't do | 3/3 | 3 | - |
+| `logo` | a white matte box with a gold logo on the front | logo request | 3/3 | 2 | - |
+| `bottle_logo` | a pink perfume bottle with gold logo | non-box plus a logo | 3/3 | 2 | - |
+| `doc_lipstick` | luxury matte red lipstick box, three-quarter view | docs render 1: luxury vs plain, matte, lipstick size | 2/3 | 3 | run 2: hue 336 deg of box #821741 (want 345..15) |
+| `doc_emerald` | a high-gloss emerald green perfume box on a pale blush backdrop | docs render 2: emerald, high-gloss, blush backdrop | 0/3 | 1 | run 1: box #50C878 as emerald: hue 140 not in 150..180; HSL lightness 55% not in 20..40<br>run 1: roughness 0.1 (want <= 0.05)<br>run 2: box #50C878 as emerald: hue 140 not in 150..180; HSL lightness 55% not in 20..40<br>run 2: roughness 0.1 (want <= 0.05)<br>run 3: box #50C878 as emerald: hue 140 not in 150..180; HSL lightness 55% not in 20..40<br>run 3: roughness 0.1 (want <= 0.05) |
+| `doc_sage` | flat lay of a matte sage green skincare gift box, seen from above | docs render 3: sage, matte, top-down, gift box shape | 0/3 | 1 | run 1: box #BCB88A as sage: hue 55 not in 75..130<br>run 2: box #BCB88A as sage: hue 55 not in 75..130<br>run 3: box #BCB88A as sage: hue 55 not in 75..130 |
+| `emerald_serum` | an emerald green serum box | named colour: emerald | 0/3 | 1 | run 1: box #50C878 as emerald: hue 140 not in 150..180; HSL lightness 55% not in 20..40<br>run 2: box #50C878 as emerald: hue 140 not in 150..180; HSL lightness 55% not in 20..40<br>run 3: box #50C878 as emerald: hue 140 not in 150..180; HSL lightness 55% not in 20..40 |
+| `sage_tea` | a sage green tea box | named colour: sage | 0/3 | 1 | run 1: box #BCB88A as sage: hue 55 not in 75..130<br>run 1: backdrop #F5F5DC: RGB spread 25, HSL lightness 91% (want spread <= 20, lightness >= 80%)<br>run 2: box #BCB88A as sage: hue 55 not in 75..130<br>run 2: backdrop #F5F5DC: RGB spread 25, HSL lightness 91% (want spread <= 20, lightness >= 80%)<br>run 3: box #BCB88A as sage: hue 55 not in 75..130<br>run 3: backdrop #F5F5DC: RGB spread 25, HSL lightness 91% (want spread <= 20, lightness >= 80%) |
+| `crimson` | a crimson perfume box | named colour: crimson | 3/3 | 1 | - |
+| `wine_gift` | a wine coloured gift box | named colour: wine, gift box shape | 3/3 | 1 | - |
+| `blush` | a blush pink candle box | named colour: blush | 3/3 | 1 | - |
+| `champagne` | a champagne coloured jewellery box | named colour: champagne | 3/3 | 2 | - |
+| `high_gloss_white` | a high-gloss white cosmetics box | high-gloss | 0/3 | 1 | run 1: roughness 0.1 (want <= 0.05)<br>run 2: roughness 0.1 (want <= 0.05)<br>run 3: roughness 0.1 (want <= 0.05) |
+| `plain_red` | a red box | style pair, reference | 3/3 | 2 | - |
+| `luxury_red` | a luxury red box | style pair: luxury = darker or less saturated | 3/3 | 2 | - |
+| `plain_blue` | a blue box | style pair, reference | 3/3 | 2 | - |
+| `playful_blue` | a playful blue box | style pair: playful = lighter or more saturated | 3/3 | 3 | - |
+| `oot_rust` | a rust coloured candle box | colour name not in the table: rust | 0/3 | 2 | run 1: box #B85B3E as rust: HSL lightness 48% not in 22..48<br>run 2: box #B85B3E as rust: HSL lightness 48% not in 22..48<br>run 3: box #B85B3E as rust: HSL lightness 48% not in 22..48 |
+| `oot_ochre` | an ochre soap box | colour name not in the table: ochre | 0/3 | 1 | run 1: box #D2B48C as ochre: HSL lightness 69% not in 35..60<br>run 2: box #D2B48C as ochre: HSL lightness 69% not in 35..60<br>run 3: box #D2B48C as ochre: HSL lightness 69% not in 35..60 |
+| `oot_fuchsia` | a fuchsia nail polish box | colour name not in the table: fuchsia | 0/3 | 1 | run 1: box #E8A3B5 as fuchsia: HSL lightness 77% not in 40..65<br>run 2: box #E8A3B5 as fuchsia: HSL lightness 77% not in 40..65<br>run 3: box #E8A3B5 as fuchsia: HSL lightness 77% not in 40..65 |
+| `oot_periwinkle` | a periwinkle tea box | colour name not in the table: periwinkle | 0/3 | 2 | run 1: box #B8A7D8 as periwinkle: hue 261 not in 215..255<br>run 2: box #B5A8D4 as periwinkle: hue 258 not in 215..255<br>run 3: box #B5A8D4 as periwinkle: hue 258 not in 215..255 |
+| `oot_sapphire` | a sapphire blue serum box | colour name not in the table: sapphire | 0/3 | 1 | run 1: box #4B8BBE as sapphire: HSL saturation 47% not in 70..100; HSL lightness 52% not in 11..50<br>run 2: box #4B8BBE as sapphire: HSL saturation 47% not in 70..100; HSL lightness 52% not in 11..50<br>run 3: box #4B8BBE as sapphire: HSL saturation 47% not in 70..100; HSL lightness 52% not in 11..50 |
+| `backdrop_pink` | a white box on a pink background | named backdrop: pink, kept | 3/3 | 2 | - |
+| `backdrop_black` | an orange candle box on a black backdrop | named backdrop: black, kept | 3/3 | 1 | - |
+
+- **Overall:** 73/111 runs passed (66%); 23/37 cases passed every run.
+- **In-table colours** (10 cases): the named-colour check passed in 18/30 runs; every check in 18/30.
+- **Out-of-table colours** (5 cases): the named-colour check passed in 0/15 runs; every check in 0/15.
+- **Retry loop fired:** 0/111 runs (0%); still invalid after 2 attempts: 0.
+- **Consistency:** 20/37 cases gave the same spec in every run (temperature 0.2).
+- **Non-box shape listed by code, not by the model:** 6 run(s). The model named the shape in its `shape` field; the code put it in the unsupported list.
+- **Average LLM time per run:** 2.3 s (2345 prompt + 134 output tokens), model already loaded. Largest prompt of any single call: 2445 tokens.

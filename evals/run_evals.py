@@ -146,12 +146,19 @@ def check_named_colour(check, result, done):
 
 
 def check_neutral_backdrop(check, result, done):
-    """A sentence that names no backdrop must get a neutral one: light and (almost) colourless, in HSL."""
+    """A sentence that names no backdrop must get a neutral one: near-grey and light.
+
+    Near-grey: the R, G and B values (0-255) differ by at most max_spread, so
+    a warm off-white passes and a pale tint doesn't. (HSL saturation can't
+    tell them apart: near white, any tint at all reads as highly saturated.)
+    """
     colour = result.spec["background_colour"]
-    _, saturation, lightness = hex_to_hsl(colour)
-    ok = saturation <= check["max_saturation"] and lightness >= check["min_lightness"]
-    return ok, (f"backdrop {colour}: HSL saturation {saturation:.0f}%, lightness {lightness:.0f}% "
-                f"(want saturation <= {check['max_saturation']}%, lightness >= {check['min_lightness']}%)")
+    rgb = [round(c * 255) for c in _rgb(colour)]
+    spread = max(rgb) - min(rgb)
+    lightness = hex_to_hsl(colour)[2]
+    ok = spread <= check["max_spread"] and lightness >= check["min_lightness"]
+    return ok, (f"backdrop {colour}: RGB spread {spread}, HSL lightness {lightness:.0f}% "
+                f"(want spread <= {check['max_spread']}, lightness >= {check['min_lightness']}%)")
 
 
 def check_hex(check, result, done):
