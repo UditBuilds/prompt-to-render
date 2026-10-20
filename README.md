@@ -43,7 +43,7 @@ v1.3 includes one fix to the colour check made after its run: H/S/L are rounded 
 
 | <img src="docs/fuchsia_before_v1.2.png" width="300"> | <img src="docs/fuchsia_after_v1.3.png" width="300"> |
 |---|---|
-| v1.2: model copied the schema's example hex (#E8A3B5) | v1.3: example removed → real fuchsia (#E100FF) |
+| v1.2: model copied the schema's example hex (#E8A3B5) | v1.3: example removed → the model picks its own vivid colour (#E100FF) |
 
 Both images were re-rendered from the saved v1.2 and v1.3 eval specs for "a fuchsia nail polish box", not new model runs; only the colour differs.
 
