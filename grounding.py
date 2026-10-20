@@ -11,12 +11,20 @@ The tables live in data/:
     colours.json        specific colour name -> hex
     product_sizes.json  product -> typical box size in cm
     style_words.json    style word -> how it shifts colour and finish
+    finishes.json       finish word -> roughness range (code only, never shown to the model)
 
-Style words are the one place where code, not the model, changes a value:
-the model picks the plain colour and the finish, then apply_style() shifts
-the box colour by the table's numbers. qwen3:8b couldn't do that hex
-arithmetic reliably itself (tested on the dev sentences in
-evals/dev_cases.json).
+Three values are set by code, not the model, after the model has answered:
+- Style words: the model picks the plain colour and the finish, then
+  apply_style() shifts the box colour by the table's numbers. qwen3:8b
+  couldn't do that hex arithmetic reliably itself (tested on the dev
+  sentences in evals/dev_cases.json).
+- Glossy: apply_finish() clamps the roughness into 0.03-0.05. The model's
+  own "glossy" (0.1) rendered satin.
+- The backdrop: neutral_backdrop() makes it a neutral light grey unless the
+  sentence gives the backdrop a colour. The model's tinted backdrops could
+  clash with the box.
+The last two add nothing to the request, so the model sees exactly what it
+saw before they existed.
 
 Matching is case-insensitive and by whole words, longest phrase first, across
 all tables at once, and each word of the sentence is used once: "rose gold"
@@ -158,11 +166,11 @@ def style_box_colour(sentence, spec, grounding):
     return changes
 
 
-def lookup(sentence, tables=None):
-    tables = tables if tables is not None else load_tables()
-    text = sentence.lower()
+def _match(text, tables):
+    """Whole-word matches of every name and alias, longest phrase first, each word used once.
 
-    # Every phrase that can match, longest first.
+    Returns {(table, name): (position, phrase)}, for where each row first matched.
+    """
     phrases = []
     for table, entries in tables.items():
         for name, row in entries.items():
@@ -171,7 +179,7 @@ def lookup(sentence, tables=None):
     phrases.sort(key=lambda p: len(p[0]), reverse=True)
 
     used = [False] * len(text)
-    found = {}  # (table, name) -> (position, phrase)
+    found = {}
     for phrase, table, name in phrases:
         for match in re.finditer(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", text):
             start, end = match.span()
@@ -179,6 +187,13 @@ def lookup(sentence, tables=None):
                 continue
             used[start:end] = [True] * (end - start)
             found.setdefault((table, name), (start, phrase))
+    return found
+
+
+def lookup(sentence, tables=None):
+    tables = tables if tables is not None else load_tables()
+    text = sentence.lower()
+    found = _match(text, tables)
 
     rows = []
     for (table, name), (position, phrase) in sorted(found.items(), key=lambda item: item[1][0]):
@@ -189,3 +204,110 @@ def lookup(sentence, tables=None):
             row = {k: v for k, v in tables[table][name].items() if k != "aliases"}
             rows.append(dict(row, table=table, name=name, matched=phrase))
     return Grounding(rows)
+
+
+# ---------------------------------------------------------------------------
+# Rules applied by code after the model, never shown to it: the finish of a
+# glossy box and the backdrop when the sentence gives it no colour.
+# ---------------------------------------------------------------------------
+
+FINISHES_FILE = "finishes.json"
+
+# The backdrop when the sentence gives it no colour: a neutral light grey. It
+# is the backdrop qwen3:8b picked most often in v1.1 (73 of 90 eval runs),
+# including the v1.1 lipstick render.
+NEUTRAL_BACKDROP = "#F5F5F5"
+
+_BACKDROP_WORDS = {"backdrop", "backdrops", "background", "backgrounds"}
+# Words that describe a backdrop without giving it a colour.
+_PLAIN_BACKDROP = {"plain", "simple", "clean", "neutral", "seamless", "studio", "soft", "smooth", "blank",
+                   "solid", "empty", "infinity", "photo"}
+# Words that end a backdrop phrase: "a white box on a pink background" -> "pink".
+_PHRASE_BREAKS = {"a", "an", "the", "its", "their", "on", "onto", "against", "over", "in", "of", "with",
+                  "and", "or", "for", "box", "carton", "case", "package", "set"}
+# Words after "backdrop" that lead on to its colour: "a backdrop of pale pink", "background colour lilac".
+_LEADS_ON = {"of", "in", "colour", "color", "coloured", "colored"}
+
+
+def load_finishes():
+    with open(os.path.join(DATA_DIR, FINISHES_FILE), encoding="utf-8") as f:
+        return json.load(f)["finishes"]
+
+
+def finish_words(sentence, tables=None, finishes=None):
+    """The finish rows the sentence names for the box, in sentence order.
+
+    Matched together with the other tables, so a product name ("lip gloss")
+    keeps its words, and a finish inside a backdrop phrase is left out.
+    """
+    tables = tables if tables is not None else load_tables()
+    finishes = finishes if finishes is not None else load_finishes()
+    text = sentence.lower()
+    found = _match(text, dict(tables, finishes=finishes))
+    rows = []
+    for (table, name), (position, phrase) in sorted(found.items(), key=lambda item: item[1][0]):
+        if table == "finishes" and not _describes_backdrop(text, position):
+            rows.append(dict(finishes[name], name=name, matched=phrase))
+    return rows
+
+
+def apply_finish(sentence, spec, tables=None, finishes=None):
+    """Clamp the box roughness into the range of the sentence's finish, if that finish has one.
+
+    Only when the sentence names exactly one finish: with two ("a matte box
+    with a glossy logo") the model's choice stands. Returns
+    {"finish", "from", "to"}, or None if the roughness didn't change.
+    """
+    rows = finish_words(sentence, tables, finishes)
+    if len({r["name"] for r in rows}) != 1 or "roughness" not in rows[0]:
+        return None
+    low, high = rows[0]["roughness"]
+    before = spec["box"]["roughness"]
+    after = min(max(before, low), high)
+    if after == before:
+        return None
+    spec["box"]["roughness"] = after
+    return {"finish": rows[0]["name"], "from": before, "to": after}
+
+
+def backdrop_colour_words(sentence):
+    """The words that give the backdrop a colour, e.g. ["pale", "blush"]; [] if there are none.
+
+    Looks just before each "backdrop"/"background" ("on a pale blush
+    backdrop") and after it ("a backdrop of pale pink"). Any word that isn't
+    a plain description ("clean", "studio") counts, so a colour name the
+    code has never heard of still keeps the backdrop the model chose.
+    """
+    words = []
+    for clause in re.split(r"[,;.:]", sentence.lower()):
+        tokens = re.findall(r"#?[\w'-]+", clause)
+        for i, token in enumerate(tokens):
+            if token not in _BACKDROP_WORDS:
+                continue
+            before = []
+            for word in reversed(tokens[:i]):
+                if word in _PHRASE_BREAKS:
+                    break
+                before.insert(0, word)
+            words += before
+            if i + 1 < len(tokens) and tokens[i + 1] in _LEADS_ON:
+                for word in tokens[i + 2:]:
+                    if word in _LEADS_ON or word in ("a", "an", "the"):
+                        continue
+                    if word in _PHRASE_BREAKS:
+                        break
+                    words.append(word)
+    return [w for w in words if w not in _PLAIN_BACKDROP]
+
+
+def neutral_backdrop(sentence, spec):
+    """Unless the sentence gives the backdrop a colour, make it NEUTRAL_BACKDROP.
+
+    Returns {"from", "to"}, or None if the backdrop is the sentence's (or
+    already the neutral one).
+    """
+    if backdrop_colour_words(sentence):
+        return None
+    before = spec["background_colour"].upper()
+    spec["background_colour"] = NEUTRAL_BACKDROP
+    return {"from": before, "to": NEUTRAL_BACKDROP} if before != NEUTRAL_BACKDROP else None

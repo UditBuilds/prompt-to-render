@@ -1,0 +1,8 @@
+{
+  "about": "Finish words, for code only: they are never shown to the model. A row with a roughness range is applied by code (grounding.apply_finish), which clamps the model's roughness into it: the model's own 'glossy' (0.1) still rendered satin under the soft studio lights. The rows without a range set nothing. They are here so 'semi-gloss' isn't read as gloss, and so a sentence naming two finishes ('a matte box with a glossy logo') is left to the model, which can tell which one is the box's. Matched like the other tables: whole words, longest phrase first, never inside a product name ('lip gloss') or a backdrop phrase ('on a glossy black backdrop').",
+  "finishes": {
+    "glossy": {"aliases": ["gloss", "high-gloss", "high gloss", "shiny", "lacquered", "polished"], "roughness": [0.03, 0.05]},
+    "satin":  {"aliases": ["semi-gloss", "semi gloss", "soft-touch", "soft touch"]},
+    "matte":  {"aliases": ["matt", "uncoated"]}
+  }
+}

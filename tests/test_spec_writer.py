@@ -58,7 +58,7 @@ class Grounded(unittest.TestCase):
         names = [r["name"] for r in result.grounding.rows]
         self.assertEqual(names, ["luxury", "emerald", "lipstick"])
         for call in backend.calls:  # the retry gets the same reference data
-            self.assertIn('"emerald green" = #50C878', call["reference"])
+            self.assertIn('"emerald green" = #009473', call["reference"])
 
     def test_no_grounding_and_no_match_send_nothing(self):
         backend = FakeBackend([GOOD, GOOD])
@@ -69,8 +69,25 @@ class Grounded(unittest.TestCase):
     def test_break_first_reply_keeps_the_reference(self):
         inner = FakeBackend([GOOD, GOOD])
         write_spec("an emerald serum box", BrokenFirstReply(inner))
-        self.assertIn("#50C878", inner.calls[0]["reference"])
-        self.assertIn("#50C878", inner.calls[1]["reference"])
+        self.assertIn("#009473", inner.calls[0]["reference"])
+        self.assertIn("#009473", inner.calls[1]["reference"])
+
+    def test_code_sets_gloss_and_backdrop_after_the_model(self):
+        glossy = json.loads(json.dumps(GOOD))
+        glossy["spec"]["box"]["roughness"] = 0.1
+        result = write_spec("a glossy red lipstick box", FakeBackend([glossy]))
+        self.assertEqual(result.spec["box"]["roughness"], 0.05)
+        self.assertEqual(result.finish_change, {"finish": "glossy", "from": 0.1, "to": 0.05})
+        self.assertEqual(result.spec["background_colour"], "#F5F5F5")  # GOOD's is #F2E6E6
+        self.assertEqual(result.backdrop_change, {"from": "#F2E6E6", "to": "#F5F5F5"})
+        # A backdrop the sentence names is the model's.
+        result = write_spec("a red lipstick box on a blush backdrop", FakeBackend([GOOD]))
+        self.assertEqual(result.spec["background_colour"], "#F2E6E6")
+        self.assertIsNone(result.backdrop_change)
+        # Without grounding the model decides everything.
+        result = write_spec("a glossy red lipstick box", FakeBackend([glossy]), grounding=False)
+        self.assertEqual(result.spec["box"]["roughness"], 0.1)
+        self.assertEqual(result.spec["background_colour"], "#F2E6E6")
 
 
 class RetryLoop(unittest.TestCase):

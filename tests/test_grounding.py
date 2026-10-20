@@ -10,7 +10,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from grounding import TABLES, load_tables, lookup  # noqa: E402
+from grounding import (NEUTRAL_BACKDROP, TABLES, apply_finish, backdrop_colour_words, load_finishes,  # noqa: E402
+                       load_tables, lookup, neutral_backdrop)
 
 
 def names(sentence):
@@ -56,7 +57,7 @@ class Lookup(unittest.TestCase):
 
     def test_text_lists_the_values(self):
         text = lookup("a luxury emerald perfume box").text
-        self.assertIn('"emerald" = #50C878', text)
+        self.assertIn('"emerald" = #009473', text)
         self.assertIn("perfume: typically 7 x 12 x 4.5", text)
         self.assertIn('"luxury": colour becomes deeper and richer (30% darker, 10% less saturated', text)
 
@@ -88,10 +89,59 @@ class Lookup(unittest.TestCase):
             for axis, value in zip(("width", "height", "depth"), row["typical"]):
                 low, high = row[axis]
                 self.assertTrue(low <= value <= high, f"{name} {axis}")
-        # Every phrase belongs to one row only.
+        # Every phrase belongs to one row only, finish words included.
+        tables["finishes"] = load_finishes()
         phrases = [p for entries in tables.values() for name, row in entries.items()
                    for p in [name] + row.get("aliases", [])]
         self.assertEqual(len(phrases), len(set(phrases)))
+
+    def test_backdrop_colour_words(self):
+        # Designed on these dev sentences, not on the eval sentences.
+        self.assertEqual(backdrop_colour_words("a white serum box on a mint backdrop"), ["mint"])
+        self.assertEqual(backdrop_colour_words("a red box on a clean white backdrop"), ["white"])
+        self.assertEqual(backdrop_colour_words("a box in front of a periwinkle backdrop"), ["periwinkle"])
+        self.assertEqual(backdrop_colour_words("a navy box on a #F4B6C2 backdrop"), ["#f4b6c2"])
+        self.assertEqual(backdrop_colour_words("a cream candle box, background in pale sage"), ["pale", "sage"])
+        self.assertEqual(backdrop_colour_words("a lipstick box, background colour lilac"), ["lilac"])
+        # A backdrop without a colour, or none at all.
+        self.assertEqual(backdrop_colour_words("a nice box on a plain backdrop"), [])
+        self.assertEqual(backdrop_colour_words("a teal box against a seamless studio background"), [])
+        self.assertEqual(backdrop_colour_words("a luxury teal box"), [])
+
+    def test_neutral_backdrop_unless_one_is_named(self):
+        spec = {"background_colour": "#F0E6E6"}
+        self.assertEqual(neutral_backdrop("a teal box", spec), {"from": "#F0E6E6", "to": NEUTRAL_BACKDROP})
+        self.assertEqual(spec["background_colour"], NEUTRAL_BACKDROP)
+        spec = {"background_colour": "#3EB489"}
+        self.assertIsNone(neutral_backdrop("a white serum box on a mint backdrop", spec))
+        self.assertEqual(spec["background_colour"], "#3EB489")
+        spec = {"background_colour": "#f5f5f5"}  # already the neutral one: nothing to report
+        self.assertIsNone(neutral_backdrop("a teal box", spec))
+
+    def test_glossy_roughness_is_clamped(self):
+        for before, after in ((0.1, 0.05), (0.0, 0.03), (0.15, 0.05)):
+            spec = {"box": {"roughness": before}}
+            self.assertEqual(apply_finish("a glossy black box", spec),
+                             {"finish": "glossy", "from": before, "to": after})
+            self.assertEqual(spec["box"]["roughness"], after)
+        spec = {"box": {"roughness": 0.04}}  # already in range
+        self.assertIsNone(apply_finish("a high-gloss white box", spec))
+        self.assertEqual(spec["box"]["roughness"], 0.04)
+
+    def test_other_finishes_are_left_to_the_model(self):
+        for sentence in ("a semi-gloss box", "a satin teal tea box", "a matte red lipstick box",
+                         "a lip gloss box",                              # a product, not a finish
+                         "a matte box on a glossy black backdrop",       # the backdrop's finish
+                         "a matte black box with a glossy gold logo"):  # two finishes: unclear
+            with self.subTest(sentence=sentence):
+                spec = {"box": {"roughness": 0.5}}
+                self.assertIsNone(apply_finish(sentence, spec))
+                self.assertEqual(spec["box"]["roughness"], 0.5)
+
+    def test_finish_words_never_reach_the_model(self):
+        # Code only: no row, so the request the model gets is unchanged.
+        self.assertEqual(names("a glossy black box"), [])
+        self.assertEqual(names("a matte red lipstick box"), [("products", "lipstick")])
 
 
 if __name__ == "__main__":

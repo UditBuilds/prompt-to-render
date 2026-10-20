@@ -290,7 +290,8 @@ def main():
     parser.add_argument("--runs", type=int, default=3, help="runs per case (default: 3)")
     parser.add_argument("--label", help='a name for this run, e.g. "baseline"; added to the file name')
     parser.add_argument("--no-grounding", action="store_true",
-                        help="don't add the matching rows of the data/ tables to the requests")
+                        help="don't add the matching rows of the data/ tables to the requests, "
+                             "and don't let code set any value")
     parser.add_argument("--cases", help="comma-separated case ids (default: all)")
     parser.add_argument("--cases-file", default=CASES_PATH,
                         help="another cases file, e.g. evals/dev_cases.json; its results go to runs/dev_evals/")
@@ -443,6 +444,8 @@ def run_case(case, backend, runs, done=None, grounding=True):
             "grounding_rows": [{"table": r["table"], "name": r["name"], "matched": r["matched"]}
                                for r in result.grounding.rows],
             "style_changes": result.style_changes,
+            "finish_change": result.finish_change,
+            "backdrop_change": result.backdrop_change,
             "spec": result.spec,
             "validation_errors": [a.errors for a in result.attempts],
             "outputs": [a.reply.text for a in result.attempts],

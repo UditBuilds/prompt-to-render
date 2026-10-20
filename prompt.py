@@ -51,7 +51,8 @@ def main():
     parser.add_argument("--blender", help="path to blender.exe (normally found automatically)")
     parser.add_argument("--verbose", action="store_true", help="show the model's raw replies and Blender's full output")
     parser.add_argument("--no-grounding", action="store_true",
-                        help="don't add the matching rows of the data/ tables to the request")
+                        help="don't add the matching rows of the data/ tables to the request, "
+                             "and don't let code set any value")
     parser.add_argument("--break-first-reply", action="store_true",
                         help="testing: corrupt the model's first reply to show the repair loop at work")
     args = parser.parse_args()
@@ -204,6 +205,14 @@ def show_spec(sentence, result):
     for change in result.style_changes:
         print(f"[grounding] style \"{change['style']}\" applied to the box colour: "
               f"{change['from']} -> {change['to']}")
+    if result.finish_change:
+        change = result.finish_change
+        print(f"[grounding] finish \"{change['finish']}\" applied to the roughness: "
+              f"{change['from']:g} -> {change['to']:g}")
+    if result.backdrop_change:
+        change = result.backdrop_change
+        print(f"[grounding] the sentence gives the backdrop no colour, so it is neutral: "
+              f"{change['from']} -> {change['to']}")
     box = result.spec["box"]
     print()
     print("Spec:")
@@ -281,6 +290,8 @@ def log_llm(log, result):
         llm_load_seconds=round(result.total("load_seconds"), 2),
         grounding_rows=result.grounding.rows,
         style_changes=result.style_changes,
+        finish_change=result.finish_change,
+        backdrop_change=result.backdrop_change,
         llm_calls=[a.to_log() for a in result.attempts],
     )
 

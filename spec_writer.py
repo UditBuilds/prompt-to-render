@@ -13,7 +13,7 @@ Used by prompt.py and by the evals, so both run the same loop.
 
 import json
 
-from grounding import Grounding, lookup, style_box_colour
+from grounding import Grounding, apply_finish, lookup, neutral_backdrop, style_box_colour
 from spec import SpecError, validate_spec
 
 MAX_ATTEMPTS = 2
@@ -44,10 +44,13 @@ class Attempt:
 
 class SpecResult:
     def __init__(self, attempts, spec=None, unsupported=None, model_unsupported=None,
-                 is_box=None, shape=None, shape_added=False, grounding=None, style_changes=None):
+                 is_box=None, shape=None, shape_added=False, grounding=None, style_changes=None,
+                 backdrop_change=None, finish_change=None):
         self.attempts = attempts
         self.grounding = grounding or Grounding([])  # the table rows the model was given
         self.style_changes = style_changes or []   # style-word colour shifts applied by code
+        self.backdrop_change = backdrop_change     # {"from", "to"} if code set the neutral backdrop
+        self.finish_change = finish_change         # {"finish", "from", "to"} if code clamped the roughness
         self.spec = spec                    # full validated spec, or None
         self.unsupported = unsupported or []  # what the user is told was ignored
         self.model_unsupported = model_unsupported or []  # the model's own list, before the code added anything
@@ -143,7 +146,9 @@ def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, ground
     """Run the LLM + validation loop. Returns a SpecResult (check .ok).
 
     With grounding on, the rows of the data/ tables that match the
-    sentence's words are added to the request (see grounding.py).
+    sentence's words are added to the request, and code then applies the
+    style shift, the glossy finish and the neutral backdrop (see
+    grounding.py). With it off, the model decides everything on its own.
 
     report(event, attempt) is called with "start" before each LLM call and
     "done" after it, so the caller can show progress. Backend errors
@@ -166,8 +171,13 @@ def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, ground
         if report:
             report("done", attempt)
         if not errors:
-            # Style words shift the box colour the model picked (see grounding.py).
+            # Code sets what the model can't be relied on for (see grounding.py).
             changes = style_box_colour(sentence, parsed["spec"], found)
-            return SpecResult(attempts, grounding=found, style_changes=changes, **parsed)
+            backdrop = finish = None
+            if grounding:
+                backdrop = neutral_backdrop(sentence, parsed["spec"])
+                finish = apply_finish(sentence, parsed["spec"])
+            return SpecResult(attempts, grounding=found, style_changes=changes,
+                              backdrop_change=backdrop, finish_change=finish, **parsed)
         previous_output, previous_errors = reply.text, errors
     return SpecResult(attempts, grounding=found)

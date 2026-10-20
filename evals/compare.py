@@ -5,9 +5,11 @@ Compare eval runs side by side, as a Markdown table.
 
 Columns follow the order of the files. The last file is also checked for
 how its runs got their values: a box colour copied from a colour table row,
-a colour shifted by code for a style word, or a box size equal to a
-product's typical size. Those are passes the tables make easy, so they are
-counted, not hidden.
+a colour shifted by code for a style word, a box size equal to a product's
+typical size, a roughness clamped by code for "glossy", or a backdrop made
+neutral by code. Those are passes the tables and code make easy, so they
+are counted, not hidden. A backdrop the model had already made neutral
+isn't counted.
 """
 
 import json
@@ -38,8 +40,10 @@ def max_prompt_tokens(report):
 
 def how_values_came(case, tables):
     """Counts, over a case's runs, of values taken straight from the tables or set by code."""
-    copied = shifted = typical = 0
+    copied = shifted = typical = glossy = backdrop = 0
     for run in case["runs"]:
+        glossy += bool(run.get("finish_change"))
+        backdrop += bool(run.get("backdrop_change"))
         rows = run.get("grounding_rows", [])
         if not run["valid"]:
             continue
@@ -60,6 +64,10 @@ def how_values_came(case, tables):
         parts.append(f"style shift by code {shifted}")
     if typical:
         parts.append(f"typical size {typical}")
+    if glossy:
+        parts.append(f"gloss by code {glossy}")
+    if backdrop:
+        parts.append(f"neutral backdrop by code {backdrop}")
     return ", ".join(parts) or "-"
 
 
