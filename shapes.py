@@ -31,6 +31,8 @@ BOTTLE_CAP_RADIUS = 0.60       # of R
 BOTTLE_NECK_HEIGHT = 0.05      # of H: the neck seen between the shoulder and the cap
 BOTTLE_NECK_RADIUS = 0.42      # of R
 BOTTLE_SHOULDER_HEIGHT = 0.14  # of H, and at most 0.8 R so a squat bottle keeps a wall
+# Above 1 the shoulder stays rounded for longer before it turns in to the neck.
+SHOULDER_CURVE = 1.5
 
 # Jar: the lid is this share of the height (at most 0.4 of the diameter), and
 # a little wider than the body, so the seam between them shows.
@@ -90,18 +92,17 @@ def _bottle(fields):
     shoulder = min(BOTTLE_SHOULDER_HEIGHT * height, 0.8 * radius)
     wall = height - cap_height - neck_height - shoulder  # straight side of the body
     edge = _edge(radius, wall)
-    # A concave round where the shoulder turns up into the neck.
-    fillet = min(0.3 * neck_radius, 0.8 * neck_height)
     cap_bottom = height - cap_height
 
     body = [(0.0, 0.0)]
     body += _arc(radius - edge, edge, edge, -90, 0)
-    # Shoulder: a quarter ellipse from the top of the wall in to the neck,
-    # meeting the wall upright and the fillet level.
-    centre_r = neck_radius + fillet
-    body += [(centre_r + (radius - centre_r) * math.cos(t), wall + shoulder * math.sin(t))
-             for t in (math.pi / 2 * i / (2 * ARC_STEPS) for i in range(2 * ARC_STEPS + 1))]
-    body += _arc(centre_r, wall + shoulder + fillet, fillet, 270, 180)
+    # Shoulder: one S-curve from the top of the wall in to the neck, upright
+    # at both ends, so it meets each without a ledge. It is rounded (convex)
+    # most of the way and turns concave just below the neck.
+    steps = 3 * ARC_STEPS
+    body += [(neck_radius + (radius - neck_radius) * (1 + math.cos(math.pi * t ** SHOULDER_CURVE)) / 2,
+              wall + shoulder * t)
+             for t in (i / steps for i in range(steps + 1))]
     # The neck goes on up inside the cap, out of sight.
     neck_top = cap_bottom + cap_height / 2
     body += [(neck_radius, neck_top), (0.0, neck_top)]
