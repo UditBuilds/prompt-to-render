@@ -30,6 +30,12 @@ MIN_SIZE_CM, MAX_SIZE_CM = 0.5, 200.0
 MIN_RES, MAX_RES = 16, 8192
 MIN_SAMPLES, MAX_SAMPLES = 1, 8192
 
+# The edge radius may be at most this share of the box's smallest side. Then
+# every face stays at least 80% flat, so it always reads as a box. Real cartons
+# sit at 1-5% (0.1-0.3 cm on 3-30 cm sides); 10% leaves room for soft-edged
+# rigid boxes but rules out a "bar of soap" (1.5 cm on an 8 cm side is 19%).
+BEVEL_MAX_SHARE = 0.10
+
 
 class SpecError(Exception):
     """Raised when a spec is invalid. Holds a list of human-readable problems."""
@@ -91,7 +97,8 @@ class Integer(Number):
 class Colour(Field):
     def check(self, value, name, problems):
         if not (isinstance(value, str) and HEX_COLOUR.match(value)):
-            problems.append(f'{name}: must be a hex colour like "#F4B6C2", got {_show(value)}')
+            # The format, never a real colour: the LLM reads this message on a retry.
+            problems.append(f'{name}: must be a hex colour in the form "#RRGGBB", got {_show(value)}')
             return False
         return True
 
@@ -146,13 +153,14 @@ FIELDS = {
         "width_cm": Number(6.0, MIN_SIZE_CM, MAX_SIZE_CM, "Left-to-right size in cm, as seen from the front."),
         "height_cm": Number(12.0, MIN_SIZE_CM, MAX_SIZE_CM, "Bottom-to-top size in cm."),
         "depth_cm": Number(4.0, MIN_SIZE_CM, MAX_SIZE_CM, "Front-to-back size in cm."),
-        "colour": Colour("#D9D9D9", 'Box colour as a hex code, e.g. "#E8A3B5".'),
+        # No example colour here: qwen3:8b copied one ("#E8A3B5") for a colour it didn't know.
+        "colour": Colour("#D9D9D9", 'Box colour as a hex code, "#RRGGBB".'),
         "roughness": Number(0.5, 0.0, 1.0, "Surface finish: 0 = mirror-glossy, 1 = fully matte."),
         "bevel_cm": Number(0.15, 0.0, MAX_SIZE_CM,
                            "Radius of the rounded edges in cm (0 = razor sharp). "
-                           "Must be less than half the smallest box side."),
+                           f"At most {BEVEL_MAX_SHARE:.0%} of the smallest box side."),
     },
-    "background_colour": Colour("#EDEDED", "Studio backdrop colour as a hex code."),
+    "background_colour": Colour("#EDEDED", 'Studio backdrop colour as a hex code, "#RRGGBB".'),
     "colour_mode": Choice("accurate", COLOUR_MODES,
                           "accurate: the box colour matches the hex closely. realistic: filmic look, paler colours."),
     "camera": Choice("three_quarter", CAMERA_PRESETS,
@@ -172,13 +180,14 @@ def _defaults(fields):
 DEFAULTS = _defaults(FIELDS)
 
 
-def json_schema(fields=FIELDS, only=None):
+def json_schema(fields=FIELDS, only=None, optional=()):
     """The JSON schema for a spec, built from FIELDS.
 
     `only` limits it to some top-level fields. Every field in the schema is
-    required, so whoever fills it in has to choose each value. One rule can't
-    be written as JSON schema (the bevel must fit the box); it is in the
-    bevel's description and validate_spec() checks it.
+    required, so whoever fills it in has to choose each value, except the
+    top-level fields named in `optional`. One rule can't be written as JSON
+    schema (the bevel must suit the box); it is in the bevel's description
+    and validate_spec() checks it.
     """
     properties = {}
     for key, field in fields.items():
@@ -187,7 +196,7 @@ def json_schema(fields=FIELDS, only=None):
     return {
         "type": "object",
         "properties": properties,
-        "required": list(properties),
+        "required": [key for key in properties if key not in optional],
         "additionalProperties": False,
     }
 
@@ -253,11 +262,11 @@ def _check_box(box, problems):
     # numbers. This is the one rule the JSON schema can't express.
     sizes = [box[f] for f in ("width_cm", "height_cm", "depth_cm")]
     if ok["bevel_cm"] and all(_is_number(s) for s in sizes):
-        limit = min(sizes) / 2
-        if box["bevel_cm"] >= limit:
+        limit = min(sizes) * BEVEL_MAX_SHARE
+        if box["bevel_cm"] > limit + 1e-9:  # tolerance for float rounding
             problems.append(
-                f"box.bevel_cm: must be less than half the smallest box side "
-                f"({limit:g} cm for this box), got {box['bevel_cm']}"
+                f"box.bevel_cm: must be at most {BEVEL_MAX_SHARE:.0%} of the smallest box side "
+                f"({limit:g} cm for this box), got {box['bevel_cm']:g}"
             )
 
 

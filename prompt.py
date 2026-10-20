@@ -32,6 +32,7 @@ import sys
 from datetime import datetime
 
 import gpu
+from grounding import lookup
 from llm_backend import DEFAULT_MODEL, BackendUnavailable, BrokenFirstReply, OllamaBackend
 from run import PROJECT_DIR, find_blender, print_blender_not_found, print_cpu_warning, print_render_failed, render
 from spec_writer import MAX_ATTEMPTS, write_spec
@@ -49,6 +50,9 @@ def main():
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Ollama model (default: {DEFAULT_MODEL})")
     parser.add_argument("--blender", help="path to blender.exe (normally found automatically)")
     parser.add_argument("--verbose", action="store_true", help="show the model's raw replies and Blender's full output")
+    parser.add_argument("--no-grounding", action="store_true",
+                        help="don't add the matching rows of the data/ tables to the request, "
+                             "and don't let code set any value")
     parser.add_argument("--break-first-reply", action="store_true",
                         help="testing: corrupt the model's first reply to show the repair loop at work")
     args = parser.parse_args()
@@ -91,21 +95,23 @@ def main():
         "backend": backend.name,
         "model": backend.model,
         "llm_settings": backend.settings(),
+        "grounding": not args.no_grounding,
     }
     try:
-        return run(sentence, backend, blender, run_dir, log, args.verbose)
+        return run(sentence, backend, blender, run_dir, log, args.verbose, not args.no_grounding)
     finally:
         with open(os.path.join(run_dir, "log.json"), "w", encoding="utf-8") as f:
             json.dump(log, f, indent=2)
             f.write("\n")
 
 
-def run(sentence, backend, blender, run_dir, log, verbose):
+def run(sentence, backend, blender, run_dir, log, verbose, grounding):
     # 1 + 2. Sentence -> validated spec. Whatever happens, the model is
     # unloaded afterwards so the GPU is free (also on errors and Ctrl-C).
     result = None
+    show_grounding(sentence, grounding, verbose)
     try:
-        result = write_spec(sentence, backend, report=AttemptPrinter(backend, verbose))
+        result = write_spec(sentence, backend, report=AttemptPrinter(backend, verbose), grounding=grounding)
     except (BackendUnavailable, RuntimeError) as e:
         print()
         print(f"LLM error: {e}")
@@ -196,6 +202,17 @@ class AttemptPrinter:
 def show_spec(sentence, result):
     if not result.ok:
         return
+    for change in result.style_changes:
+        print(f"[grounding] style \"{change['style']}\" applied to the box colour: "
+              f"{change['from']} -> {change['to']}")
+    if result.finish_change:
+        change = result.finish_change
+        print(f"[grounding] finish \"{change['finish']}\" applied to the roughness: "
+              f"{change['from']:g} -> {change['to']:g}")
+    if result.backdrop_change:
+        change = result.backdrop_change
+        print(f"[grounding] the sentence gives the backdrop no colour, so it is neutral: "
+              f"{change['from'] or '(left out by the model)'} -> {change['to']}")
     box = result.spec["box"]
     print()
     print("Spec:")
@@ -242,6 +259,20 @@ def unload(backend):
     return {"model_loaded": before, "after_unload": after, "unloaded": released}
 
 
+def show_grounding(sentence, enabled, verbose):
+    if not enabled:
+        print("[grounding] off (--no-grounding): the model decides everything on its own")
+        return
+    found = lookup(sentence)
+    if found:
+        print(f"[grounding] table rows for this sentence: {found.summary()}")
+        if verbose:
+            for line in found.text.splitlines():
+                print(f"[grounding] | {line}")
+    else:
+        print("[grounding] no table rows match this sentence; the model decides on its own")
+
+
 def log_llm(log, result):
     log.update(
         status="spec_valid" if result.ok else "invalid_spec",
@@ -251,11 +282,17 @@ def log_llm(log, result):
         is_box=result.is_box,
         shape=result.shape,
         unsupported=result.unsupported,
+        model_unsupported=result.model_unsupported,
         shape_added_by_code=result.shape_added,
         prompt_tokens=result.total("prompt_tokens"),
         output_tokens=result.total("output_tokens"),
         llm_seconds=round(result.total("seconds"), 2),
         llm_load_seconds=round(result.total("load_seconds"), 2),
+        grounding_rows=result.grounding.rows,
+        style_changes=result.style_changes,
+        finish_change=result.finish_change,
+        backdrop_change=result.backdrop_change,
+        backdrop_given=result.backdrop_given,
         llm_calls=[a.to_log() for a in result.attempts],
     )
 

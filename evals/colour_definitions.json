@@ -1,0 +1,164 @@
+{
+  "about": "What each colour name must look like, for the eval checks. Written from general colour definitions (Wikipedia colour articles, CSS, Pantone), never derived from the model's output. Two colour spaces are used. Without a 'space' key (the v1.1 definitions): hue is HSV hue in degrees (a range like [335, 3] wraps round through 0), saturation is HSV saturation 0-1, lightness is CIE L* 0-100. With \"space\": \"hsl\" (v1.2): hue in degrees, saturation and lightness are HSL, in %. Method 'references': the span of the reference colours, widened by fixed tolerances (hue 10 deg; saturation 0.15 HSV or 15 points HSL; lightness 10 L* or 10 points HSL) and rounded outward. Method 'description': only one standard reference, or the common meaning differs from the reference, so the range follows the written description. Method 'review' (v1.2): the range was set after reviewing the v1.1 renders, where the v1.1 reference colour looked wrong in the image. 'must_fail' lists colours the range must reject. tests/test_eval_checks.py checks that every reference falls inside its range and every must_fail colour outside. The out-of-table colours (rust, ochre, fuchsia, periwinkle, sapphire) are deliberately NOT in data/colours.json and must never be added to it: they measure what the model knows on its own. 'pink' is only used for a backdrop the sentence names.",
+  "colours": {
+    "emerald": {
+      "description": "The gemstone green: a deep, strong, slightly bluish jewel green.",
+      "method": "review",
+      "space": "hsl",
+      "references": [
+        {"hex": "#009473", "source": "Pantone 17-5641 Emerald"}
+      ],
+      "must_fail": [
+        {"hex": "#50C878", "why": "Wikipedia: Emerald (color). In the v1.1 render it reads as bright grass green, not a deep jewel green."},
+        {"hex": "#208040", "why": "v1's emerald: a plain mid green (hue 140)."}
+      ],
+      "hue": [150, 180], "saturation": [50, 100], "lightness": [20, 40]
+    },
+    "sage": {
+      "description": "The herb: a muted grey-green.",
+      "method": "review",
+      "space": "hsl",
+      "references": [
+        {"hex": "#9CAF88", "source": "common 'sage green'"}
+      ],
+      "must_fail": [
+        {"hex": "#BCB88A", "why": "Wikipedia: Sage (color). In the v1.1 render it reads as olive/khaki, not grey-green (hue 55)."}
+      ],
+      "hue": [75, 130], "saturation": [10, 35], "lightness": [45, 75]
+    },
+    "crimson": {
+      "description": "A strong, deep red leaning slightly towards blue.",
+      "method": "references",
+      "references": [
+        {"hex": "#DC143C", "source": "CSS / Wikipedia: Crimson"},
+        {"hex": "#9E1B32", "source": "Wikipedia: Crimson (University of Alabama crimson)"}
+      ],
+      "hue": [338, 360], "saturation": [0.68, 1.0], "lightness": [24, 57]
+    },
+    "wine": {
+      "description": "The colour of red wine: a dark red with a hint of purple (burgundy).",
+      "method": "references",
+      "references": [
+        {"hex": "#722F37", "source": "Wikipedia: Wine (color)"},
+        {"hex": "#800020", "source": "Wikipedia: Burgundy (color)"}
+      ],
+      "hue": [335, 3], "saturation": [0.44, 1.0], "lightness": [15, 40]
+    },
+    "gold": {
+      "description": "Metallic gold as used in packaging: a warm, slightly muted yellow-orange. CSS 'gold' (#FFD700) is deliberately not a reference: Wikipedia lists it as 'Gold (web) (Golden)', a saturated golden yellow, not the metallic colour packaging means.",
+      "method": "references",
+      "references": [
+        {"hex": "#D4AF37", "source": "Wikipedia: Gold (metallic)"},
+        {"hex": "#CFB53B", "source": "Wikipedia: Old gold"},
+        {"hex": "#C5B358", "source": "Wikipedia: Vegas gold"}
+      ],
+      "hue": [35, 61], "saturation": [0.40, 0.89], "lightness": [62, 84]
+    },
+    "navy": {
+      "description": "A very dark blue. Only one standard reference (CSS navy, which is at the extreme: pure, fully saturated), so the range follows the description: blue hue, clearly saturated, very dark.",
+      "method": "description",
+      "references": [
+        {"hex": "#000080", "source": "CSS / Wikipedia: Navy blue"}
+      ],
+      "hue": [205, 250], "saturation": [0.35, 1.0], "lightness": [3, 30]
+    },
+    "blush": {
+      "description": "A soft, pale pink, as 'blush' and 'blush pink' are used in fashion, interiors and packaging. Crayola's 'Blush' (#DE5D83) is a much deeper rose, so the range follows the common meaning: pink to warm pink, low saturation, light.",
+      "method": "description",
+      "references": [
+        {"hex": "#F4C2C2", "source": "Wikipedia: Baby pink"},
+        {"hex": "#FADADD", "source": "Wikipedia: Pale pink"}
+      ],
+      "hue": [330, 20], "saturation": [0.08, 0.45], "lightness": [70, 93]
+    },
+    "champagne": {
+      "description": "The drink: a very pale, warm beige.",
+      "method": "references",
+      "references": [
+        {"hex": "#F7E7CE", "source": "Wikipedia: Champagne (color)"},
+        {"hex": "#F1DDCF", "source": "Wikipedia: Champagne pink"}
+      ],
+      "hue": [14, 47], "saturation": [0.0, 0.32], "lightness": [79, 100]
+    },
+    "rust": {
+      "description": "The colour of iron rust: a dark reddish orange-brown. Only one standard reference, so the range follows the description: orange-red to orange, clearly coloured (not a grey-brown), dark to mid. Lighter than that is terracotta or orange.",
+      "method": "description",
+      "space": "hsl",
+      "references": [
+        {"hex": "#B7410E", "source": "Wikipedia: Rust (color)"}
+      ],
+      "must_fail": [
+        {"hex": "#E2725B", "why": "terracotta (Wikipedia: Terra cotta): too light"}
+      ],
+      "hue": [8, 30], "saturation": [40, 100], "lightness": [22, 48]
+    },
+    "ochre": {
+      "description": "The earth pigment: a warm orange-brown to golden yellow-brown. Only one standard reference (Wikipedia's ochre, at the orange end; yellow ochre is more golden), so the range follows the description: orange to golden, earthy rather than fully saturated, mid lightness.",
+      "method": "description",
+      "space": "hsl",
+      "references": [
+        {"hex": "#CC7722", "source": "Wikipedia: Ochre"}
+      ],
+      "must_fail": [
+        {"hex": "#FFDB58", "why": "mustard (Wikipedia: Mustard (color)): brighter and fully saturated"}
+      ],
+      "hue": [25, 50], "saturation": [40, 90], "lightness": [35, 60]
+    },
+    "fuchsia": {
+      "description": "The flower: a vivid purplish pink to pinkish purple.",
+      "method": "references",
+      "space": "hsl",
+      "references": [
+        {"hex": "#FF00FF", "source": "CSS / Wikipedia: Fuchsia (color)"},
+        {"hex": "#C154C1", "source": "Wikipedia: Fuchsia (color), Crayola 'fuchsia'"},
+        {"hex": "#C74375", "source": "Wikipedia: Fuchsia (color), Pantone 'fuchsia rose'"}
+      ],
+      "must_fail": [
+        {"hex": "#FF69B4", "why": "hot pink (CSS): too light"}
+      ],
+      "hue": [290, 348], "saturation": [31, 100], "lightness": [40, 65]
+    },
+    "periwinkle": {
+      "description": "The flower: a pale blue with a touch of violet. Only one standard reference, so the range follows the description: blue to blue-violet, pale.",
+      "method": "description",
+      "space": "hsl",
+      "references": [
+        {"hex": "#CCCCFF", "source": "Wikipedia: Periwinkle (color)"}
+      ],
+      "must_fail": [
+        {"hex": "#C8A2C8", "why": "lilac (Wikipedia: Lilac (color)): purple, not blue"},
+        {"hex": "#87CEEB", "why": "sky blue (CSS): no violet"}
+      ],
+      "hue": [215, 255], "saturation": [30, 100], "lightness": [65, 92]
+    },
+    "sapphire": {
+      "description": "The gemstone: a deep, strong blue.",
+      "method": "references",
+      "space": "hsl",
+      "references": [
+        {"hex": "#0F52BA", "source": "Wikipedia: Shades of blue, Sapphire (Maerz and Paul)"},
+        {"hex": "#0067A5", "source": "Wikipedia: Shades of blue, Sapphire blue (ISCC-NBS)"},
+        {"hex": "#082567", "source": "Wikipedia: Shades of blue, Sapphire"}
+      ],
+      "must_fail": [
+        {"hex": "#000080", "why": "navy (CSS): too violet"},
+        {"hex": "#4169E1", "why": "royal blue (CSS): too light"}
+      ],
+      "hue": [192, 232], "saturation": [70, 100], "lightness": [11, 50]
+    },
+    "pink": {
+      "description": "Plain pink, for a backdrop the sentence names: light red to purplish red, clearly tinted.",
+      "method": "references",
+      "space": "hsl",
+      "references": [
+        {"hex": "#FFC0CB", "source": "CSS / Wikipedia: Pink"},
+        {"hex": "#FF69B4", "source": "CSS hot pink"},
+        {"hex": "#F9CCCA", "source": "Wikipedia: Shades of pink, Pale pink (ISCC-NBS)"}
+      ],
+      "must_fail": [
+        {"hex": "#F5F5F5", "why": "the neutral default backdrop"}
+      ],
+      "hue": [320, 13], "saturation": [64, 100], "lightness": [60, 99]
+    }
+  }
+}

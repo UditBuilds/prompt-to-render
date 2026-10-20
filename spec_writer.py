@@ -13,6 +13,7 @@ Used by prompt.py and by the evals, so both run the same loop.
 
 import json
 
+from grounding import Grounding, apply_finish, lookup, neutral_backdrop, style_box_colour
 from spec import SpecError, validate_spec
 
 MAX_ATTEMPTS = 2
@@ -42,11 +43,18 @@ class Attempt:
 
 
 class SpecResult:
-    def __init__(self, attempts, spec=None, unsupported=None, is_box=None, shape=None,
-                 shape_added=False):
+    def __init__(self, attempts, spec=None, unsupported=None, model_unsupported=None,
+                 is_box=None, shape=None, shape_added=False, grounding=None, style_changes=None,
+                 backdrop_change=None, finish_change=None, backdrop_given=None):
         self.attempts = attempts
+        self.grounding = grounding or Grounding([])  # the table rows the model was given
+        self.style_changes = style_changes or []   # style-word colour shifts applied by code
+        self.backdrop_change = backdrop_change     # {"from", "to"} if code set the neutral backdrop
+        self.backdrop_given = backdrop_given       # False if the model left the backdrop out
+        self.finish_change = finish_change         # {"finish", "from", "to"} if code clamped the roughness
         self.spec = spec                    # full validated spec, or None
-        self.unsupported = unsupported or []
+        self.unsupported = unsupported or []  # what the user is told was ignored
+        self.model_unsupported = model_unsupported or []  # the model's own list, before the code added anything
         self.is_box = is_box
         self.shape = shape
         self.shape_added = shape_added      # True if the code added the shape to `unsupported`
@@ -70,7 +78,8 @@ class SpecResult:
 
 
 def parse_reply(text):
-    """Turn the model's reply into a dict: spec, unsupported, is_box, shape, shape_added.
+    """Turn the model's reply into a dict: spec, unsupported, model_unsupported,
+    is_box, shape, shape_added, backdrop_given.
 
     The spec is validated by spec.validate_spec, with defaults filled in. The
     rest is kept apart from it: it is reported to the user and never reaches
@@ -123,29 +132,39 @@ def parse_reply(text):
         if item and item.lower() not in (c.lower() for c in cleaned):
             cleaned.append(item)
 
+    final = list(cleaned)
     shape_added = False
     if not is_box:
         named = shape if shape and shape != "box" else "non-box"
-        if not any(named in item.lower() for item in cleaned):
-            cleaned.insert(0, f"{named} shape")
+        if not any(named in item.lower() for item in final):
+            final.insert(0, f"{named} shape")
             shape_added = True
-    return {"spec": spec, "unsupported": cleaned, "is_box": is_box, "shape": shape,
-            "shape_added": shape_added}
+    # The model may leave the backdrop out (when the sentence names none).
+    backdrop_given = "background_colour" in raw_spec
+    return {"spec": spec, "unsupported": final, "model_unsupported": cleaned, "is_box": is_box,
+            "shape": shape, "shape_added": shape_added, "backdrop_given": backdrop_given}
 
 
-def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None):
+def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, grounding=True, tables=None):
     """Run the LLM + validation loop. Returns a SpecResult (check .ok).
+
+    With grounding on, the rows of the data/ tables that match the
+    sentence's words are added to the request, and code then applies the
+    style shift, the glossy finish and the neutral backdrop (see
+    grounding.py). With it off, the model decides everything on its own.
+    `tables` replaces the data/ tables (e.g. without the colour table).
 
     report(event, attempt) is called with "start" before each LLM call and
     "done" after it, so the caller can show progress. Backend errors
     (BackendUnavailable, RuntimeError) are not caught here.
     """
+    found = lookup(sentence, tables) if grounding else Grounding([])
     attempts = []
     previous_output = previous_errors = None
     for number in range(1, max_attempts + 1):
         if report:
             report("start", Attempt(number, None, previous_errors or []))
-        reply = backend.generate_spec(sentence, previous_errors, previous_output)
+        reply = backend.generate_spec(sentence, previous_errors, previous_output, found.text or None)
         try:
             parsed = parse_reply(reply.text)
             errors = []
@@ -156,6 +175,13 @@ def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None):
         if report:
             report("done", attempt)
         if not errors:
-            return SpecResult(attempts, **parsed)
+            # Code sets what the model can't be relied on for (see grounding.py).
+            changes = style_box_colour(sentence, parsed["spec"], found)
+            backdrop = finish = None
+            if grounding:
+                backdrop = neutral_backdrop(sentence, parsed["spec"], parsed["backdrop_given"])
+                finish = apply_finish(sentence, parsed["spec"], tables)
+            return SpecResult(attempts, grounding=found, style_changes=changes,
+                              backdrop_change=backdrop, finish_change=finish, **parsed)
         previous_output, previous_errors = reply.text, errors
-    return SpecResult(attempts)
+    return SpecResult(attempts, grounding=found)

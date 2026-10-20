@@ -1,0 +1,52 @@
+{
+  "about": "Dev sentences for designing the grounding tables and prompt (Phase 3). They are deliberately different from the frozen eval sentences in cases.json, and use other products and colours where possible, so tuning on them doesn't tune on the eval. Same check types as cases.json.",
+  "cases": [
+    {"id": "dev_rose_gold", "sentence": "a rose gold mascara box", "checks": [
+      {"type": "hex", "equals": "#B76E79"},
+      {"type": "dimension", "field": "height_cm", "min": 14, "max": 17},
+      {"type": "dimension", "field": "width_cm", "min": 2.5, "max": 3.5}]},
+    {"id": "dev_burgundy", "sentence": "a matte burgundy nail polish box", "checks": [
+      {"type": "hex", "equals": "#800020"},
+      {"type": "roughness", "min": 0.6},
+      {"type": "dimension", "field": "height_cm", "min": 8, "max": 10}]},
+    {"id": "dev_ivory_logo", "sentence": "an ivory candle box with a silver logo", "checks": [
+      {"type": "hex", "equals": "#FFFFF0"},
+      {"type": "model_unsupported_mentions", "any": ["logo"]}]},
+    {"id": "dev_jade_bottle", "sentence": "a jade green perfume bottle with a gold cap", "checks": [
+      {"type": "is_box", "equals": false},
+      {"type": "shape_contains", "any": ["bottle"]},
+      {"type": "model_unsupported_mentions", "any": ["cap"]},
+      {"type": "hex", "equals": "#00A86B"}]},
+    {"id": "dev_frosted_jar", "sentence": "a frosted glass jar of face cream", "checks": [
+      {"type": "is_box", "equals": false},
+      {"type": "shape_contains", "any": ["jar"]},
+      {"type": "model_unsupported_mentions", "any": ["glass", "frosted", "transparen"]}]},
+    {"id": "dev_teal", "sentence": "a teal box", "checks": [
+      {"type": "hex", "equals": "#008080"}]},
+    {"id": "dev_luxury_teal", "sentence": "a luxury teal box", "checks": [
+      {"type": "style_shift", "than": "dev_teal", "direction": "darker_or_less_saturated", "min_lightness": 5, "min_saturation": 0.1}]},
+    {"id": "dev_orange", "sentence": "an orange box", "checks": [
+      {"type": "hue", "min": 15, "max": 40}]},
+    {"id": "dev_playful_orange", "sentence": "a playful orange box", "checks": [
+      {"type": "hue", "min": 15, "max": 45},
+      {"type": "style_shift", "than": "dev_orange", "direction": "lighter_or_more_saturated", "min_lightness": 5, "min_saturation": 0.1}]},
+    {"id": "dev_green", "sentence": "a green box", "checks": [
+      {"type": "hue", "min": 90, "max": 160}]},
+    {"id": "dev_natural_green", "sentence": "a natural green box", "checks": [
+      {"type": "style_shift", "than": "dev_green", "direction": "darker_or_less_saturated", "min_lightness": 5, "min_saturation": 0.1}]},
+    {"id": "dev_gift_set", "sentence": "a lavender skincare gift set box", "checks": [
+      {"type": "hex", "equals": "#B57EDC"},
+      {"type": "top_aspect", "max": 1.6}]},
+    {"id": "dev_high_gloss", "sentence": "a high-gloss black lash box", "checks": [
+      {"type": "roughness", "max": 0.1},
+      {"type": "lightness", "max": 20},
+      {"type": "dimension", "field": "height_cm", "min": 1.5, "max": 2.5}]},
+    {"id": "dev_palette", "sentence": "a terracotta eyeshadow palette box, top-down", "checks": [
+      {"type": "hex", "equals": "#E2725B"},
+      {"type": "camera", "equals": "top_down"},
+      {"type": "dimension", "field": "height_cm", "max": 2.5}]},
+    {"id": "dev_backdrop", "sentence": "a white serum box on a mint backdrop", "checks": [
+      {"type": "hex", "equals": "#3EB489", "target": "background"},
+      {"type": "lightness", "min": 85}]}
+  ]
+}

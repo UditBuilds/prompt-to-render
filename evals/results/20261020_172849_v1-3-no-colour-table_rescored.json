@@ -1,0 +1,1213 @@
+{
+  "created": "2026-10-20T17:29:20",
+  "label": "v1.3-no-colour-table",
+  "cases_file": "evals\\cases.json",
+  "grounding": true,
+  "without_tables": [
+    "colours"
+  ],
+  "model": "qwen3:8b",
+  "backend": "ollama",
+  "llm_settings": {
+    "url": "http://127.0.0.1:11434",
+    "temperature": 0.2,
+    "think": false,
+    "num_ctx": 4096,
+    "num_predict": 512
+  },
+  "runs_per_case": 3,
+  "max_attempts": 2,
+  "eval_seconds": 31.6,
+  "stopped_early": null,
+  "summary": {
+    "colour_groups": {
+      "out_of_table": {
+        "cases": 5,
+        "total_runs": 15,
+        "colour_passed_runs": 9,
+        "passed_runs": 9
+      }
+    },
+    "passed_runs": 9,
+    "total_runs": 15,
+    "pass_rate": 0.6,
+    "cases_passing_all_runs": 3,
+    "cases_with_identical_runs": 3,
+    "total_cases": 5,
+    "retry_runs": 0,
+    "retry_rate": 0.0,
+    "invalid_after_retries": 0,
+    "shape_added_by_code_runs": 0,
+    "avg_llm_seconds": 2.1,
+    "avg_prompt_tokens": 2293,
+    "max_prompt_tokens_per_call": 2298,
+    "avg_output_tokens": 118
+  },
+  "cases": [
+    {
+      "id": "oot_rust",
+      "sentence": "a rust coloured candle box",
+      "covers": "colour name not in the table: rust",
+      "colour_group": "out_of_table",
+      "checks": [
+        {
+          "type": "named_colour",
+          "name": "rust"
+        },
+        {
+          "type": "neutral_backdrop",
+          "max_spread": 20,
+          "min_lightness": 80
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "distinct_specs": 1,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.85,
+          "prompt_tokens": 2290,
+          "output_tokens": 118,
+          "call_prompt_tokens": [
+            2290
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": true,
+              "found": "box #8B4513 as rust: hue 25, HSL saturation 76%, HSL lightness 31%"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "candle",
+              "matched": "candle"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "a rust coloured candle box",
+            "box": {
+              "width_cm": 9,
+              "height_cm": 10.5,
+              "depth_cm": 9,
+              "colour": "#8B4513",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a rust coloured candle box\",\n    \"box\": {\n      \"width_cm\": 9,\n      \"height_cm\": 10.5,\n      \"depth_cm\": 9,\n      \"colour\": \"#8B4513\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 1.94,
+          "prompt_tokens": 2290,
+          "output_tokens": 118,
+          "call_prompt_tokens": [
+            2290
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": true,
+              "found": "box #8B4513 as rust: hue 25, HSL saturation 76%, HSL lightness 31%"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "candle",
+              "matched": "candle"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "a rust coloured candle box",
+            "box": {
+              "width_cm": 9,
+              "height_cm": 10.5,
+              "depth_cm": 9,
+              "colour": "#8B4513",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a rust coloured candle box\",\n    \"box\": {\n      \"width_cm\": 9,\n      \"height_cm\": 10.5,\n      \"depth_cm\": 9,\n      \"colour\": \"#8B4513\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.03,
+          "prompt_tokens": 2290,
+          "output_tokens": 118,
+          "call_prompt_tokens": [
+            2290
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": true,
+              "found": "box #8B4513 as rust: hue 25, HSL saturation 76%, HSL lightness 31%"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "candle",
+              "matched": "candle"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "a rust coloured candle box",
+            "box": {
+              "width_cm": 9,
+              "height_cm": 10.5,
+              "depth_cm": 9,
+              "colour": "#8B4513",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a rust coloured candle box\",\n    \"box\": {\n      \"width_cm\": 9,\n      \"height_cm\": 10.5,\n      \"depth_cm\": 9,\n      \"colour\": \"#8B4513\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "oot_ochre",
+      "sentence": "an ochre soap box",
+      "covers": "colour name not in the table: ochre",
+      "colour_group": "out_of_table",
+      "checks": [
+        {
+          "type": "named_colour",
+          "name": "ochre"
+        },
+        {
+          "type": "neutral_backdrop",
+          "max_spread": 20,
+          "min_lightness": 80
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "distinct_specs": 1,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.05,
+          "prompt_tokens": 2294,
+          "output_tokens": 116,
+          "call_prompt_tokens": [
+            2294
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": true,
+              "found": "box #CC9966 as ochre: hue 30, HSL saturation 50%, HSL lightness 60%"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "soap",
+              "matched": "soap"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "an ochre soap box",
+            "box": {
+              "width_cm": 9,
+              "height_cm": 3.5,
+              "depth_cm": 6,
+              "colour": "#CC9966",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"an ochre soap box\",\n    \"box\": {\n      \"width_cm\": 9,\n      \"height_cm\": 3.5,\n      \"depth_cm\": 6,\n      \"colour\": \"#CC9966\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.0,
+          "prompt_tokens": 2294,
+          "output_tokens": 116,
+          "call_prompt_tokens": [
+            2294
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": true,
+              "found": "box #CC9966 as ochre: hue 30, HSL saturation 50%, HSL lightness 60%"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "soap",
+              "matched": "soap"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "an ochre soap box",
+            "box": {
+              "width_cm": 9,
+              "height_cm": 3.5,
+              "depth_cm": 6,
+              "colour": "#CC9966",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"an ochre soap box\",\n    \"box\": {\n      \"width_cm\": 9,\n      \"height_cm\": 3.5,\n      \"depth_cm\": 6,\n      \"colour\": \"#CC9966\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.01,
+          "prompt_tokens": 2294,
+          "output_tokens": 116,
+          "call_prompt_tokens": [
+            2294
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": true,
+              "found": "box #CC9966 as ochre: hue 30, HSL saturation 50%, HSL lightness 60%"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "soap",
+              "matched": "soap"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "an ochre soap box",
+            "box": {
+              "width_cm": 9,
+              "height_cm": 3.5,
+              "depth_cm": 6,
+              "colour": "#CC9966",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"an ochre soap box\",\n    \"box\": {\n      \"width_cm\": 9,\n      \"height_cm\": 3.5,\n      \"depth_cm\": 6,\n      \"colour\": \"#CC9966\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "oot_fuchsia",
+      "sentence": "a fuchsia nail polish box",
+      "covers": "colour name not in the table: fuchsia",
+      "colour_group": "out_of_table",
+      "checks": [
+        {
+          "type": "named_colour",
+          "name": "fuchsia"
+        },
+        {
+          "type": "neutral_backdrop",
+          "max_spread": 20,
+          "min_lightness": 80
+        }
+      ],
+      "passed_runs": 3,
+      "total_runs": 3,
+      "distinct_specs": 2,
+      "runs": [
+        {
+          "run": 1,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.09,
+          "prompt_tokens": 2295,
+          "output_tokens": 119,
+          "call_prompt_tokens": [
+            2295
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": true,
+              "found": "box #e13fff as fuchsia: hue 291, HSL saturation 100%, HSL lightness 62%"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "nail polish",
+              "matched": "nail polish"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "a fuchsia nail polish box",
+            "box": {
+              "width_cm": 4.0,
+              "height_cm": 9.0,
+              "depth_cm": 4.0,
+              "colour": "#e13fff",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a fuchsia nail polish box\",\n    \"box\": {\n      \"width_cm\": 4.0,\n      \"height_cm\": 9.0,\n      \"depth_cm\": 4.0,\n      \"colour\": \"#e13fff\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.06,
+          "prompt_tokens": 2295,
+          "output_tokens": 119,
+          "call_prompt_tokens": [
+            2295
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": true,
+              "found": "box #e13fff as fuchsia: hue 291, HSL saturation 100%, HSL lightness 62%"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "nail polish",
+              "matched": "nail polish"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "a fuchsia nail polish box",
+            "box": {
+              "width_cm": 4.0,
+              "height_cm": 9.0,
+              "depth_cm": 4.0,
+              "colour": "#e13fff",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a fuchsia nail polish box\",\n    \"box\": {\n      \"width_cm\": 4.0,\n      \"height_cm\": 9.0,\n      \"depth_cm\": 4.0,\n      \"colour\": \"#e13fff\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": true,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.08,
+          "prompt_tokens": 2295,
+          "output_tokens": 120,
+          "call_prompt_tokens": [
+            2295
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": true,
+              "found": "box #e100ff as fuchsia: hue 293, HSL saturation 100%, HSL lightness 50%"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "nail polish",
+              "matched": "nail polish"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "a fuchsia nail polish box",
+            "box": {
+              "width_cm": 4.0,
+              "height_cm": 9.0,
+              "depth_cm": 4.0,
+              "colour": "#e100ff",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a fuchsia nail polish box\",\n    \"box\": {\n      \"width_cm\": 4.0,\n      \"height_cm\": 9.0,\n      \"depth_cm\": 4.0,\n      \"colour\": \"#e100ff\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "oot_periwinkle",
+      "sentence": "a periwinkle tea box",
+      "covers": "colour name not in the table: periwinkle",
+      "colour_group": "out_of_table",
+      "checks": [
+        {
+          "type": "named_colour",
+          "name": "periwinkle"
+        },
+        {
+          "type": "neutral_backdrop",
+          "max_spread": 20,
+          "min_lightness": 80
+        }
+      ],
+      "passed_runs": 0,
+      "total_runs": 3,
+      "distinct_specs": 1,
+      "runs": [
+        {
+          "run": 1,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.05,
+          "prompt_tokens": 2288,
+          "output_tokens": 116,
+          "call_prompt_tokens": [
+            2288
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": false,
+              "found": "box #b59fc3 as periwinkle: hue 277 not in 215..255; HSL saturation 23% not in 30..100"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "tea",
+              "matched": "tea box"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "a periwinkle tea box",
+            "box": {
+              "width_cm": 8,
+              "height_cm": 14,
+              "depth_cm": 6,
+              "colour": "#b59fc3",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a periwinkle tea box\",\n    \"box\": {\n      \"width_cm\": 8,\n      \"height_cm\": 14,\n      \"depth_cm\": 6,\n      \"colour\": \"#b59fc3\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.01,
+          "prompt_tokens": 2288,
+          "output_tokens": 116,
+          "call_prompt_tokens": [
+            2288
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": false,
+              "found": "box #b59fc3 as periwinkle: hue 277 not in 215..255; HSL saturation 23% not in 30..100"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "tea",
+              "matched": "tea box"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "a periwinkle tea box",
+            "box": {
+              "width_cm": 8,
+              "height_cm": 14,
+              "depth_cm": 6,
+              "colour": "#b59fc3",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a periwinkle tea box\",\n    \"box\": {\n      \"width_cm\": 8,\n      \"height_cm\": 14,\n      \"depth_cm\": 6,\n      \"colour\": \"#b59fc3\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.01,
+          "prompt_tokens": 2288,
+          "output_tokens": 116,
+          "call_prompt_tokens": [
+            2288
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": false,
+              "found": "box #b59fc3 as periwinkle: hue 277 not in 215..255; HSL saturation 23% not in 30..100"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "tea",
+              "matched": "tea box"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "a periwinkle tea box",
+            "box": {
+              "width_cm": 8,
+              "height_cm": 14,
+              "depth_cm": 6,
+              "colour": "#b59fc3",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a periwinkle tea box\",\n    \"box\": {\n      \"width_cm\": 8,\n      \"height_cm\": 14,\n      \"depth_cm\": 6,\n      \"colour\": \"#b59fc3\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "oot_sapphire",
+      "sentence": "a sapphire blue serum box",
+      "covers": "colour name not in the table: sapphire",
+      "colour_group": "out_of_table",
+      "checks": [
+        {
+          "type": "named_colour",
+          "name": "sapphire"
+        },
+        {
+          "type": "neutral_backdrop",
+          "max_spread": 20,
+          "min_lightness": 80
+        }
+      ],
+      "passed_runs": 0,
+      "total_runs": 3,
+      "distinct_specs": 2,
+      "runs": [
+        {
+          "run": 1,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.13,
+          "prompt_tokens": 2298,
+          "output_tokens": 121,
+          "call_prompt_tokens": [
+            2298
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": false,
+              "found": "box #6495ED as sapphire: HSL lightness 66% not in 11..50"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "serum",
+              "matched": "serum"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "a sapphire blue serum box",
+            "box": {
+              "width_cm": 4.0,
+              "height_cm": 11.5,
+              "depth_cm": 4.0,
+              "colour": "#6495ED",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a sapphire blue serum box\",\n    \"box\": {\n      \"width_cm\": 4.0,\n      \"height_cm\": 11.5,\n      \"depth_cm\": 4.0,\n      \"colour\": \"#6495ED\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.09,
+          "prompt_tokens": 2298,
+          "output_tokens": 121,
+          "call_prompt_tokens": [
+            2298
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": false,
+              "found": "box #66b2ff as sapphire: HSL lightness 70% not in 11..50"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "serum",
+              "matched": "serum"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "a sapphire blue serum box",
+            "box": {
+              "width_cm": 4.0,
+              "height_cm": 11.5,
+              "depth_cm": 4.0,
+              "colour": "#66b2ff",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a sapphire blue serum box\",\n    \"box\": {\n      \"width_cm\": 4.0,\n      \"height_cm\": 11.5,\n      \"depth_cm\": 4.0,\n      \"colour\": \"#66b2ff\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.08,
+          "prompt_tokens": 2298,
+          "output_tokens": 121,
+          "call_prompt_tokens": [
+            2298
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": false,
+              "found": "box #6495ED as sapphire: HSL lightness 66% not in 11..50"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "serum",
+              "matched": "serum"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "spec": {
+            "description": "a sapphire blue serum box",
+            "box": {
+              "width_cm": 4.0,
+              "height_cm": 11.5,
+              "depth_cm": 4.0,
+              "colour": "#6495ED",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a sapphire blue serum box\",\n    \"box\": {\n      \"width_cm\": 4.0,\n      \"height_cm\": 11.5,\n      \"depth_cm\": 4.0,\n      \"colour\": \"#6495ED\",\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    }
+  ],
+  "rescored": {
+    "on": "2026-10-20T17:39:48",
+    "from": "20261020_172849_v1-3-no-colour-table.json",
+    "why": "re-scored on the current evals/cases.json checks, no new model runs"
+  }
+}
