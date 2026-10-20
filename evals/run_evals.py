@@ -33,6 +33,7 @@ EVALS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(EVALS_DIR))
 
 from check_colour import hex_to_lab  # noqa: E402
+from grounding import TABLES, load_tables  # noqa: E402
 from llm_backend import DEFAULT_MODEL, BackendUnavailable, OllamaBackend  # noqa: E402
 from run import PROJECT_DIR, find_blender, render  # noqa: E402
 from spec_writer import MAX_ATTEMPTS, write_spec  # noqa: E402
@@ -299,6 +300,8 @@ def main():
     parser.add_argument("--no-grounding", action="store_true",
                         help="don't add the matching rows of the data/ tables to the requests, "
                              "and don't let code set any value")
+    parser.add_argument("--without-table", action="append", default=[], choices=sorted(TABLES),
+                        help="leave one data/ table out of grounding, e.g. colours (code rules stay on)")
     parser.add_argument("--cases", help="comma-separated case ids (default: all)")
     parser.add_argument("--cases-file", default=CASES_PATH,
                         help="another cases file, e.g. evals/dev_cases.json; its results go to runs/dev_evals/")
@@ -332,13 +335,14 @@ def main():
     if args.label:
         stamp += "_" + re.sub(r"[^A-Za-z0-9-]+", "-", args.label)
     print(f"{len(cases)} cases x {args.runs} runs\n")
+    tables = {name: rows for name, rows in load_tables().items() if name not in args.without_table}
     results = []
     done = {}
     stopped_early = None
     started = time.perf_counter()
     try:
         for case in cases:
-            results.append(run_case(case, backend, args.runs, done, not args.no_grounding))
+            results.append(run_case(case, backend, args.runs, done, not args.no_grounding, tables))
             done[case["id"]] = results[-1]
     except (BackendUnavailable, RuntimeError, KeyboardInterrupt) as e:
         # Keep what was collected so far rather than losing it all.
@@ -360,6 +364,7 @@ def main():
         "label": args.label,
         "cases_file": os.path.relpath(args.cases_file, PROJECT_DIR),
         "grounding": not args.no_grounding,
+        "without_tables": args.without_table,
         "model": backend.model,
         "backend": backend.name,
         "llm_settings": backend.settings(),
@@ -418,11 +423,11 @@ def load_cases(wanted=None, path=CASES_PATH):
     return [c for c in cases if c["id"] in keep]
 
 
-def run_case(case, backend, runs, done=None, grounding=True):
+def run_case(case, backend, runs, done=None, grounding=True, tables=None):
     print(f"{case['id']}: \"{case['sentence']}\"")
     case_runs = []
     for n in range(1, runs + 1):
-        result = write_spec(case["sentence"], backend, grounding=grounding)
+        result = write_spec(case["sentence"], backend, grounding=grounding, tables=tables)
         outcomes = run_checks(case, result, done)
         passed = all(o["passed"] for o in outcomes)
         retry_note = ", retried" if result.retried else ""

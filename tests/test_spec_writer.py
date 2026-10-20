@@ -60,6 +60,14 @@ class Grounded(unittest.TestCase):
         for call in backend.calls:  # the retry gets the same reference data
             self.assertIn('"emerald green" = #009473', call["reference"])
 
+    def test_a_table_can_be_left_out(self):
+        from grounding import load_tables
+        tables = {k: v for k, v in load_tables().items() if k != "colours"}
+        backend = FakeBackend([GOOD])
+        result = write_spec("a luxury emerald green lipstick box", backend, tables=tables)
+        self.assertEqual([r["name"] for r in result.grounding.rows], ["luxury", "lipstick"])
+        self.assertNotIn("emerald", backend.calls[0]["reference"])
+
     def test_no_grounding_and_no_match_send_nothing(self):
         backend = FakeBackend([GOOD, GOOD])
         write_spec("a luxury emerald green lipstick box", backend, grounding=False)
