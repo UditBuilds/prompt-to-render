@@ -1,6 +1,6 @@
 # v2 step 4: text labels
 
-**Columns.** **v2-step3** is the step 4 baseline: the step 3 code (`117543b`) with the step 4 evals (`0ce5df3`), all 94 cases (`20261021_150133_v2-step4-baseline`). **v2-step4** is the final code (`e079d08`, labels on every shape) (`20261021_151759_v2-step4`). 3 runs per case, qwen3:8b, temperature 0.2.
+**Columns.** **v2-step3** is the step 4 baseline: the step 3 code (`117543b`) with the step 4 evals (`0ce5df3`), all 94 cases (`20261021_150133_v2-step4-baseline`). **v2-step4** is the final code (`20261021_151759_v2-step4`): the eval ran on `e079d08`'s product code (labels on every shape); the matte check and the renders below ran on `f06c25c`, which adds two fixes that touch rendering and printing only (a guard for a label with no drawable letter, and `run.py` printing a "?" for a character the terminal can't show). 3 runs per case, qwen3:8b, temperature 0.2.
 
 | | v2-step3 | v2-step4 |
 |---|---|---|
@@ -35,7 +35,7 @@ The saved specs of `docs/v2_blush_pink_serum_bottle.png` and `docs/v2_step2_glos
 
 Tried once, as planned, on a bottle, a jar and a mascara from the front, three-quarter and top-down cameras: no distortion, clipping, sinking or mirroring. The label is wrapped round the body's side, centred on the camera's direction, its chord 60% of the diameter; the letters are cut into 1.5-degree strips first, so no straight edge sinks into the body. From above (top_down) it lies flat on the cap or lid, coloured for the cap or lid (black on light, white on dark). A box gets it flat on its front, or on its top from above. Every render checks that the camera sees it left to right, upright and from the front, and stops otherwise.
 
-A/B renders of the same spec with and without a label: the same exposure (the light meter hides the label while it meters); outside the label, at most 3 levels on the box, and at most 5 levels on 446 pixels of the jar's body (the denoiser near a sharp edge).
+A/B renders of the same spec with and without a label: the same exposure (the light meter hides the label while it meters); outside the label, at most 3 levels on the box, and at most 5 levels on 446 pixels of the jar's body, 30-90 px from the label and slightly darker on average (likely the denoiser reacting to the label's sharp edge; not verified).
 
 ## Renders (three_quarter, final code)
 
@@ -65,7 +65,7 @@ A/B renders of the same spec with and without a label: the same exposure (the li
 
 - An inch mark pairs with the next quote: `a 12" box with "NOIR"` reads ` box with ` as the label.
 - A label in the same metal as its cap is invisible from above (gold on a gold cap).
-- Only Blender's built-in font. A text with no letter in it isn't drawn (with a warning); a letter it lacks is left out. It has Latin accents, `º`, `&` and `★`.
+- Only Blender's built-in font. Tried and drawn: Latin accents (`maison Lumière`), `º`, `&`, `★`, and Chinese (`香水`, `NOIR 香`; Blender bundles fallback fonts). If a text had no letter the font can draw, the renderer would skip the label with a warning instead of crashing; nothing tried triggers that guard.
 
 ## Per case
 
