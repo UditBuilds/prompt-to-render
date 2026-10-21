@@ -104,6 +104,8 @@ Columns: **v2-shapes** is the step 2 baseline: the v2 step 1 code (`d0a8154`) ru
 | a marker pen | cylinder, 0.8-2.6 x 10-17 | bottle 1.2-1.5 x 18, 3 times | 0/3 | 0/3 (too tall) |
 | a body butter | jar, 5-12 x 3-9, wider than tall | jar 6.5 x 10-10.5, 3 times | 3/3 | 0/3 (taller than wide) |
 
-Shape choice 9/15 (step 1's in-table shape choice: 45/45), sizes 6/15. No step 2 change targets this score.
+Shape choice 9/15, sizes 6/15. Right shape and right size in the same run: 3/15 (beard oil only): the sizes row reads the drawn shape's fields, so the eyebrow pencil's 3 size passes are for a bottle. No step 2 change targets this score.
+
+**Reading the shape rows.** "Shape choice" is not step 1's row any more: it covered step 1's 15 cases (45/45) and now covers 27, the 12 step 2 cases with a shape check included (the capped cylinders, the metal caps and lids, the jar lid), and in the final run one shape (the squeeze tube) is redrawn by code. Those products are named in the size table or in the sentence ("bottle", "jar"), so 81/81 is still mostly copying. The out-of-table rows are the honest shape score.
 
 **What code decides** (scored apart, it measures code, not the model): metal caps and lids, the two-part cylinder and the jar lid's share, 36/36. Metal comes only from a metal word for the cap or lid; both negatives (a gold logo, a gold body with a black cap) stay plain in every run.

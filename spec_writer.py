@@ -210,7 +210,7 @@ def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, ground
     sentence's words are added to the request, and code then applies the
     style shift, the glossy finish, the neutral backdrop, the default cap
     or lid colour and the metal of a cap or lid (see grounding.py). With it
-    off, the model decides everything on its own.
+    off, the model decides everything but parse_reply's rules on its own.
     `tables` replaces the data/ tables (e.g. without the colour table).
 
     report(event, attempt) is called with "start" before each LLM call and
