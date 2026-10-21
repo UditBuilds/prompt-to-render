@@ -227,6 +227,9 @@ def show_spec(sentence, result):
         change = result.metal_change
         part = "lid" if change["field"] == "lid_metal" else "cap"
         print(f"[grounding] the sentence names a metal for the {part}, so it is drawn in {change['metal']}")
+    for change in result.proportion_changes:
+        print(f"[proportions] clamped by code, {change['rule']}: "
+              f"{change['field']} {change['from']:g} -> {change['to']:g}")
     shape = result.spec["shape"]
     product = result.spec[shape]
     print()
@@ -321,6 +324,7 @@ def log_llm(log, result):
         cap_given=result.cap_given,
         metal_change=result.metal_change,
         shape_fixed=result.shape_fixed,
+        proportion_changes=result.proportion_changes,
         llm_calls=[a.to_log() for a in result.attempts],
     )
 

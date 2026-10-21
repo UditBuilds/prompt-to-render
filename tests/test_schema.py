@@ -202,6 +202,59 @@ class SchemaMatchesValidator(unittest.TestCase):
         self.assertTrue(spec.has_shine(full("cylinder", roughness=0.7, cap_metal="silver")))
         self.assertTrue(spec.has_shine(full("jar", roughness=0.8, lid_metal="copper")))
 
+    def test_proportion_limits_clamp_only_impossible_values(self):
+        def clamped(shape, diameter, height):
+            raw = spec.validate_spec({"shape": shape, shape: {"diameter_cm": diameter, "height_cm": height}})
+            changes = spec.clamp_proportions(raw)
+            return (raw[shape]["diameter_cm"], raw[shape]["height_cm"]), [(c["field"], c["from"], c["to"]) for c in changes]
+
+        # A jar is never taller than it is wide: the height comes down, the diameter stays.
+        self.assertEqual(clamped("jar", 6.5, 10.5), ((6.5, 6.5), [("height_cm", 10.5, 6.5)]))
+        self.assertEqual(clamped("jar", 6.5, 6.5), ((6.5, 6.5), []))
+        # A bottle: at least 1.5 cm across, then at most 6 times as tall as that.
+        self.assertEqual(clamped("bottle", 1.2, 18), ((1.5, 9.0), [("diameter_cm", 1.2, 1.5), ("height_cm", 18, 9.0)]))
+        self.assertEqual(clamped("bottle", 1.0, 1.2), ((1.5, 1.5), [("diameter_cm", 1.0, 1.5), ("height_cm", 1.2, 1.5)]))
+        self.assertEqual(clamped("bottle", 2.5, 12.5), ((2.5, 12.5), []))  # slim, but a real bottle
+        # A cylinder: 0.5-15 cm across, 2-40 cm tall.
+        self.assertEqual(clamped("cylinder", 20, 50), ((15.0, 40.0), [("diameter_cm", 20, 15.0), ("height_cm", 50, 40.0)]))
+        self.assertEqual(clamped("cylinder", 0.8, 17), ((0.8, 17), []))  # a pencil
+        # A box is never clamped.
+        box = spec.validate_spec({"box": {"width_cm": 200, "height_cm": 0.5, "depth_cm": 0.5, "bevel_cm": 0}})
+        self.assertEqual(spec.clamp_proportions(box), [])
+        # Every clamp says which limit it held.
+        raw = spec.validate_spec({"shape": "jar", "jar": {"diameter_cm": 6.5, "height_cm": 10.5}})
+        self.assertEqual(spec.clamp_proportions(raw)[0]["rule"], "jar height at most 6.5 cm (1 x its diameter)")
+
+    def test_no_table_product_is_ever_clamped(self):
+        # The limits are for clearly impossible values: no size in the product table comes near them.
+        with open(os.path.join(os.path.dirname(spec.__file__), "data", "product_sizes.json"), encoding="utf-8") as f:
+            products = json.load(f)["products"]
+        for name, row in products.items():
+            for shape in ("cylinder", "bottle", "jar"):
+                if shape not in row:
+                    continue
+                size = row[shape]
+                for diameter in size["diameter"] + [size["typical"][0]]:
+                    for height in size["height"] + [size["typical"][1]]:
+                        if shape == "bottle" and height < diameter:
+                            continue  # not a valid bottle in the first place
+                        with self.subTest(product=name, size=(diameter, height)):
+                            raw = spec.validate_spec({"shape": shape, shape: {"diameter_cm": diameter, "height_cm": height}})
+                            self.assertEqual(spec.clamp_proportions(raw), [])
+
+    def test_a_clamped_spec_is_still_valid(self):
+        sizes = [0.5, 0.8, 1.2, 1.5, 3, 6.5, 10, 14, 15.5, 25, 45, 120, 200]
+        for shape in ("cylinder", "bottle", "jar"):
+            for diameter in sizes:
+                for height in sizes:
+                    if shape == "bottle" and height < diameter:
+                        continue
+                    with self.subTest(shape=shape, size=(diameter, height)):
+                        raw = spec.validate_spec({"shape": shape, shape: {"diameter_cm": diameter, "height_cm": height}})
+                        spec.clamp_proportions(raw)
+                        spec.validate_spec(raw)
+                        self.assertEqual(spec.clamp_proportions(raw), [])  # a second pass changes nothing
+
     def test_bevel_share_of_smallest_side(self):
         box = {"width_cm": 12, "height_cm": 18, "depth_cm": 8}
         self.assertTrue(is_valid({"box": dict(box, bevel_cm=0.8)}))   # exactly 10% of 8 cm

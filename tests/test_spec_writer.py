@@ -320,6 +320,21 @@ class Shapes(unittest.TestCase):
                             grounding=False)
         self.assertIsNone(result.spec["bottle"]["cap_metal"])
 
+    def test_code_clamps_impossible_proportions(self):
+        # v2 step 3: a jar taller than it is wide is clamped, and the clamp is recorded.
+        result = write_spec("a body scrub", FakeBackend([round_reply("jar", diameter_cm=6.5, height_cm=10.5)]))
+        self.assertEqual((result.spec["jar"]["diameter_cm"], result.spec["jar"]["height_cm"]), (6.5, 6.5))
+        self.assertEqual(result.proportion_changes, [{"rule": "jar height at most 6.5 cm (1 x its diameter)",
+                                                      "field": "height_cm", "from": 10.5, "to": 6.5}])
+        # Sensible sizes are the model's.
+        result = write_spec("a toner bottle", FakeBackend([round_reply("bottle", diameter_cm=4, height_cm=14)]))
+        self.assertEqual(result.proportion_changes, [])
+        # Without grounding, code sets nothing.
+        result = write_spec("a body scrub", FakeBackend([round_reply("jar", diameter_cm=6.5, height_cm=10.5)]),
+                            grounding=False)
+        self.assertEqual(result.spec["jar"]["height_cm"], 10.5)
+        self.assertEqual(result.proportion_changes, [])
+
     def test_code_rules_apply_to_every_shape(self):
         # The style shift recolours the body, and the default cap follows the new body colour.
         result = write_spec("a luxury blush serum bottle", FakeBackend([round_reply("bottle", colour="#F4C2C2")]))

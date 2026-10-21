@@ -65,6 +65,28 @@ METALS = {
 # Polished metal: sharp but not mirror-perfect reflections, whatever the body's finish.
 METAL_ROUGHNESS = 0.15
 
+# Proportion limits of the round shapes, held by code after the model (v2 step
+# 3, spec_writer.write_spec). They clamp only clearly impossible values, never
+# a sensible one, so code doesn't pick sizes. Written from general product
+# knowledge, not from the eval ranges:
+# - cylinder (a stick, a tube, a can): 0.5 to 15 cm across, from a slim pencil
+#   to a wide tin or pillar candle; 2 to 40 cm tall, from a mini lip balm to a
+#   tall candle or a poster tube.
+# - bottle: at least 1.5 cm across: the narrowest bottles with a shoulder, a
+#   neck and a cap (roller and sample bottles) are 1.5-2 cm; narrower is a
+#   vial. At most 6 times as tall as it is wide: slim bottles (rollers, oil
+#   bottles) reach about 5; taller is a vial or a tube. At least as tall as it
+#   is wide is a validation rule; it is held here too, after the diameter.
+# - jar: never taller than it is wide: a jar is squat; taller is a canister.
+# Sizes are (lowest, highest) in cm, None for no limit, and are clamped first.
+# height_per_diameter is (lowest, highest) height / diameter, held by changing
+# the height, so the model's diameter stays.
+PROPORTION_LIMITS = {
+    "cylinder": {"diameter_cm": (0.5, 15.0), "height_cm": (2.0, 40.0)},
+    "bottle": {"diameter_cm": (1.5, None), "height_per_diameter": (1.0, 6.0)},
+    "jar": {"height_per_diameter": (None, 1.0)},
+}
+
 # The renderer adds strip lights for sharp highlights only when something in
 # the scene is glossy (roughness at most this) or metal, so a matte render
 # stays exactly as it was. The model's own "glossy" is 0.1-0.3, code's 0.05.
@@ -396,6 +418,41 @@ def _check_product(shape, fields, problems):
                 f"bottle.height_cm: a bottle is at least as tall as it is wide (diameter_cm "
                 f"{fields['diameter_cm']:g}), got {fields['height_cm']:g}. A shorter, wider container is a jar."
             )
+
+
+def clamp_proportions(spec):
+    """Hold a full spec's round shape to PROPORTION_LIMITS, in place. A box is left alone.
+
+    The sizes first, then the height against the diameter. Returns the
+    changes, {"rule", "field", "from", "to"} each, in the order they were
+    made, [] if none: every clamp is logged.
+    """
+    shape = spec["shape"]
+    fields = spec[shape]
+    limits = PROPORTION_LIMITS.get(shape, {})
+    changes = []
+
+    def hold(field, low, high, name, why=("", "")):
+        """Clamp fields[field] into low..high (None: no limit). why: a note for each side."""
+        value = fields[field]
+        if low is not None and value < low:
+            rule, to = f"{name} at least {low:g} cm{why[0]}", low
+        elif high is not None and value > high:
+            rule, to = f"{name} at most {high:g} cm{why[1]}", high
+        else:
+            return
+        changes.append({"rule": f"{shape} {rule}", "field": field, "from": value, "to": to})
+        fields[field] = to
+
+    for field, name in (("diameter_cm", "diameter"), ("height_cm", "height")):
+        if field in limits:
+            hold(field, *limits[field], name)
+    if "height_per_diameter" in limits:
+        low, high = limits["height_per_diameter"]
+        diameter = fields["diameter_cm"]
+        hold("height_cm", None if low is None else low * diameter, None if high is None else high * diameter,
+             "height", (f" ({low:g} x its diameter)" if low else "", f" ({high:g} x its diameter)" if high else ""))
+    return changes
 
 
 def default_cap_colour(body_colour):
