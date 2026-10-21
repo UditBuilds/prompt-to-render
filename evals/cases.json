@@ -1,5 +1,5 @@
 {
-  "about": "Eval cases for the spec writer. The first 30 were frozen in v1.1 before the grounding tables existed; v1.2 tightened some of their checks and added 7 cases, all before any v1.2 fix was written (see the git history). Each sentence goes through the same LLM + validation loop as prompt.py; the checks run on the final spec. Checks are ranges, not exact values, except where the sentence gives an exact hex. Colour checks use HSV hue (degrees) and saturation (0-1) and CIE L* lightness (0-100); named_colour checks use evals/colour_definitions.json (some of those are in HSL). neutral_backdrop (v1.3) wants a near-grey, light backdrop: R, G and B within max_spread of each other (0-255) and HSL lightness in %: every sentence that names no backdrop has it. colour_group marks the cases whose box colour name is in data/colours.json (in_table) and the 5 whose name is deliberately not (out_of_table: never add these names to the table). model_unsupported_mentions only looks at the model's own unsupported list, never at items the code added. style_shift compares a case's colour with an earlier case's (mean over its runs). A run also fails if no valid spec came back within 2 attempts. None of these sentences may be used to tune the prompt or the tables. v2 (shapes) added 15 cases, marked \"added\": \"v2\", committed before any v2 code: the shape chosen (shape reads spec.shape; a spec without one is a box, the default), the sizes of round shapes (shape_size and shape_ratio read the fields of the spec's own shape, so a box, which has no diameter_cm, fails them), unsupported items in the model's own list, and cap or lid colours (target \"cap\"; model_unsupported_excludes: the model must not list the cap or lid as unsupported). Their size ranges were written from general product knowledge before any size table had round shapes, for the product with its cap or lid on: lipstick 1.5-2.5 cm across and 7-9 cm tall (given in the brief); mascara 1.2-2.8 across, 10-16 tall (slim to chunky tubes); perfume bottle 3.5-9 across, 8-16 tall (30-100 ml), at least as tall as wide; serum bottle 2.5-4.5 across, 7-13 tall with its dropper (15-50 ml); face cream jar 5-9 across, 3-7 tall (30-100 ml), wider than tall. shape_lipstick_box repeats red_lipstick's sentence on purpose, to check only its shape and leave the 37 earlier cases untouched. v2 step 2 added 17 cases, marked \"added\": \"v2-step2\", committed before any step 2 code; the checks of the 52 earlier cases are untouched. Five are out-of-table shapes (\"shape_group\": \"out_of_table\"): products named in no data/ table, no prompt example and no dev sentence, so their shape and size are the model's own (never add them to any of those; a test enforces it). In v2 step 1 the shape choice was mostly copied: the size table names the shape, and the prompt names lip balm, deodorant stick and nail polish as shape examples. Expected shape and sizes, written from general product knowledge before any run, cap or lid on: micellar water = bottle, 3.5-9 cm across, 10-26 tall (100-700 ml); beard oil = bottle, 2.5-6 across, 7-16 tall (30-100 ml dropper bottles); eyebrow pencil = cylinder, 0.5-1.6 across, 9-19 tall (wooden or retractable); marker pen = cylinder, 0.8-2.6 across, 10-17 tall (fine to chunky); body butter = jar, 5-12 across, 3-9 tall (50-250 ml tubs), wider than tall. The other 12 check the step 2 fixes, with three new check types that measure code, not the model: metal (the metal a cap or lid is drawn in, set by code from a metal word for the cap or lid: gold, silver, chrome, copper, bronze, rose gold; null for none; two negatives: a gold logo, and a gold body with a black cap), cap_part (a cylinder is drawn as a base plus a cap, read from shapes.py's parts) and lid_share (the lid's height over the jar's, measured on shapes.py's profile; about a third, 0.25-0.35). The capped cylinders also check the existing cap colour rule on table colours: nude (light) gets the black cap #1A1A1A, navy (dark) the silver-grey #C0C0C0.",
+  "about": "Eval cases for the spec writer. The first 30 were frozen in v1.1 before the grounding tables existed; v1.2 tightened some of their checks and added 7 cases, all before any v1.2 fix was written (see the git history). Each sentence goes through the same LLM + validation loop as prompt.py; the checks run on the final spec. Checks are ranges, not exact values, except where the sentence gives an exact hex. Colour checks use HSV hue (degrees) and saturation (0-1) and CIE L* lightness (0-100); named_colour checks use evals/colour_definitions.json (some of those are in HSL). neutral_backdrop (v1.3) wants a near-grey, light backdrop: R, G and B within max_spread of each other (0-255) and HSL lightness in %: every sentence that names no backdrop has it. colour_group marks the cases whose box colour name is in data/colours.json (in_table) and the 5 whose name is deliberately not (out_of_table: never add these names to the table). model_unsupported_mentions only looks at the model's own unsupported list, never at items the code added. style_shift compares a case's colour with an earlier case's (mean over its runs). A run also fails if no valid spec came back within 2 attempts. None of these sentences may be used to tune the prompt or the tables. v2 (shapes) added 15 cases, marked \"added\": \"v2\", committed before any v2 code: the shape chosen (shape reads spec.shape; a spec without one is a box, the default), the sizes of round shapes (shape_size and shape_ratio read the fields of the spec's own shape, so a box, which has no diameter_cm, fails them), unsupported items in the model's own list, and cap or lid colours (target \"cap\"; model_unsupported_excludes: the model must not list the cap or lid as unsupported). Their size ranges were written from general product knowledge before any size table had round shapes, for the product with its cap or lid on: lipstick 1.5-2.5 cm across and 7-9 cm tall (given in the brief); mascara 1.2-2.8 across, 10-16 tall (slim to chunky tubes); perfume bottle 3.5-9 across, 8-16 tall (30-100 ml), at least as tall as wide; serum bottle 2.5-4.5 across, 7-13 tall with its dropper (15-50 ml); face cream jar 5-9 across, 3-7 tall (30-100 ml), wider than tall. shape_lipstick_box repeats red_lipstick's sentence on purpose, to check only its shape and leave the 37 earlier cases untouched. v2 step 2 added 17 cases, marked \"added\": \"v2-step2\", committed before any step 2 code; the checks of the 52 earlier cases are untouched. Five are out-of-table shapes (\"shape_group\": \"out_of_table\"): products named in no data/ table, no prompt example and no dev sentence, so their shape and size are the model's own (never add them to any of those; a test enforces it). In v2 step 1 the shape choice was mostly copied: the size table names the shape, and the prompt names lip balm, deodorant stick and nail polish as shape examples. Expected shape and sizes, written from general product knowledge before any run, cap or lid on: micellar water = bottle, 3.5-9 cm across, 10-26 tall (100-700 ml); beard oil = bottle, 2.5-6 across, 7-16 tall (30-100 ml dropper bottles); eyebrow pencil = cylinder, 0.5-1.6 across, 9-19 tall (wooden or retractable); marker pen = cylinder, 0.8-2.6 across, 10-17 tall (fine to chunky); body butter = jar, 5-12 across, 3-9 tall (50-250 ml tubs), wider than tall. The other 12 check the step 2 fixes, with three new check types that measure code, not the model: metal (the metal a cap or lid is drawn in, set by code from a metal word for the cap or lid: gold, silver, chrome, copper, bronze, rose gold; null for none; two negatives: a gold logo, and a gold body with a black cap), cap_part (a cylinder is drawn as a base plus a cap, read from shapes.py's parts) and lid_share (the lid's height over the jar's, measured on shapes.py's profile; about a third, 0.25-0.35). The capped cylinders also check the existing cap colour rule on table colours: nude (light) gets the black cap #1A1A1A, navy (dark) the silver-grey #C0C0C0. v2 step 3 added 6 cases, marked \"added\": \"v2-step3\", committed before any step 3 code; the checks of the 69 earlier cases are untouched. Five are new held-out colour names (\"colour_group\": \"out_of_table_new\", scored apart from the first five: those had been looked at across many sessions): vermilion, marigold, chartreuse, prussian blue and amethyst, in box sentences like the first five, so the step 3 shape rules (proportion limits, the jar's camera) can't touch them and they measure the colour format alone. Their ranges are in evals/colour_definitions.json, written from general colour knowledge before any run; the names are in no data/ table, the prompt, the schema, the dev set or any other eval sentence (a test checks). The sixth checks the step 3 jar lid, a quarter of the jar's height: lid_share 0.20-0.30, on the sentence of the docs jar render. lid_share is now measured to 6 decimals, like the HSL check, so a lid exactly on a range's edge isn't pushed past it by floating point (re-scoring the step 2 final run changes no run).",
   "cases": [
     {
       "id": "red_lipstick",
@@ -773,6 +773,72 @@
       "checks": [
         {"type": "shape", "equals": "jar"},
         {"type": "lid_share", "min": 0.25, "max": 0.35},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "oot_new_vermilion",
+      "added": "v2-step3",
+      "covers": "new held-out colour name: vermilion",
+      "colour_group": "out_of_table_new",
+      "sentence": "a vermilion lipstick box",
+      "checks": [
+        {"type": "named_colour", "name": "vermilion"},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "oot_new_marigold",
+      "added": "v2-step3",
+      "covers": "new held-out colour name: marigold",
+      "colour_group": "out_of_table_new",
+      "sentence": "a marigold candle box",
+      "checks": [
+        {"type": "named_colour", "name": "marigold"},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "oot_new_chartreuse",
+      "added": "v2-step3",
+      "covers": "new held-out colour name: chartreuse",
+      "colour_group": "out_of_table_new",
+      "sentence": "a chartreuse soap box",
+      "checks": [
+        {"type": "named_colour", "name": "chartreuse"},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "oot_new_prussian_blue",
+      "added": "v2-step3",
+      "covers": "new held-out colour name: prussian blue",
+      "colour_group": "out_of_table_new",
+      "sentence": "a prussian blue perfume box",
+      "checks": [
+        {"type": "named_colour", "name": "prussian blue"},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "oot_new_amethyst",
+      "added": "v2-step3",
+      "covers": "new held-out colour name: amethyst",
+      "colour_group": "out_of_table_new",
+      "sentence": "an amethyst serum box",
+      "checks": [
+        {"type": "named_colour", "name": "amethyst"},
+        {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
+      ]
+    },
+    {
+      "id": "lid_quarter_jar",
+      "added": "v2-step3",
+      "covers": "jar lid about a quarter of the jar's height: 20-30% (code)",
+      "sentence": "a sage green face cream jar",
+      "checks": [
+        {"type": "shape", "equals": "jar"},
+        {"type": "lid_share", "min": 0.20, "max": 0.30},
         {"type": "neutral_backdrop", "max_spread": 20, "min_lightness": 80}
       ]
     }

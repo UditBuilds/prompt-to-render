@@ -24,6 +24,7 @@ summary next to it.
 
 import argparse
 import colorsys
+import copy
 import json
 import os
 import re
@@ -336,7 +337,12 @@ def check_cap_part(check, result, done):
 
 
 def check_lid_share(check, result, done):
-    """The lid's height as a share of the whole jar's, measured on the profile the renderer draws. Decided by code."""
+    """The lid's height as a share of the whole jar's, measured on the profile the renderer draws. Decided by code.
+
+    Rounded to 6 decimals, like hex_to_hsl, so a lid exactly on a range's
+    edge isn't pushed past it by floating point: a lid of 0.30 of a 3.5 cm
+    jar computes as 0.30000000000000004, of a 4.5 cm jar as 0.3.
+    """
     shape = shape_of(result.spec)
     lid = None
     if shape != "box":
@@ -344,7 +350,7 @@ def check_lid_share(check, result, done):
     if lid is None:
         return False, f"shape {shape} has no lid (want lid share {describe_range(check)})"
     heights = [z for _, z in lid.profile]
-    share = (max(heights) - min(heights)) / (product_of(result.spec)["height_cm"] / 100)
+    share = round((max(heights) - min(heights)) / (product_of(result.spec)["height_cm"] / 100), 6)
     return in_range(share, check), f"lid {share:.3f} of the jar's height (want {describe_range(check)})"
 
 
@@ -431,6 +437,31 @@ def run_checks(case, result, done=None):
         passed, found = CHECKS[check["type"]](check, result, done or {})
         outcomes.append({"check": check["type"], "passed": passed, "found": found})
     return outcomes
+
+
+def unclamped_spec(spec, changes):
+    """The spec as the model wrote it, before code clamped its proportions (v2 step 3).
+
+    `changes` is the run's proportion_changes: {"rule", "field", "from", "to"}
+    per clamp, in the order they fired, each on a field of the spec's own shape.
+    """
+    spec = json.loads(json.dumps(spec))
+    for change in reversed(changes):
+        product_of(spec)[change["field"]] = change["from"]
+    return spec
+
+
+def checks_without_clamps(case, result, changes, done=None):
+    """The checks run again on the spec before any proportion clamp, or None if no clamp fired.
+
+    A run that passes with the clamps but not without them passed only
+    because code clamped a size: that is code's pass, not the model's.
+    """
+    if not (result.ok and changes):
+        return None
+    model = copy.copy(result)
+    model.spec = unclamped_spec(result.spec, changes)
+    return run_checks(case, model, done)
 
 
 # ---------------------------------------------------------------------------
@@ -578,6 +609,10 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
         result = write_spec(case["sentence"], backend, grounding=grounding, tables=tables)
         outcomes = run_checks(case, result, done)
         passed = all(o["passed"] for o in outcomes)
+        # v2 step 3: the sizes code clamped ({"rule", "field", "from", "to"}), and the
+        # checks on the spec before them (None if no clamp fired).
+        clamps = getattr(result, "proportion_changes", None) or []
+        unclamped = checks_without_clamps(case, result, clamps, done)
         retry_note = ", retried" if result.retried else ""
         print(f"  run {n}: {'PASS' if passed else 'FAIL'}  "
               f"({len(result.attempts)} attempt{'s' if result.retried else ''}{retry_note}, "
@@ -585,6 +620,8 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
         for o in outcomes:
             if not o["passed"]:
                 print(f"         x {o['found']}")
+        if passed and unclamped and not all(o["passed"] for o in unclamped):
+            print("         (passed only because code clamped a size)")
         case_runs.append({
             "run": n,
             "passed": passed,
@@ -613,6 +650,10 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
             "metal_change": getattr(result, "metal_change", None),
             # v2 step 2: a tube or can code redrew as a cylinder ({"real", "from", "to"}), None if none.
             "shape_fixed": getattr(result, "shape_fixed", None),
+            # v2 step 3: proportion clamps, and whether the run passes without them (None: no clamp fired).
+            "proportion_changes": clamps,
+            "checks_without_clamps": unclamped,
+            "passed_without_clamps": None if unclamped is None else all(o["passed"] for o in unclamped),
             "spec": result.spec,
             "validation_errors": [a.errors for a in result.attempts],
             "outputs": [a.reply.text for a in result.attempts],
@@ -628,8 +669,11 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
             "total_runs": len(case_runs), "distinct_specs": distinct, "runs": case_runs}
 
 
-# colour_group in cases.json -> how the summary names it.
-COLOUR_GROUPS = {"in_table": "In-table colours", "out_of_table": "Out-of-table colours"}
+# colour_group in cases.json -> how the summary names it. The five held-out
+# names of v1.1 and the five of v2 step 3 are scored apart: the first five had
+# been looked at across many sessions, so only the new five are fully clean.
+COLOUR_GROUPS = {"in_table": "In-table colours", "out_of_table": "Out-of-table colours, old 5",
+                 "out_of_table_new": "Out-of-table colours, new 5"}
 
 
 def box_colour_passed(case, run):
@@ -667,14 +711,19 @@ def summarise_groups(results):
     return groups
 
 
-# The check types behind the shape scores: the shape chosen, and the sizes of
-# that shape. The products in no table and no prompt example (shape_group
+# The check types behind the shape scores: the shape chosen, the sizes of
+# that shape, and both in the same run (v2 step 3; only over the cases that
+# check both, since a size check on the wrong shape reads that shape's
+# fields). The products in no table and no prompt example (shape_group
 # "out_of_table", v2 step 2) are scored apart: only they measure the model's
 # own knowledge of shapes.
-SHAPE_SCORES = {"choice": ("shape",), "sizes": ("shape_size", "shape_ratio")}
+SHAPE_SCORES = {"choice": ("shape",), "sizes": ("shape_size", "shape_ratio"),
+                "both": ("shape", "shape_size", "shape_ratio")}
 SHAPE_SCORE_NAMES = {"choice": "Shape choice", "sizes": "Shape sizes",
+                     "both": "Shape choice and sizes in the same run",
                      "oot_choice": "Out-of-table products: shape choice",
-                     "oot_sizes": "Out-of-table products: shape sizes"}
+                     "oot_sizes": "Out-of-table products: shape sizes",
+                     "oot_both": "Out-of-table products: shape and size in the same run"}
 # Other checks scored on their own, over every case that has them. The rules
 # code decides measure the code, not the model.
 CHECK_SCORES = {"unsupported": ("model_unsupported_mentions", "model_unsupported_excludes"),
@@ -683,32 +732,47 @@ CHECK_SCORE_NAMES = {"unsupported": "Unsupported lists (the model's own)",
                      "code_rules": "Rules decided by code (metal cap or lid, cylinder cap, lid share)"}
 # "added" in cases.json -> the summary's group, and how it is named.
 ADDED_GROUPS = {"before_v2": (None, "Cases from before v2"), "v2": ("v2", "Cases added in v2"),
-                "v2_step2": ("v2-step2", "Cases added in v2 step 2")}
+                "v2_step2": ("v2-step2", "Cases added in v2 step 2"),
+                "v2_step3": ("v2-step3", "Cases added in v2 step 3")}
 
 
-def checks_passed(case, run, types):
+def checks_passed(case, run, types, unclamped=False):
     """Did the run pass every check of these types? None if the case has none.
 
-    An invalid spec counts as a fail.
+    An invalid spec counts as a fail. With unclamped, the checks on the spec
+    before code clamped its proportions (the same checks if no clamp fired).
     """
     indexes = [i for i, c in enumerate(case["checks"]) if c["type"] in types]
     if not indexes:
         return None
-    return run["valid"] and all(run["checks"][i]["passed"] for i in indexes)
+    checks = (unclamped and run.get("checks_without_clamps")) or run["checks"]
+    return run["valid"] and all(checks[i]["passed"] for i in indexes)
+
+
+def clamp_only(run):
+    """True if the run passed only because code clamped a size: it fails on the spec before the clamps."""
+    return run["passed"] and run.get("passed_without_clamps") is False
 
 
 def score(results, types):
-    """Runs passing every check of these types, over the cases that have any. None if no case has one."""
+    """Runs passing every check of these types, over the cases that have any. None if no case has one.
+
+    clamp_only_runs: of those passes, the ones that pass only because code
+    clamped a size. They count for the code, not the model.
+    """
     runs = [(c, r) for c in results for r in c["runs"] if checks_passed(c, r, types) is not None]
     if not runs:
         return None
     return {"cases": len({c["id"] for c, _ in runs}), "total_runs": len(runs),
-            "passed_runs": sum(bool(checks_passed(c, r, types)) for c, r in runs)}
+            "passed_runs": sum(bool(checks_passed(c, r, types)) for c, r in runs),
+            "clamp_only_runs": sum(bool(checks_passed(c, r, types)) and not checks_passed(c, r, types, True)
+                                   for c, r in runs)}
 
 
 def summarise_shapes(results):
-    """The shape checks alone, and the size checks alone, over the cases that have them;
-    the out-of-table products ("oot_choice", "oot_sizes") apart from the others.
+    """The shape checks alone, the size checks alone, and both in the same run, over the cases
+    that have them; the out-of-table products ("oot_choice", "oot_sizes", "oot_both") apart
+    from the others.
 
     Counted like the named-colour check of the colour groups: the other
     checks of these cases (e.g. the neutral backdrop) are set by code.
@@ -718,10 +782,18 @@ def summarise_shapes(results):
     scores = {}
     for prefix, cases in groups.items():
         for name, types in SHAPE_SCORES.items():
-            found = score(cases, types)
+            scored = cases
+            if name == "both":
+                scored = [c for c in cases if "shape" in check_types(c)
+                          and {"shape_size", "shape_ratio"} & check_types(c)]
+            found = score(scored, types)
             if found:
                 scores[prefix + name] = found
     return scores
+
+
+def check_types(case):
+    return {c["type"] for c in case["checks"]}
 
 
 def summarise_checks(results):
@@ -740,7 +812,8 @@ def summarise_added(results):
         cases = [c for c in results if c.get("added") == added]
         if cases:
             groups[name] = {"cases": len(cases), "total_runs": sum(c["total_runs"] for c in cases),
-                            "passed_runs": sum(c["passed_runs"] for c in cases)}
+                            "passed_runs": sum(c["passed_runs"] for c in cases),
+                            "clamp_only_runs": sum(clamp_only(r) for c in cases for r in c.get("runs", []))}
     return groups
 
 
@@ -764,6 +837,10 @@ def summarise(results, peak_gpu_mib=None):
         # Runs where the "<shape> shape" item in unsupported came from the
         # code (from the model's shape field), not from the model's own list.
         "shape_added_by_code_runs": sum(bool(r.get("shape_added_by_code")) for r in runs),
+        # v2 step 3: runs where code clamped a size, and the passes that hold only because of it.
+        "clamp_runs": sum(bool(r.get("proportion_changes")) for r in runs),
+        "clamp_only_runs": sum(clamp_only(r) for r in runs),
+        "clamp_only": [f"{case['id']} run {r['run']}" for case in results for r in case["runs"] if clamp_only(r)],
         "avg_llm_seconds": round(sum(r["llm_seconds"] for r in runs) / total, 2) if total else None,
         "avg_prompt_tokens": round(sum(r["prompt_tokens"] for r in runs) / total) if total else None,
         # Per LLM call, not per run: a retry sends a longer prompt, and the
@@ -784,6 +861,12 @@ def percent(part, total):
     rounding it again turned 66/111 (59.46%) into 0.595 and then 60%.
     """
     return f"{(200 * part + total) // (2 * total)}%"
+
+
+def clamped(group):
+    """ ", N of them only because code clamped a size", or "" if none."""
+    n = group.get("clamp_only_runs", 0)
+    return f", {n} of them only because code clamped a size" if n else ""
 
 
 def markdown_table(report):
@@ -812,7 +895,7 @@ def markdown_table(report):
     lines += [
         "",
         f"- **Overall:** {s['passed_runs']}/{s['total_runs']} runs passed "
-        f"({percent(s['passed_runs'], s['total_runs'])}); "
+        f"({percent(s['passed_runs'], s['total_runs'])}){clamped(s)}; "
         f"{s['cases_passing_all_runs']}/{s['total_cases']} cases passed every run.",
     ]
     added = s.get("added_groups", {})
@@ -821,7 +904,7 @@ def markdown_table(report):
             g = added.get(name)
             if g:
                 lines.append(f"- **{title}** ({g['cases']} cases): {g['passed_runs']}/{g['total_runs']} runs "
-                             f"passed ({percent(g['passed_runs'], g['total_runs'])}).")
+                             f"passed ({percent(g['passed_runs'], g['total_runs'])}){clamped(g)}.")
     for group, g in s.get("colour_groups", {}).items():
         lines.append(f"- **{COLOUR_GROUPS[group]}** ({g['cases']} cases): the named-colour check passed in "
                      f"{g['colour_passed_runs']}/{g['total_runs']} runs; every check in "
@@ -830,7 +913,11 @@ def markdown_table(report):
                           (CHECK_SCORE_NAMES, s.get("check_scores", {}))):
         for name, g in scores.items():
             lines.append(f"- **{names[name]}** ({g['cases']} cases): passed in {g['passed_runs']}/"
-                         f"{g['total_runs']} runs ({percent(g['passed_runs'], g['total_runs'])}).")
+                         f"{g['total_runs']} runs ({percent(g['passed_runs'], g['total_runs'])}){clamped(g)}.")
+    if s.get("clamp_runs"):
+        lines.append(f"- **Sizes clamped by code:** in {s['clamp_runs']}/{s['total_runs']} runs. Passed only "
+                     f"because of a clamp (they fail on the model's own sizes): "
+                     f"{', '.join(s['clamp_only']) or 'none'}.")
     lines += [
         f"- **Retry loop fired:** {s['retry_runs']}/{s['total_runs']} runs "
         f"({percent(s['retry_runs'], s['total_runs'])}); "

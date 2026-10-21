@@ -18,7 +18,7 @@ from types import SimpleNamespace
 EVALS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(EVALS_DIR))
 
-from run_evals import load_cases, markdown_table, run_checks, summarise  # noqa: E402
+from run_evals import checks_without_clamps, load_cases, markdown_table, run_checks, summarise  # noqa: E402
 
 
 def saved_result(run):
@@ -37,8 +37,13 @@ def rescore(report, cases):
         case["checks"] = current["checks"]
         case["shape_group"] = current.get("shape_group")
         for run in case["runs"]:
-            run["checks"] = run_checks(current, saved_result(run), done)
+            result = saved_result(run)
+            run["checks"] = run_checks(current, result, done)
             run["passed"] = all(o["passed"] for o in run["checks"])
+            # v2 step 3: the checks again on the sizes before any proportion clamp.
+            unclamped = checks_without_clamps(current, result, run.get("proportion_changes"), done)
+            run["checks_without_clamps"] = unclamped
+            run["passed_without_clamps"] = None if unclamped is None else all(o["passed"] for o in unclamped)
         case["passed_runs"] = sum(r["passed"] for r in case["runs"])
         done[case["id"]] = case
     report["summary"] = summarise(report["cases"], report.get("summary", {}).get("peak_gpu_mib"))

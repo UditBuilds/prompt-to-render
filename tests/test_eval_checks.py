@@ -9,14 +9,16 @@ import os
 import re
 import sys
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "evals"))
 
+import llm_backend  # noqa: E402
 import rescore  # noqa: E402
 import run_evals  # noqa: E402
-from grounding import load_tables, lookup  # noqa: E402
+from grounding import load_finishes, load_tables, lookup  # noqa: E402
 from spec import validate_spec  # noqa: E402
 
 
@@ -226,18 +228,23 @@ class ShapeChecks(unittest.TestCase):
                     "runs": [run(True, True, False), run(True, False), run(False, True), run(True, True, valid=False)]},
                    {"id": "other", "checks": checks[2:], "runs": [run(True, True)]}]
         self.assertEqual(run_evals.summarise_shapes(results),
-                         {"choice": {"cases": 1, "total_runs": 4, "passed_runs": 2},
-                          "sizes": {"cases": 1, "total_runs": 4, "passed_runs": 2}})
+                         {"choice": {"cases": 1, "total_runs": 4, "passed_runs": 2, "clamp_only_runs": 0},
+                          "sizes": {"cases": 1, "total_runs": 4, "passed_runs": 2, "clamp_only_runs": 0},
+                          # v2 step 3: shape and size both right in the same run.
+                          "both": {"cases": 1, "total_runs": 4, "passed_runs": 1, "clamp_only_runs": 0}})
 
     def test_cases_added_in_v2_are_counted_apart(self):
         results = [{"id": "old", "total_runs": 3, "passed_runs": 3},
                    {"id": "new", "added": "v2", "total_runs": 3, "passed_runs": 1}]
         self.assertEqual(run_evals.summarise_added(results),
-                         {"before_v2": {"cases": 1, "total_runs": 3, "passed_runs": 3},
-                          "v2": {"cases": 1, "total_runs": 3, "passed_runs": 1}})
+                         {"before_v2": {"cases": 1, "total_runs": 3, "passed_runs": 3, "clamp_only_runs": 0},
+                          "v2": {"cases": 1, "total_runs": 3, "passed_runs": 1, "clamp_only_runs": 0}})
         results.append({"id": "newer", "added": "v2-step2", "total_runs": 3, "passed_runs": 2})
         self.assertEqual(run_evals.summarise_added(results)["v2_step2"],
-                         {"cases": 1, "total_runs": 3, "passed_runs": 2})
+                         {"cases": 1, "total_runs": 3, "passed_runs": 2, "clamp_only_runs": 0})
+        results.append({"id": "newest", "added": "v2-step3", "total_runs": 3, "passed_runs": 3})
+        self.assertEqual(run_evals.summarise_added(results)["v2_step3"],
+                         {"cases": 1, "total_runs": 3, "passed_runs": 3, "clamp_only_runs": 0})
 
 
 class StepTwoChecks(unittest.TestCase):
@@ -260,6 +267,19 @@ class StepTwoChecks(unittest.TestCase):
         self.assertIn(f"lid {share:.3f}", run_evals.CHECKS["lid_share"](check, jar, {})[1])
         self.assertFalse(passes(check, shaped("bottle", diameter_cm=3, height_cm=10, cap_colour="#1A1A1A")))
         self.assertFalse(passes(check, FakeResult()))
+
+    def test_lid_share_on_a_range_edge(self):
+        # v2 step 3: the share is rounded to 6 decimals, like hex_to_hsl. Unrounded,
+        # a lid of 0.30 of a 3.5 cm jar computed as 0.30000000000000004 and one of
+        # 0.25 of a 4.5 cm jar as 0.24999999999999992.
+        top = {"type": "lid_share", "min": 0.20, "max": 0.30}
+        bottom = {"type": "lid_share", "min": 0.25, "max": 0.35}
+        with mock.patch.object(run_evals.shapes, "JAR_LID_HEIGHT", 0.30):
+            self.assertTrue(passes(top, shaped("jar", diameter_cm=5.5, height_cm=3.5, lid_colour="#1A1A1A")))
+        with mock.patch.object(run_evals.shapes, "JAR_LID_HEIGHT", 0.25):
+            self.assertTrue(passes(bottom, shaped("jar", diameter_cm=6.5, height_cm=4.5, lid_colour="#1A1A1A")))
+        with mock.patch.object(run_evals.shapes, "JAR_LID_HEIGHT", 0.31):
+            self.assertFalse(passes(top, shaped("jar", diameter_cm=5.5, height_cm=3.5, lid_colour="#1A1A1A")))
 
     def test_metal(self):
         gold = {"type": "metal", "target": "cap", "equals": "gold"}
@@ -294,13 +314,63 @@ class StepTwoChecks(unittest.TestCase):
                                   {"type": "model_unsupported_excludes", "any": ["cap"]}],
                         [(True, False), (True, True)])]
         self.assertEqual(run_evals.summarise_shapes(results),
-                         {"choice": {"cases": 1, "total_runs": 2, "passed_runs": 2},
-                          "sizes": {"cases": 1, "total_runs": 2, "passed_runs": 1},
-                          "oot_choice": {"cases": 1, "total_runs": 3, "passed_runs": 2},
-                          "oot_sizes": {"cases": 1, "total_runs": 3, "passed_runs": 3}})
+                         {"choice": {"cases": 1, "total_runs": 2, "passed_runs": 2, "clamp_only_runs": 0},
+                          "sizes": {"cases": 1, "total_runs": 2, "passed_runs": 1, "clamp_only_runs": 0},
+                          "both": {"cases": 1, "total_runs": 2, "passed_runs": 1, "clamp_only_runs": 0},
+                          "oot_choice": {"cases": 1, "total_runs": 3, "passed_runs": 2, "clamp_only_runs": 0},
+                          "oot_sizes": {"cases": 1, "total_runs": 3, "passed_runs": 3, "clamp_only_runs": 0},
+                          "oot_both": {"cases": 1, "total_runs": 3, "passed_runs": 2, "clamp_only_runs": 0}})
         self.assertEqual(run_evals.summarise_checks(results),
-                         {"unsupported": {"cases": 1, "total_runs": 2, "passed_runs": 1},
-                          "code_rules": {"cases": 1, "total_runs": 2, "passed_runs": 2}})
+                         {"unsupported": {"cases": 1, "total_runs": 2, "passed_runs": 1, "clamp_only_runs": 0},
+                          "code_rules": {"cases": 1, "total_runs": 2, "passed_runs": 2, "clamp_only_runs": 0}})
+
+
+class ClampedSizes(unittest.TestCase):
+    """v2 step 3: a pass that holds only because code clamped a size is code's, not the model's."""
+
+    def test_checks_run_again_on_the_models_own_sizes(self):
+        case = {"id": "jar", "checks": [{"type": "shape", "equals": "jar"},
+                                        {"type": "shape_ratio", "num": "height_cm", "den": "diameter_cm", "max": 1}]}
+        result = shaped("jar", diameter_cm=6.5, height_cm=6.5, lid_colour="#1A1A1A")
+        changes = [{"rule": "jar height at most its diameter", "field": "height_cm", "from": 10.5, "to": 6.5}]
+        self.assertEqual(run_evals.unclamped_spec(result.spec, changes)["jar"]["height_cm"], 10.5)
+        self.assertEqual(result.spec["jar"]["height_cm"], 6.5)  # the run's own spec is left as it is
+        self.assertTrue(all(o["passed"] for o in run_evals.run_checks(case, result)))
+        without = run_evals.checks_without_clamps(case, result, changes)
+        self.assertEqual([o["passed"] for o in without], [True, False])
+        self.assertIsNone(run_evals.checks_without_clamps(case, result, []))
+
+    def test_clamp_only_passes_are_counted_apart(self):
+        checks = [{"type": "shape", "equals": "jar"}, {"type": "shape_size", "field": "height_cm", "max": 9}]
+
+        def run(passed, without=None):
+            unclamped = None if without is None else [{"passed": True}, {"passed": without}]
+            return {"valid": True, "passed": passed, "checks": [{"passed": True}, {"passed": passed}],
+                    "checks_without_clamps": unclamped,
+                    "passed_without_clamps": None if without is None else without}
+
+        runs = [run(True), run(True, without=False), run(True, without=True), run(False, without=False)]
+        self.assertEqual([run_evals.clamp_only(r) for r in runs], [False, True, False, False])
+        results = [{"id": "oot", "checks": checks, "shape_group": "out_of_table", "runs": runs,
+                    "total_runs": 4, "passed_runs": 3, "added": "v2-step2"}]
+        self.assertEqual(run_evals.summarise_shapes(results)["oot_both"],
+                         {"cases": 1, "total_runs": 4, "passed_runs": 3, "clamp_only_runs": 1})
+        self.assertEqual(run_evals.summarise_added(results)["v2_step2"]["clamp_only_runs"], 1)
+
+    def test_rescore_reruns_the_checks_without_clamps(self):
+        spec = validate_spec({"shape": "jar", "jar": {"diameter_cm": 6.5, "height_cm": 6.5},
+                              "background_colour": "#F5F5F5"})
+        run = {"valid": True, "spec": spec, "validation_errors": [[]], "is_box": False, "shape": "jar",
+               "unsupported": [], "model_unsupported": [], "passed": False, "retried": False,
+               "llm_seconds": 2.0, "prompt_tokens": 100, "output_tokens": 50, "call_prompt_tokens": [100],
+               "checks": [],
+               "proportion_changes": [{"rule": "jar height at most its diameter", "field": "height_cm",
+                                       "from": 10.5, "to": 6.5}]}
+        report = {"cases": [{"id": "oot_shape_body_butter", "checks": [], "runs": [run], "passed_runs": 0,
+                             "total_runs": 1, "distinct_specs": 1}]}
+        rescore.rescore(report, run_evals.load_cases())
+        self.assertFalse(run["passed_without_clamps"])  # 10.5 tall: outside 3-9, not wider than tall
+        self.assertFalse(run["passed"])  # 6.5 x 6.5: not wider than tall either, so no clamp-only pass
 
 
 class ColourDefinitions(unittest.TestCase):
@@ -342,15 +412,16 @@ class ColourDefinitions(unittest.TestCase):
 class Cases(unittest.TestCase):
     def test_cases_use_known_checks_and_colours(self):
         cases = run_evals.load_cases()
-        self.assertEqual(len(cases), 69)  # 30 from v1.1, 7 added in v1.2, 15 in v2, 17 in v2 step 2
+        self.assertEqual(len(cases), 75)  # 30 from v1.1, 7 added in v1.2, 15 in v2, 17 in v2 step 2, 6 in step 3
         self.assertEqual(sum(c.get("added") == "v2" for c in cases), 15)
         self.assertEqual(sum(c.get("added") == "v2-step2" for c in cases), 17)
-        self.assertEqual(len({c["id"] for c in cases}), 69)
+        self.assertEqual(sum(c.get("added") == "v2-step3" for c in cases), 6)
+        self.assertEqual(len({c["id"] for c in cases}), 75)
         # One sentence on purpose twice: shape_lipstick_box checks only the shape of red_lipstick's.
         sentences = [c["sentence"] for c in cases]
         repeated = {s for s in sentences if sentences.count(s) > 1}
         self.assertEqual(repeated, {"a red lipstick box"})
-        self.assertEqual(len(set(sentences)), 68)
+        self.assertEqual(len(set(sentences)), 74)
         for case in cases:
             for check in case["checks"]:
                 self.assertIn(check["type"], run_evals.CHECKS, case["id"])
@@ -385,6 +456,36 @@ class Cases(unittest.TestCase):
                 rows = lookup(case["sentence"]).rows
                 self.assertEqual([r["name"] for r in rows if r["table"] in ("colours", "styles")], [])
                 self.assertNotRegex(case["sentence"], r"\b(?:backdrop|background)\b")
+
+    def test_new_out_of_table_colours_stay_out_of_everything(self):
+        # v2 step 3's five held-out names, kept apart from the first five (looked at
+        # across many sessions). Never add them to a data/ table, the prompt or its
+        # schema, the dev set, or another eval sentence.
+        cases = [c for c in run_evals.load_cases() if c.get("colour_group") == "out_of_table_new"]
+        names = [box_colour_name(c) for c in cases]
+        self.assertEqual(names, ["vermilion", "marigold", "chartreuse", "prussian blue", "amethyst"])
+        tables = dict(load_tables(), finishes=load_finishes())
+        texts = {
+            "data/ tables": " | ".join(phrase.lower() for entries in tables.values() for name, row in entries.items()
+                                       for phrase in [name] + row.get("aliases", [])),
+            "the prompt and its schema": llm_backend.system_prompt().lower(),
+            "other eval sentences": " | ".join(c["sentence"].lower() for c in run_evals.load_cases()
+                                               if c not in cases),
+        }
+        with open(os.path.join(ROOT, "evals", "dev_cases.json"), encoding="utf-8") as f:
+            texts["the dev set"] = " | ".join(c["sentence"].lower() for c in json.load(f)["cases"])
+        for case, name in zip(cases, names):
+            word = name.split()[0]  # "prussian": "blue" alone is in the table's "navy blue"
+            for where, text in texts.items():
+                with self.subTest(colour=name, where=where):
+                    self.assertNotRegex(text, r"\b" + re.escape(word) + r"\b")
+            with self.subTest(colour=name, where="grounding"):
+                # No colour row and no style shift reach the model or the code for these sentences.
+                rows = lookup(case["sentence"]).rows
+                self.assertEqual([r["name"] for r in rows if r["table"] in ("colours", "styles")], [])
+                self.assertNotRegex(case["sentence"], r"\b(?:backdrop|background)\b")
+                # Box sentences, like the first five: no round shape's rule can touch them.
+                self.assertRegex(case["sentence"], r"\bbox$")
 
     def test_out_of_table_shape_products_stay_out_of_the_tables_prompt_and_dev_set(self):
         # They measure the model's own knowledge of shapes and sizes. Never add these

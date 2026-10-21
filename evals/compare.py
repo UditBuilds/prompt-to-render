@@ -8,8 +8,11 @@ how its runs got their values: a box colour copied from a colour table row,
 a colour shifted by code for a style word, a box size equal to a product's
 typical size, a roughness clamped by code for "glossy", or a backdrop made
 neutral by code, or a cap or lid colour set by code, or a metal cap or lid
-set by code, or a tube or can redrawn as a cylinder by code. Those are passes the
-tables and code make easy, so they are counted, not hidden. A backdrop is counted whenever the code changed
+set by code, or a tube or can redrawn as a cylinder by code, or a size clamped
+by code (v2 step 3). Those are passes the tables and code make easy, so they
+are counted, not hidden. A pass that holds only because code clamped a size
+is not counted as the model's: those rows give the model's passes, then the
+clamp-only passes apart ("+ 2 clamp-only"). A backdrop is counted whenever the code changed
 it, even from another neutral grey; one the model had already set to the
 code's #F5F5F5 isn't.
 
@@ -27,7 +30,8 @@ sys.path.insert(0, os.path.dirname(EVALS_DIR))
 
 from grounding import load_tables  # noqa: E402
 from run_evals import (ADDED_GROUPS, CHECK_SCORE_NAMES, COLOUR_GROUPS, SHAPE_SCORE_NAMES,  # noqa: E402
-                       load_cases, percent, product_of, shape_of, summarise_checks, summarise_shapes)
+                       clamp_only, load_cases, percent, product_of, shape_of, summarise_checks,
+                       summarise_shapes)
 
 
 def load(path):
@@ -47,8 +51,9 @@ def max_prompt_tokens(report):
 
 def how_values_came(case, tables):
     """Counts, over a case's runs, of values taken straight from the tables or set by code."""
-    copied = shifted = typical = glossy = backdrop = cap = metal = redrawn = 0
+    copied = shifted = typical = glossy = backdrop = cap = metal = redrawn = clamped = 0
     for run in case["runs"]:
+        clamped += bool(run.get("proportion_changes"))
         glossy += bool(run.get("finish_change"))
         backdrop += bool(run.get("backdrop_change"))
         cap += bool(run.get("cap_change"))
@@ -90,7 +95,17 @@ def how_values_came(case, tables):
         parts.append(f"metal by code {metal}")
     if redrawn:
         parts.append(f"shape redrawn by code {redrawn}")
+    if clamped:
+        only = sum(clamp_only(r) for r in case["runs"])
+        parts.append(f"size clamped by code {clamped}" + (f" ({only} pass only because of it)" if only else ""))
     return ", ".join(parts) or "-"
+
+
+def model_cell(passed, total, clamp_only_runs=0):
+    """The model's passes (without the clamp-only ones), then the clamp-only passes apart."""
+    own = passed - clamp_only_runs
+    cell = f"{own}/{total} ({percent(own, total)})"
+    return cell + (f" + {clamp_only_runs} clamp-only" if clamp_only_runs else "")
 
 
 def main(paths):
@@ -113,8 +128,8 @@ def main(paths):
     def row(title, values):
         lines.append(f"| **{title}** | " + " | ".join(values) + " | |")
 
-    row("Runs passed", [f"{r['summary']['passed_runs']}/{r['summary']['total_runs']} "
-                        f"({percent(r['summary']['passed_runs'], r['summary']['total_runs'])})" for r in reports])
+    row("Runs passed", [model_cell(r["summary"]["passed_runs"], r["summary"]["total_runs"],
+                                   sum(clamp_only(run) for c in r["cases"] for run in c["runs"])) for r in reports])
     # Split by the current cases.json, so a report from before v2 (all of
     # whose cases are from before v2) is counted the same way.
     current = {c["id"]: c for c in load_cases()}
@@ -123,7 +138,8 @@ def main(paths):
         for r in reports:
             cases = [c for c in r["cases"] if current.get(c["id"], {}).get("added") == which]
             passed, total = sum(c["passed_runs"] for c in cases), sum(c["total_runs"] for c in cases)
-            cells.append(f"{passed}/{total} ({percent(passed, total)})" if total else "n/a")
+            only = sum(clamp_only(run) for c in cases for run in c["runs"])
+            cells.append(model_cell(passed, total, only) if total else "n/a")
         row(f"Runs passed, {title[0].lower()}{title[1:]}", cells)
     for r in reports:
         for c in r["cases"]:
@@ -140,8 +156,7 @@ def main(paths):
         cells = []
         for s in scores:
             g = s.get(name)
-            cells.append(f"{g['passed_runs']}/{g['total_runs']} ({percent(g['passed_runs'], g['total_runs'])})"
-                         if g else "n/a")
+            cells.append(model_cell(g["passed_runs"], g["total_runs"], g.get("clamp_only_runs", 0)) if g else "n/a")
         row(f"{title} right", cells)
     row("Cases passing every run", [f"{r['summary']['cases_passing_all_runs']}/{r['summary']['total_cases']}"
                                     for r in reports])

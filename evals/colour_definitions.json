@@ -1,5 +1,5 @@
 {
-  "about": "What each colour name must look like, for the eval checks. Written from general colour definitions (Wikipedia colour articles, CSS, Pantone), never derived from the model's output. Two colour spaces are used. Without a 'space' key (the v1.1 definitions): hue is HSV hue in degrees (a range like [335, 3] wraps round through 0), saturation is HSV saturation 0-1, lightness is CIE L* 0-100. With \"space\": \"hsl\" (v1.2): hue in degrees, saturation and lightness are HSL, in %. Method 'references': the span of the reference colours, widened by fixed tolerances (hue 10 deg; saturation 0.15 HSV or 15 points HSL; lightness 10 L* or 10 points HSL) and rounded outward. Method 'description': only one standard reference, or the common meaning differs from the reference, so the range follows the written description. Method 'review' (v1.2): the range was set after reviewing the v1.1 renders, where the v1.1 reference colour looked wrong in the image. 'must_fail' lists colours the range must reject. tests/test_eval_checks.py checks that every reference falls inside its range and every must_fail colour outside. The out-of-table colours (rust, ochre, fuchsia, periwinkle, sapphire) are deliberately NOT in data/colours.json and must never be added to it: they measure what the model knows on its own. 'pink' is only used for a backdrop the sentence names.",
+  "about": "What each colour name must look like, for the eval checks. Written from general colour definitions (Wikipedia colour articles, CSS, Pantone), never derived from the model's output. Two colour spaces are used. Without a 'space' key (the v1.1 definitions): hue is HSV hue in degrees (a range like [335, 3] wraps round through 0), saturation is HSV saturation 0-1, lightness is CIE L* 0-100. With \"space\": \"hsl\" (v1.2): hue in degrees, saturation and lightness are HSL, in %. Method 'references': the span of the reference colours, widened by fixed tolerances (hue 10 deg; saturation 0.15 HSV or 15 points HSL; lightness 10 L* or 10 points HSL) and rounded outward. Method 'description': only one standard reference, or the common meaning differs from the reference, so the range follows the written description. Method 'review' (v1.2): the range was set after reviewing the v1.1 renders, where the v1.1 reference colour looked wrong in the image. 'must_fail' lists colours the range must reject. tests/test_eval_checks.py checks that every reference falls inside its range and every must_fail colour outside. The out-of-table colours (rust, ochre, fuchsia, periwinkle, sapphire) are deliberately NOT in data/colours.json and must never be added to it: they measure what the model knows on its own. v2 step 3 added five more held-out names (vermilion, marigold, chartreuse, prussian blue, amethyst), because the first five had been looked at across many sessions; their ranges were written from general colour knowledge before any run, and they appear in no data/ table, the prompt, the schema, the dev set or any other eval sentence (a test checks). 'pink' is only used for a backdrop the sentence names.",
   "colours": {
     "emerald": {
       "description": "The gemstone green: a deep, strong, slightly bluish jewel green.",
@@ -145,6 +145,83 @@
         {"hex": "#4169E1", "why": "royal blue (CSS): too light"}
       ],
       "hue": [192, 232], "saturation": [70, 100], "lightness": [11, 50]
+    },
+    "vermilion": {
+      "description": "The pigment (cinnabar red): a vivid red-orange, clearly more orange than a pure red. The references sit close together, but ten degrees round them would take in pure red, so the range follows the description: red-orange hues, strongly saturated, mid lightness. Pure red (hue 0) is red, not vermilion; lighter is coral or salmon.",
+      "method": "description",
+      "space": "hsl",
+      "references": [
+        {"hex": "#E34234", "source": "Wikipedia: Vermilion"},
+        {"hex": "#E44D2E", "source": "Wikipedia: Cinnabar"}
+      ],
+      "must_fail": [
+        {"hex": "#FF0000", "why": "red (CSS): no orange in it"},
+        {"hex": "#FF7F50", "why": "coral (CSS): too light"},
+        {"hex": "#FFA500", "why": "orange (CSS): orange, not red-orange"}
+      ],
+      "hue": [3, 22], "saturation": [55, 100], "lightness": [40, 62]
+    },
+    "marigold": {
+      "description": "The flower: a warm, vivid golden orange-yellow. Only one standard reference, so the range follows the description: orange-yellow hues, strongly saturated, mid lightness. Paler is mustard or lemon, more yellow is yellow, duller is tan.",
+      "method": "description",
+      "space": "hsl",
+      "references": [
+        {"hex": "#EAA221", "source": "Wikipedia: Marigold (color)"}
+      ],
+      "must_fail": [
+        {"hex": "#FFDB58", "why": "mustard (Wikipedia: Mustard (color)): too light"},
+        {"hex": "#FFFF00", "why": "yellow (CSS): no orange in it"},
+        {"hex": "#C19A6B", "why": "camel (Wikipedia: Camel (color)): a dull tan"}
+      ],
+      "hue": [32, 48], "saturation": [65, 100], "lightness": [40, 62]
+    },
+    "chartreuse": {
+      "description": "The liqueur: a vivid yellow-green. Two standard meanings, the traditional chartreuse yellow and the CSS chartreuse green; the range covers both, between yellow and green, strongly saturated, mid lightness. Pure yellow (hue 60) and pure green (hue 120) are not chartreuse; a muted yellow-green is pistachio or olive.",
+      "method": "description",
+      "space": "hsl",
+      "references": [
+        {"hex": "#DFFF00", "source": "Wikipedia: Chartreuse (color), chartreuse yellow"},
+        {"hex": "#7FFF00", "source": "CSS / Wikipedia: Chartreuse (color), chartreuse green"}
+      ],
+      "must_fail": [
+        {"hex": "#FFFF00", "why": "yellow (CSS): no green in it"},
+        {"hex": "#00FF00", "why": "lime (CSS): pure green"},
+        {"hex": "#808000", "why": "olive (CSS): yellow and dark"},
+        {"hex": "#93C572", "why": "pistachio (Wikipedia: Pistachio (color)): muted"}
+      ],
+      "hue": [65, 100], "saturation": [50, 100], "lightness": [35, 65]
+    },
+    "prussian blue": {
+      "description": "The pigment: a very dark, deep blue leaning a little towards cyan. Only one standard reference, so the range follows the description: blue hues on the cyan side of pure blue, clearly coloured, very dark. Navy is a purer blue, teal is green-blue, charcoal is grey; sapphire and royal blue are lighter.",
+      "method": "description",
+      "space": "hsl",
+      "references": [
+        {"hex": "#003153", "source": "Wikipedia: Prussian blue"}
+      ],
+      "must_fail": [
+        {"hex": "#000080", "why": "navy (CSS): pure blue, no cyan"},
+        {"hex": "#008080", "why": "teal (CSS): green-blue"},
+        {"hex": "#36454F", "why": "charcoal (Wikipedia: Charcoal (color)): grey, not blue"},
+        {"hex": "#4169E1", "why": "royal blue (CSS): too light"},
+        {"hex": "#0F52BA", "why": "sapphire (Wikipedia: Shades of blue, Maerz and Paul): too light"}
+      ],
+      "hue": [195, 225], "saturation": [40, 100], "lightness": [8, 32]
+    },
+    "amethyst": {
+      "description": "The gemstone: a medium to deep violet-purple. Only one standard reference, so the range follows the description: violet hues, clearly coloured, mid to dark. Paler is lavender, lilac or mauve; redder is plum or purple; bluer is periwinkle.",
+      "method": "description",
+      "space": "hsl",
+      "references": [
+        {"hex": "#9966CC", "source": "Wikipedia: Amethyst (color)"}
+      ],
+      "must_fail": [
+        {"hex": "#C8A2C8", "why": "lilac (Wikipedia: Lilac (color)): pinker and greyer"},
+        {"hex": "#CCCCFF", "why": "periwinkle (Wikipedia: Periwinkle (color)): blue and pale"},
+        {"hex": "#800080", "why": "purple (CSS): red-purple"},
+        {"hex": "#E0B0FF", "why": "mauve (Wikipedia: Mauve): too pale"},
+        {"hex": "#8E4585", "why": "plum (Wikipedia: Plum (color)): red-purple"}
+      ],
+      "hue": [258, 290], "saturation": [30, 100], "lightness": [30, 65]
     },
     "pink": {
       "description": "Plain pink, for a backdrop the sentence names: light red to purplish red, clearly tinted.",
