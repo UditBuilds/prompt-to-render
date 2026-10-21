@@ -127,7 +127,10 @@ def render(spec_path, output_path, blender, verbose=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Render a box product shot from a JSON spec.")
+    # A label's text may hold characters the terminal can't show (v2 step 4).
+    # Print a "?" for those instead of crashing.
+    sys.stdout.reconfigure(errors="replace")
+    parser = argparse.ArgumentParser(description="Render a product shot from a JSON spec.")
     parser.add_argument("spec", help="path to a JSON spec, e.g. specs/pink_three_quarter.json")
     parser.add_argument("--blender", help="path to blender.exe (normally found automatically)")
     parser.add_argument("--verbose", action="store_true", help="show Blender's full output")

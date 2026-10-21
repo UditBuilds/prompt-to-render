@@ -9,11 +9,12 @@ just whole-word matching.
 
 The tables live in data/:
     colours.json        specific colour name -> hex
-    product_sizes.json  product -> typical box size in cm
+    product_sizes.json  product -> typical box size in cm, and for some its
+                        round shape (cylinder, bottle or jar) and size
     style_words.json    style word -> how it shifts colour and finish
     finishes.json       finish word -> roughness range (code only, never shown to the model)
 
-Three values are set by code, not the model, after the model has answered:
+Four values are set by code, not the model, after the model has answered:
 - Style words: the model picks the plain colour and the finish, then
   apply_style() shifts the box colour by the table's numbers. qwen3:8b
   couldn't do that hex arithmetic reliably itself (tested on the dev
@@ -23,8 +24,15 @@ Three values are set by code, not the model, after the model has answered:
 - The backdrop: neutral_backdrop() makes it a neutral light grey unless the
   sentence gives the backdrop a colour. The model's tinted backdrops could
   clash with the box.
-The last two add nothing to the request, so the model sees exactly what it
-saw before they existed.
+- The cap or lid of a round shape: default_cap() makes it black on a light
+  body and silver-grey on a dark one, unless the sentence gives it a colour;
+  apply_metal() draws it in metal when the sentence names a metal for it
+  ("with a gold cap"). The model never decides the metal.
+The last three add nothing to the request.
+
+A sentence that names a box (box, carton, case, package) gets the box size
+of a product, in exactly the words of v1.3. Any other sentence gets the
+product's round shape and size where the table has one.
 
 Matching is case-insensitive and by whole words, longest phrase first, across
 all tables at once, and each word of the sentence is used once: "rose gold"
@@ -40,6 +48,8 @@ import colorsys
 import json
 import os
 import re
+
+from spec import CAP_FIELDS, METAL_FIELDS, METALS, default_cap_colour
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(PROJECT_DIR, "data")
@@ -60,9 +70,20 @@ def load_tables():
     return tables
 
 
+# A sentence with one of these words is about a box, whatever the product.
+BOX_WORDS = {"box", "boxes", "carton", "cartons", "case", "cases", "package", "packages", "packaging"}
+# The round shapes a product row may give a size for.
+ROUND_SHAPES = ("cylinder", "bottle", "jar")
+
+
+def names_a_box(sentence):
+    return any(word in BOX_WORDS for word in re.findall(r"[a-z]+", sentence.lower()))
+
+
 class Grounding:
-    def __init__(self, rows):
+    def __init__(self, rows, boxed=True):
         self.rows = rows  # in sentence order, at most TABLES[...][2] per table
+        self.boxed = boxed  # the sentence names a box: products get their box size
 
     def __bool__(self):
         return bool(self.rows)
@@ -87,19 +108,33 @@ class Grounding:
         colours = [r for r in self.rows if r["table"] == "colours"]
         products = [r for r in self.rows if r["table"] == "products"]
         styles = [r for r in self.rows if r["table"] == "styles"]
+        # A sentence that names a box reads exactly as in v1.3.
+        product = "box" if self.boxed else "product"
         if colours:
+            uses = "the box" if self.boxed else "the product, its cap or lid"
             lines.append("Colour names: what each name means. Use it for whatever the sentence uses that "
-                         "name for: the box, the backdrop, or a detail the renderer can't draw.")
+                         f"name for: {uses}, the backdrop, or a detail the renderer can't draw.")
             lines += [f'- "{r["matched"]}" = {r["hex"]}' for r in colours]
-        if products:
+        round_rows = [r for r in products if not self.boxed and _round_shape(r)]
+        box_rows = [r for r in products if r not in round_rows]
+        if box_rows:
             lines.append("Product sizes: the usual box for that product, width x height x depth in cm.")
-            for r in products:
+            for r in box_rows:
                 (w, h, d), note = r["typical"], f" ({r['note']})" if r.get("note") else ""
                 lines.append(f"- {r['name']}: typically {w:g} x {h:g} x {d:g}; width {_span(r['width'])}, "
                              f"height {_span(r['height'])}, depth {_span(r['depth'])}{note}")
+        if round_rows:
+            lines.append("Product sizes: the usual shape and size of that product, diameter x height in cm, "
+                         "with any cap or lid on.")
+            for r in round_rows:
+                shape = _round_shape(r)
+                size = r[shape]
+                (d, h) = size["typical"]
+                lines.append(f"- {r['name']}: a {shape}, typically {d:g} x {h:g}; diameter {_span(size['diameter'])}, "
+                             f"height {_span(size['height'])}")
         if styles:
-            lines.append("Style words: choose the plain box colour as usual (don't shift it yourself); the colour "
-                         "shift is applied to it automatically afterwards. Do apply the finish.")
+            lines.append(f"Style words: choose the plain {product} colour as usual (don't shift it yourself); the "
+                         "colour shift is applied to it automatically afterwards. Do apply the finish.")
             lines += [f'- "{r["matched"]}": colour becomes {r["colour"]} ({_describe_shift(r)}, applied for you). '
                       f'Finish: {r["finish"]}.' for r in styles]
         lines.append("Use these values. Anything not listed here is up to you.")
@@ -108,6 +143,16 @@ class Grounding:
 
 def _span(pair):
     return f"{pair[0]:g}-{pair[1]:g}"
+
+
+def _product(spec):
+    """The fields of the spec's own shape. A spec without a shape is a box, the default."""
+    return spec[spec.get("shape", "box")]
+
+
+def _round_shape(row):
+    """The round shape a product row gives a size for, or None."""
+    return next((shape for shape in ROUND_SHAPES if shape in row), None)
 
 
 def _describes_backdrop(text, start):
@@ -149,7 +194,7 @@ def apply_style(hex_colour, row):
 
 
 def style_box_colour(sentence, spec, grounding):
-    """Apply every matched style word to the spec's box colour, in sentence order.
+    """Apply every matched style word to the product's colour (any shape), in sentence order.
 
     Skipped when the sentence gives an exact hex: the user's colour wins.
     Returns a list of {"style", "from", "to"} (empty if nothing changed).
@@ -158,10 +203,11 @@ def style_box_colour(sentence, spec, grounding):
     if not styles or re.search(r"#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?\b", sentence):
         return []
     changes = []
+    product = _product(spec)
     for row in styles:
-        before = spec["box"]["colour"]
+        before = product["colour"]
         after = apply_style(before, row)
-        spec["box"]["colour"] = after
+        product["colour"] = after
         changes.append({"style": row["name"], "from": before.upper(), "to": after})
     return changes
 
@@ -203,12 +249,13 @@ def lookup(sentence, tables=None):
         if sum(r["table"] == table for r in rows) < limit:
             row = {k: v for k, v in tables[table][name].items() if k != "aliases"}
             rows.append(dict(row, table=table, name=name, matched=phrase))
-    return Grounding(rows)
+    return Grounding(rows, names_a_box(sentence))
 
 
 # ---------------------------------------------------------------------------
 # Rules applied by code after the model, never shown to it: the finish of a
-# glossy box and the backdrop when the sentence gives it no colour.
+# glossy product, the backdrop when the sentence gives it no colour, and the
+# cap or lid when the sentence gives it no colour.
 # ---------------------------------------------------------------------------
 
 FINISHES_FILE = "finishes.json"
@@ -228,6 +275,14 @@ _PHRASE_BREAKS = {"a", "an", "the", "its", "their", "on", "onto", "against", "ov
 # Words after "backdrop" that lead on to its colour: "a backdrop of pale pink", "background colour lilac".
 _LEADS_ON = {"of", "in", "colour", "color", "coloured", "colored"}
 
+_CAP_WORDS = {"cap", "caps", "lid", "lids"}
+# Words that describe a cap or lid without giving it a colour.
+_PLAIN_CAP = {"matching", "screw", "flip", "twist", "round", "flat", "domed", "simple", "plain", "big", "large",
+              "small", "tall", "short", "wide", "thin", "thick", "dropper", "pump", "spray",
+              "glossy", "gloss", "shiny", "matte", "matt", "satin", "metallic", "polished"}
+# A cap phrase also ends at the container: "a gold bottle cap" names the bottle's colour, not the cap's.
+_CAP_BREAKS = _PHRASE_BREAKS | {"bottle", "bottles", "jar", "jars", "tube", "tubes", "cylinder"}
+
 
 def load_finishes():
     with open(os.path.join(DATA_DIR, FINISHES_FILE), encoding="utf-8") as f:
@@ -235,7 +290,7 @@ def load_finishes():
 
 
 def finish_words(sentence, tables=None, finishes=None):
-    """The finish rows the sentence names for the box, in sentence order.
+    """The finish rows the sentence names for the product, in sentence order.
 
     Matched together with the other tables, so a product name ("lip gloss")
     keeps its words, and a finish inside a backdrop phrase is left out.
@@ -252,7 +307,7 @@ def finish_words(sentence, tables=None, finishes=None):
 
 
 def apply_finish(sentence, spec, tables=None, finishes=None):
-    """Clamp the box roughness into the range of the sentence's finish, if that finish has one.
+    """Clamp the product's roughness into the range of the sentence's finish, if that finish has one.
 
     Only when the sentence names exactly one finish: with two ("a matte box
     with a glossy logo") the model's choice stands. Returns
@@ -262,11 +317,12 @@ def apply_finish(sentence, spec, tables=None, finishes=None):
     if len({r["name"] for r in rows}) != 1 or "roughness" not in rows[0]:
         return None
     low, high = rows[0]["roughness"]
-    before = spec["box"]["roughness"]
+    product = _product(spec)
+    before = product["roughness"]
     after = min(max(before, low), high)
     if after == before:
         return None
-    spec["box"]["roughness"] = after
+    product["roughness"] = after
     return {"finish": rows[0]["name"], "from": before, "to": after}
 
 
@@ -278,15 +334,28 @@ def backdrop_colour_words(sentence):
     a plain description ("clean", "studio") counts, so a colour name the
     code has never heard of still keeps the backdrop the model chose.
     """
+    return _colour_words(sentence, _BACKDROP_WORDS, _PHRASE_BREAKS, _PLAIN_BACKDROP)
+
+
+def cap_colour_words(sentence):
+    """The words that give a cap or lid a colour, e.g. ["gold"] in "with a gold cap"; [] if none do.
+
+    Found the same way as the backdrop's colour words.
+    """
+    return _colour_words(sentence, _CAP_WORDS, _CAP_BREAKS, _PLAIN_CAP)
+
+
+def _colour_words(sentence, targets, breaks, plain):
+    """The words just before each target word, and after it ("a lid in gold"), that aren't plain."""
     words = []
     for clause in re.split(r"[,;.:]", sentence.lower()):
         tokens = re.findall(r"#?[\w'-]+", clause)
         for i, token in enumerate(tokens):
-            if token not in _BACKDROP_WORDS:
+            if token not in targets:
                 continue
             before = []
             for word in reversed(tokens[:i]):
-                if word in _PHRASE_BREAKS:
+                if word in breaks:
                     break
                 before.insert(0, word)
             words += before
@@ -294,10 +363,10 @@ def backdrop_colour_words(sentence):
                 for word in tokens[i + 2:]:
                     if word in _LEADS_ON or word in ("a", "an", "the"):
                         continue
-                    if word in _PHRASE_BREAKS:
+                    if word in breaks:
                         break
                     words.append(word)
-    return [w for w in words if w not in _PLAIN_BACKDROP]
+    return [w for w in words if w not in plain]
 
 
 def neutral_backdrop(sentence, spec, given=True):
@@ -312,3 +381,50 @@ def neutral_backdrop(sentence, spec, given=True):
     before = spec["background_colour"].upper() if given else None
     spec["background_colour"] = NEUTRAL_BACKDROP
     return {"from": before, "to": NEUTRAL_BACKDROP} if before != NEUTRAL_BACKDROP else None
+
+
+def cap_metal(sentence):
+    """The metal the sentence names for the cap or lid ("with a gold cap": "gold"), or None.
+
+    Read from the cap's own words (cap_colour_words), so a metal anywhere
+    else ("a gold logo", "a gold bottle with a black cap") doesn't count.
+    Longest name first: "rose gold" is rose gold, not gold.
+    """
+    words = " ".join(part for word in cap_colour_words(sentence) for part in word.split("-"))
+    for metal in sorted(METALS, key=len, reverse=True):
+        if re.search(r"(?<!\w)" + re.escape(metal) + r"(?!\w)", words):
+            return metal
+    return None
+
+
+def apply_metal(sentence, spec):
+    """Draw the cap or lid in the metal the sentence names for it, or in no metal.
+
+    Only for a round shape. The field is always set, so the model never
+    decides it. Returns {"field", "metal"} when a metal was set, else None.
+    """
+    field = METAL_FIELDS.get(spec["shape"])
+    if field is None:
+        return None
+    metal = cap_metal(sentence)
+    spec[spec["shape"]][field] = metal
+    return {"field": field, "metal": metal} if metal else None
+
+
+def default_cap(sentence, spec, given=True):
+    """Unless the sentence gives the cap or lid a colour, set the default one for the body colour.
+
+    Only for a round shape. The default (spec.default_cap_colour) is black
+    on a light body and silver-grey on a dark one. Run after the style
+    shift, which may change the body colour. `given` is False when the model
+    left the cap colour out. Returns {"field", "from", "to"} ("from" is None
+    if it was left out), or None if nothing changed.
+    """
+    field = CAP_FIELDS.get(spec["shape"])
+    if field is None or cap_colour_words(sentence):
+        return None
+    product = spec[spec["shape"]]
+    before = product[field].upper() if given else None
+    after = default_cap_colour(product["colour"])
+    product[field] = after
+    return {"field": field, "from": before, "to": after} if before != after else None

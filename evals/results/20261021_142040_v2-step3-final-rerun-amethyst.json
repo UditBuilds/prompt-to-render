@@ -1,0 +1,318 @@
+{
+  "created": "2026-10-21T14:20:49",
+  "label": "v2-step3-final-rerun-amethyst",
+  "cases_file": "evals\\cases.json",
+  "grounding": true,
+  "without_tables": [],
+  "model": "qwen3:8b",
+  "backend": "ollama",
+  "llm_settings": {
+    "url": "http://127.0.0.1:11434",
+    "temperature": 0.2,
+    "think": false,
+    "num_ctx": 8192,
+    "num_predict": 512
+  },
+  "runs_per_case": 3,
+  "max_attempts": 2,
+  "eval_seconds": 9.1,
+  "stopped_early": null,
+  "summary": {
+    "colour_groups": {
+      "out_of_table_new": {
+        "cases": 1,
+        "total_runs": 3,
+        "colour_passed_runs": 0,
+        "passed_runs": 0
+      }
+    },
+    "shape_scores": {},
+    "check_scores": {},
+    "added_groups": {
+      "v2_step3": {
+        "cases": 1,
+        "total_runs": 3,
+        "passed_runs": 0,
+        "clamp_only_runs": 0
+      }
+    },
+    "passed_runs": 0,
+    "total_runs": 3,
+    "pass_rate": 0.0,
+    "cases_passing_all_runs": 0,
+    "cases_with_identical_runs": 1,
+    "total_cases": 1,
+    "retry_runs": 0,
+    "retry_rate": 0.0,
+    "invalid_after_retries": 0,
+    "shape_added_by_code_runs": 0,
+    "clamp_runs": 0,
+    "clamp_only_runs": 0,
+    "clamp_only": [],
+    "avg_llm_seconds": 2.98,
+    "avg_prompt_tokens": 4833,
+    "max_prompt_tokens_per_call": 4833,
+    "avg_output_tokens": 129,
+    "peak_gpu_mib": 6563
+  },
+  "cases": [
+    {
+      "id": "oot_new_amethyst",
+      "sentence": "an amethyst serum box",
+      "covers": "new held-out colour name: amethyst",
+      "colour_group": "out_of_table_new",
+      "shape_group": null,
+      "added": "v2-step3",
+      "checks": [
+        {
+          "type": "named_colour",
+          "name": "amethyst"
+        },
+        {
+          "type": "neutral_backdrop",
+          "max_spread": 20,
+          "min_lightness": 80
+        }
+      ],
+      "passed_runs": 0,
+      "total_runs": 3,
+      "distinct_specs": 1,
+      "runs": [
+        {
+          "run": 1,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 4.19,
+          "prompt_tokens": 4833,
+          "output_tokens": 129,
+          "call_prompt_tokens": [
+            4833
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": false,
+              "found": "box #800080 as amethyst: hue 300 not in 258..290; HSL lightness 25% not in 30..65"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "serum",
+              "matched": "serum"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "cap_change": null,
+          "cap_given": null,
+          "metal_change": null,
+          "shape_fixed": null,
+          "proportion_changes": [],
+          "checks_without_clamps": null,
+          "passed_without_clamps": null,
+          "spec": {
+            "description": "an amethyst serum box",
+            "shape": "box",
+            "box": {
+              "width_cm": 4.0,
+              "height_cm": 11.5,
+              "depth_cm": 4.0,
+              "colour": "#800080",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"an amethyst serum box\",\n    \"shape\": \"box\",\n    \"box\": {\n      \"width_cm\": 4.0,\n      \"height_cm\": 11.5,\n      \"depth_cm\": 4.0,\n      \"colour\": \"#800080\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.38,
+          "prompt_tokens": 4833,
+          "output_tokens": 129,
+          "call_prompt_tokens": [
+            4833
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": false,
+              "found": "box #800080 as amethyst: hue 300 not in 258..290; HSL lightness 25% not in 30..65"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "serum",
+              "matched": "serum"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "cap_change": null,
+          "cap_given": null,
+          "metal_change": null,
+          "shape_fixed": null,
+          "proportion_changes": [],
+          "checks_without_clamps": null,
+          "passed_without_clamps": null,
+          "spec": {
+            "description": "an amethyst serum box",
+            "shape": "box",
+            "box": {
+              "width_cm": 4.0,
+              "height_cm": 11.5,
+              "depth_cm": 4.0,
+              "colour": "#800080",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"an amethyst serum box\",\n    \"shape\": \"box\",\n    \"box\": {\n      \"width_cm\": 4.0,\n      \"height_cm\": 11.5,\n      \"depth_cm\": 4.0,\n      \"colour\": \"#800080\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.38,
+          "prompt_tokens": 4833,
+          "output_tokens": 129,
+          "call_prompt_tokens": [
+            4833
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": false,
+              "found": "box #800080 as amethyst: hue 300 not in 258..290; HSL lightness 25% not in 30..65"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "serum",
+              "matched": "serum"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "cap_change": null,
+          "cap_given": null,
+          "metal_change": null,
+          "shape_fixed": null,
+          "proportion_changes": [],
+          "checks_without_clamps": null,
+          "passed_without_clamps": null,
+          "spec": {
+            "description": "an amethyst serum box",
+            "shape": "box",
+            "box": {
+              "width_cm": 4.0,
+              "height_cm": 11.5,
+              "depth_cm": 4.0,
+              "colour": "#800080",
+              "roughness": 0.45,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"an amethyst serum box\",\n    \"shape\": \"box\",\n    \"box\": {\n      \"width_cm\": 4.0,\n      \"height_cm\": 11.5,\n      \"depth_cm\": 4.0,\n      \"colour\": \"#800080\",\n      \"roughness\": 0.45,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    }
+  ]
+}

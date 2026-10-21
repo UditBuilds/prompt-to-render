@@ -1,0 +1,627 @@
+{
+  "created": "2026-10-21T13:58:54",
+  "label": "v2-step3-rerun-tall-rust",
+  "cases_file": "evals\\cases.json",
+  "grounding": true,
+  "without_tables": [],
+  "model": "qwen3:8b",
+  "backend": "ollama",
+  "llm_settings": {
+    "url": "http://127.0.0.1:11434",
+    "temperature": 0.2,
+    "think": false,
+    "num_ctx": 8192,
+    "num_predict": 512
+  },
+  "runs_per_case": 3,
+  "max_attempts": 2,
+  "eval_seconds": 19.4,
+  "stopped_early": null,
+  "summary": {
+    "colour_groups": {
+      "out_of_table": {
+        "cases": 1,
+        "total_runs": 3,
+        "colour_passed_runs": 0,
+        "passed_runs": 0
+      }
+    },
+    "shape_scores": {},
+    "check_scores": {},
+    "added_groups": {
+      "before_v2": {
+        "cases": 2,
+        "total_runs": 6,
+        "passed_runs": 0,
+        "clamp_only_runs": 0
+      }
+    },
+    "passed_runs": 0,
+    "total_runs": 6,
+    "pass_rate": 0.0,
+    "cases_passing_all_runs": 0,
+    "cases_with_identical_runs": 0,
+    "total_cases": 2,
+    "retry_runs": 0,
+    "retry_rate": 0.0,
+    "invalid_after_retries": 0,
+    "shape_added_by_code_runs": 0,
+    "clamp_runs": 0,
+    "clamp_only_runs": 0,
+    "clamp_only": [],
+    "avg_llm_seconds": 3.21,
+    "avg_prompt_tokens": 6276,
+    "max_prompt_tokens_per_call": 6318,
+    "avg_output_tokens": 147,
+    "peak_gpu_mib": 6477
+  },
+  "cases": [
+    {
+      "id": "tall",
+      "sentence": "a tall, slim grey box",
+      "covers": "tall proportions, named colour",
+      "colour_group": null,
+      "shape_group": null,
+      "added": null,
+      "checks": [
+        {
+          "type": "ratio",
+          "num": "height_cm",
+          "den": "width_cm",
+          "gt": 1.5
+        },
+        {
+          "type": "saturation",
+          "max": 0.2
+        },
+        {
+          "type": "neutral_backdrop",
+          "max_spread": 20,
+          "min_lightness": 80
+        }
+      ],
+      "passed_runs": 0,
+      "total_runs": 3,
+      "distinct_specs": 2,
+      "runs": [
+        {
+          "run": 1,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 5.23,
+          "prompt_tokens": 6234,
+          "output_tokens": 150,
+          "call_prompt_tokens": [
+            6234
+          ],
+          "checks": [
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/width_cm = 15/5 = 3.00 (want > 1.5)"
+            },
+            {
+              "check": "saturation",
+              "passed": false,
+              "found": "saturation 0.57 of box #5C99D6 (want <= 0.2)"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "cap_change": null,
+          "cap_given": null,
+          "metal_change": null,
+          "shape_fixed": null,
+          "proportion_changes": [],
+          "model_colours": {
+            "box.colour": [
+              210,
+              60,
+              60
+            ]
+          },
+          "hex_changes": [],
+          "checks_without_clamps": null,
+          "passed_without_clamps": null,
+          "spec": {
+            "description": "a tall, slim grey box",
+            "shape": "box",
+            "box": {
+              "width_cm": 5.0,
+              "height_cm": 15.0,
+              "depth_cm": 3.0,
+              "colour": "#5C99D6",
+              "roughness": 0.4,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a tall, slim grey box\",\n    \"shape\": \"box\",\n    \"box\": {\n      \"width_cm\": 5.0,\n      \"height_cm\": 15.0,\n      \"depth_cm\": 3.0,\n      \"colour\": {\n        \"hue\": 210,\n        \"saturation\": 60,\n        \"lightness\": 60\n      },\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.1\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.82,
+          "prompt_tokens": 6234,
+          "output_tokens": 150,
+          "call_prompt_tokens": [
+            6234
+          ],
+          "checks": [
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/width_cm = 15/5 = 3.00 (want > 1.5)"
+            },
+            {
+              "check": "saturation",
+              "passed": false,
+              "found": "saturation 0.57 of box #5C99D6 (want <= 0.2)"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "cap_change": null,
+          "cap_given": null,
+          "metal_change": null,
+          "shape_fixed": null,
+          "proportion_changes": [],
+          "model_colours": {
+            "box.colour": [
+              210,
+              60,
+              60
+            ]
+          },
+          "hex_changes": [],
+          "checks_without_clamps": null,
+          "passed_without_clamps": null,
+          "spec": {
+            "description": "a tall, slim grey box",
+            "shape": "box",
+            "box": {
+              "width_cm": 5.0,
+              "height_cm": 15.0,
+              "depth_cm": 3.0,
+              "colour": "#5C99D6",
+              "roughness": 0.4,
+              "bevel_cm": 0.1
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a tall, slim grey box\",\n    \"shape\": \"box\",\n    \"box\": {\n      \"width_cm\": 5.0,\n      \"height_cm\": 15.0,\n      \"depth_cm\": 3.0,\n      \"colour\": {\n        \"hue\": 210,\n        \"saturation\": 60,\n        \"lightness\": 60\n      },\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.1\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.86,
+          "prompt_tokens": 6234,
+          "output_tokens": 151,
+          "call_prompt_tokens": [
+            6234
+          ],
+          "checks": [
+            {
+              "check": "ratio",
+              "passed": true,
+              "found": "height_cm/width_cm = 18/6 = 3.00 (want > 1.5)"
+            },
+            {
+              "check": "saturation",
+              "passed": false,
+              "found": "saturation 0.57 of box #5C99D6 (want <= 0.2)"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "cap_change": null,
+          "cap_given": null,
+          "metal_change": null,
+          "shape_fixed": null,
+          "proportion_changes": [],
+          "model_colours": {
+            "box.colour": [
+              210,
+              60,
+              60
+            ]
+          },
+          "hex_changes": [],
+          "checks_without_clamps": null,
+          "passed_without_clamps": null,
+          "spec": {
+            "description": "a tall, slim grey box",
+            "shape": "box",
+            "box": {
+              "width_cm": 6.0,
+              "height_cm": 18.0,
+              "depth_cm": 3.0,
+              "colour": "#5C99D6",
+              "roughness": 0.4,
+              "bevel_cm": 0.15
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a tall, slim grey box\",\n    \"shape\": \"box\",\n    \"box\": {\n      \"width_cm\": 6.0,\n      \"height_cm\": 18.0,\n      \"depth_cm\": 3.0,\n      \"colour\": {\n        \"hue\": 210,\n        \"saturation\": 60,\n        \"lightness\": 60\n      },\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.15\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "oot_rust",
+      "sentence": "a rust coloured candle box",
+      "covers": "colour name not in the table: rust",
+      "colour_group": "out_of_table",
+      "shape_group": null,
+      "added": null,
+      "checks": [
+        {
+          "type": "named_colour",
+          "name": "rust"
+        },
+        {
+          "type": "neutral_backdrop",
+          "max_spread": 20,
+          "min_lightness": 80
+        }
+      ],
+      "passed_runs": 0,
+      "total_runs": 3,
+      "distinct_specs": 2,
+      "runs": [
+        {
+          "run": 1,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.83,
+          "prompt_tokens": 6318,
+          "output_tokens": 144,
+          "call_prompt_tokens": [
+            6318
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": false,
+              "found": "box #E69019 as rust: hue 35 not in 8..30; HSL lightness 50% not in 22..48"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "candle",
+              "matched": "candle"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "cap_change": null,
+          "cap_given": null,
+          "metal_change": null,
+          "shape_fixed": null,
+          "proportion_changes": [],
+          "model_colours": {
+            "box.colour": [
+              35,
+              80,
+              50
+            ]
+          },
+          "hex_changes": [],
+          "checks_without_clamps": null,
+          "passed_without_clamps": null,
+          "spec": {
+            "description": "a rust coloured candle box",
+            "shape": "box",
+            "box": {
+              "width_cm": 9,
+              "height_cm": 10.5,
+              "depth_cm": 9,
+              "colour": "#E69019",
+              "roughness": 0.4,
+              "bevel_cm": 0.2
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a rust coloured candle box\",\n    \"shape\": \"box\",\n    \"box\": {\n      \"width_cm\": 9,\n      \"height_cm\": 10.5,\n      \"depth_cm\": 9,\n      \"colour\": {\n        \"hue\": 35,\n        \"saturation\": 80,\n        \"lightness\": 50\n      },\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.2\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.76,
+          "prompt_tokens": 6318,
+          "output_tokens": 144,
+          "call_prompt_tokens": [
+            6318
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": false,
+              "found": "box #E69019 as rust: hue 35 not in 8..30; HSL lightness 50% not in 22..48"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "candle",
+              "matched": "candle"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "cap_change": null,
+          "cap_given": null,
+          "metal_change": null,
+          "shape_fixed": null,
+          "proportion_changes": [],
+          "model_colours": {
+            "box.colour": [
+              35,
+              80,
+              50
+            ]
+          },
+          "hex_changes": [],
+          "checks_without_clamps": null,
+          "passed_without_clamps": null,
+          "spec": {
+            "description": "a rust coloured candle box",
+            "shape": "box",
+            "box": {
+              "width_cm": 9,
+              "height_cm": 10.5,
+              "depth_cm": 9,
+              "colour": "#E69019",
+              "roughness": 0.4,
+              "bevel_cm": 0.2
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a rust coloured candle box\",\n    \"shape\": \"box\",\n    \"box\": {\n      \"width_cm\": 9,\n      \"height_cm\": 10.5,\n      \"depth_cm\": 9,\n      \"colour\": {\n        \"hue\": 35,\n        \"saturation\": 80,\n        \"lightness\": 50\n      },\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.2\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.74,
+          "prompt_tokens": 6318,
+          "output_tokens": 144,
+          "call_prompt_tokens": [
+            6318
+          ],
+          "checks": [
+            {
+              "check": "named_colour",
+              "passed": false,
+              "found": "box #CF8217 as rust: hue 35 not in 8..30"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": true,
+          "shape": "box",
+          "unsupported": [],
+          "model_unsupported": [],
+          "shape_added_by_code": false,
+          "grounding_rows": [
+            {
+              "table": "products",
+              "name": "candle",
+              "matched": "candle"
+            }
+          ],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "cap_change": null,
+          "cap_given": null,
+          "metal_change": null,
+          "shape_fixed": null,
+          "proportion_changes": [],
+          "model_colours": {
+            "box.colour": [
+              35,
+              80,
+              45
+            ]
+          },
+          "hex_changes": [],
+          "checks_without_clamps": null,
+          "passed_without_clamps": null,
+          "spec": {
+            "description": "a rust coloured candle box",
+            "shape": "box",
+            "box": {
+              "width_cm": 9,
+              "height_cm": 10.5,
+              "depth_cm": 9,
+              "colour": "#CF8217",
+              "roughness": 0.4,
+              "bevel_cm": 0.2
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": true,\n  \"shape\": \"box\",\n  \"unsupported\": [],\n  \"spec\": {\n    \"description\": \"a rust coloured candle box\",\n    \"shape\": \"box\",\n    \"box\": {\n      \"width_cm\": 9,\n      \"height_cm\": 10.5,\n      \"depth_cm\": 9,\n      \"colour\": {\n        \"hue\": 35,\n        \"saturation\": 80,\n        \"lightness\": 45\n      },\n      \"roughness\": 0.4,\n      \"bevel_cm\": 0.2\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    }
+  ]
+}

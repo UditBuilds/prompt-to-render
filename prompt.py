@@ -33,8 +33,10 @@ from datetime import datetime
 
 import gpu
 from grounding import lookup
+from labels import read_label
 from llm_backend import DEFAULT_MODEL, BackendUnavailable, BrokenFirstReply, OllamaBackend
 from run import PROJECT_DIR, find_blender, print_blender_not_found, print_cpu_warning, print_render_failed, render
+from spec import LABEL_ON_LIGHT, METAL_FIELDS
 from spec_writer import MAX_ATTEMPTS, write_spec
 
 RUNS_DIR = os.path.join(PROJECT_DIR, "runs")
@@ -45,7 +47,7 @@ def main():
     # terminal can't show. Print a "?" for those instead of crashing.
     sys.stdout.reconfigure(errors="replace")
 
-    parser = argparse.ArgumentParser(description="Describe a box product shot in a sentence; get a render.")
+    parser = argparse.ArgumentParser(description="Describe a product shot (a box, cylinder, bottle or jar) in a sentence; get a render.")
     parser.add_argument("sentence", help='e.g. "luxury matte red lipstick box, three-quarter view"')
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Ollama model (default: {DEFAULT_MODEL})")
     parser.add_argument("--blender", help="path to blender.exe (normally found automatically)")
@@ -202,8 +204,12 @@ class AttemptPrinter:
 def show_spec(sentence, result):
     if not result.ok:
         return
+    if result.shape_fixed:
+        change = result.shape_fixed
+        print(f"[shape] the model named a {change['real']} but drew a {change['from']}; "
+              f"drawn as the closest shape, a {change['to']}")
     for change in result.style_changes:
-        print(f"[grounding] style \"{change['style']}\" applied to the box colour: "
+        print(f"[grounding] style \"{change['style']}\" applied to the product colour: "
               f"{change['from']} -> {change['to']}")
     if result.finish_change:
         change = result.finish_change
@@ -213,21 +219,59 @@ def show_spec(sentence, result):
         change = result.backdrop_change
         print(f"[grounding] the sentence gives the backdrop no colour, so it is neutral: "
               f"{change['from'] or '(left out by the model)'} -> {change['to']}")
-    box = result.spec["box"]
+    if result.cap_change:
+        change = result.cap_change
+        part = "lid" if change["field"] == "lid_colour" else "cap"
+        print(f"[grounding] the sentence gives the {part} no colour, so it is the default for the body: "
+              f"{change['from'] or '(left out by the model)'} -> {change['to']}")
+    if result.metal_change:
+        change = result.metal_change
+        part = "lid" if change["field"] == "lid_metal" else "cap"
+        print(f"[grounding] the sentence names a metal for the {part}, so it is drawn in {change['metal']}")
+    for change in result.proportion_changes:
+        print(f"[proportions] clamped by code, {change['rule']}: "
+              f"{change['field']} {change['from']:g} -> {change['to']:g}")
+    if result.label_change:
+        change = result.label_change
+        surface = "black on a light" if change["colour"] == LABEL_ON_LIGHT else "white on a dark"
+        how = {"metal": f"in {change['metal']} (the metal named after it)",
+               "named": f"in {change['colour']} (the colour named after it)",
+               "default": f"in {change['colour']} ({surface} surface)"}[change["colour_from"]]
+        print(f"[label] the quoted text is drawn by code: \"{change['text']}\" {how}")
+    shape = result.spec["shape"]
+    product = result.spec[shape]
     print()
     print("Spec:")
-    print(f"  box        {box['width_cm']:g} x {box['height_cm']:g} x {box['depth_cm']:g} cm (width x height x depth)")
-    print(f"  finish     colour {box['colour']}, roughness {box['roughness']:g}, bevel {box['bevel_cm']:g} cm")
+    if shape == "box":
+        print(f"  box        {product['width_cm']:g} x {product['height_cm']:g} x {product['depth_cm']:g} cm "
+              f"(width x height x depth)")
+        print(f"  finish     colour {product['colour']}, roughness {product['roughness']:g}, "
+              f"bevel {product['bevel_cm']:g} cm")
+    else:
+        print(f"  {shape:<10} {product['diameter_cm']:g} cm across x {product['height_cm']:g} cm tall")
+        cap = ", lid {lid_colour}" if shape == "jar" else ", cap {cap_colour}"
+        metal = product.get(METAL_FIELDS[shape])
+        cap = cap.format(**product) + (f" ({metal})" if metal else "")
+        print(f"  finish     colour {product['colour']}{cap}, roughness {product['roughness']:g}")
+    label = result.spec["label"]
+    if label:
+        print(f"  label      \"{label['text']}\" in {label['metal'] or label['colour']}")
     print(f"  backdrop   {result.spec['background_colour']}")
     print(f"  camera     {result.spec['camera']}")
     print(f"  about      {result.spec['description']}")
+    not_drawn = [item for item in result.unsupported if item.startswith("label text")]
+    if not_drawn:
+        print()
+        print("WARNING: quoted text that is not drawn:")
+        for item in not_drawn:
+            print(f"  - {item}")
 
-    if result.is_box is False:
+    if result.shape_added:
         print()
         print("=" * 72)
         what = f"a {result.shape}" if result.shape and result.shape != "box" else "not a box"
-        print(f"WARNING: this is {what}, but the renderer can only draw a box.")
-        print("Rendering the closest box instead. Ignored:")
+        print(f"WARNING: this is {what}, but the renderer can only draw a box, cylinder, bottle or jar.")
+        print(f"Rendering the closest shape ({shape}) instead. Ignored:")
         for item in result.unsupported or ["(the model listed nothing)"]:
             print(f"  - {item}")
         print("=" * 72)
@@ -263,7 +307,11 @@ def show_grounding(sentence, enabled, verbose):
     if not enabled:
         print("[grounding] off (--no-grounding): the model decides everything on its own")
         return
-    found = lookup(sentence)
+    # The model and the tables get the sentence without its quoted text (labels.py).
+    sent = read_label(sentence).model_sentence
+    if sent != sentence:
+        print(f"[label] the model and the tables get the sentence without the quoted text: \"{sent}\"")
+    found = lookup(sent)
     if found:
         print(f"[grounding] table rows for this sentence: {found.summary()}")
         if verbose:
@@ -293,6 +341,13 @@ def log_llm(log, result):
         finish_change=result.finish_change,
         backdrop_change=result.backdrop_change,
         backdrop_given=result.backdrop_given,
+        cap_change=result.cap_change,
+        cap_given=result.cap_given,
+        metal_change=result.metal_change,
+        shape_fixed=result.shape_fixed,
+        proportion_changes=result.proportion_changes,
+        label_change=result.label_change,
+        model_sentence=result.model_sentence,
         llm_calls=[a.to_log() for a in result.attempts],
     )
 
@@ -317,8 +372,9 @@ def show_summary(run_dir, png_path, log, result, render_result):
     print(f"  Colour check: {render_result['colour_check']}")
     if result.unsupported:
         print(f"  Not rendered: {', '.join(result.unsupported)}")
-    if result.is_box is False:
-        print("  WARNING:      not a box; the closest box was rendered instead.")
+    if result.shape_added:
+        print(f"  WARNING:      a {result.shape or 'shape'} the renderer can't draw; "
+              f"the closest shape ({result.spec['shape']}) was rendered instead.")
 
 
 def new_run_dir(sentence):

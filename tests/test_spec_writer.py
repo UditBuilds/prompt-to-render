@@ -201,5 +201,151 @@ class ParseReply(unittest.TestCase):
         self.assertFalse(parsed["shape_added"])
 
 
+def round_reply(shape, real_shape=None, unsupported=(), **fields):
+    """A valid reply for a round shape."""
+    product = dict({"diameter_cm": 3, "height_cm": 10, "colour": "#F4C2C2", "roughness": 0.4}, **fields)
+    return {"is_box": False, "shape": real_shape or shape, "unsupported": list(unsupported),
+            "spec": {"description": "A round product.", "shape": shape, shape: product, "camera": "three_quarter"}}
+
+
+class Shapes(unittest.TestCase):
+    def test_a_drawn_shape_is_not_unsupported(self):
+        parsed = parse_reply(json.dumps(round_reply("bottle", "perfume bottle", ["glass"])))
+        self.assertEqual(parsed["spec"]["shape"], "bottle")
+        self.assertEqual(parsed["unsupported"], ["glass"])
+        self.assertFalse(parsed["shape_added"])
+
+    def test_a_shape_that_isnt_drawn_is_listed_first(self):
+        # A squeeze tube, drawn as the closest shape, a cylinder.
+        parsed = parse_reply(json.dumps(round_reply("cylinder", "tube", ["white cap"])))
+        self.assertEqual(parsed["unsupported"], ["tube shape", "white cap"])
+        self.assertTrue(parsed["shape_added"])
+        self.assertEqual(parsed["model_unsupported"], ["white cap"])
+
+    def test_the_shapes_object_must_be_given(self):
+        # A spec file may leave it out (defaults); the model must choose the sizes.
+        reply = round_reply("jar")
+        del reply["spec"]["jar"]
+        with self.assertRaises(Exception) as ctx:
+            parse_reply(json.dumps(reply))
+        self.assertEqual(ctx.exception.problems,
+                         ['jar: missing. The shape is "jar", so its size, colour and finish go in "jar".'])
+
+    def test_another_shapes_object_is_an_error(self):
+        reply = round_reply("cylinder")
+        reply["spec"]["box"] = GOOD["spec"]["box"]
+        with self.assertRaises(Exception) as ctx:
+            parse_reply(json.dumps(reply))
+        self.assertEqual(ctx.exception.problems, [
+            'box: only used when shape is "box", but shape is "cylinder". Remove box, or set shape to "box".'])
+
+    def test_a_box_is_drawn_as_a_box(self):
+        reply = round_reply("cylinder")
+        reply["is_box"] = True
+        with self.assertRaises(Exception) as ctx:
+            parse_reply(json.dumps(reply))
+        self.assertIn('shape: is_box is true, so the shape is "box", got "cylinder".', ctx.exception.problems[0])
+        # The repair loop sends that back; a fixed reply passes.
+        backend = FakeBackend([reply, round_reply("cylinder")])
+        result = write_spec("a red lipstick", backend)
+        self.assertTrue(result.ok and result.retried)
+
+    def test_default_cap_unless_the_sentence_names_one(self):
+        # The model's cap is replaced: the sentence gives the cap no colour.
+        result = write_spec("a blush pink serum bottle", FakeBackend([round_reply("bottle", cap_colour="#D4AF37")]))
+        self.assertEqual(result.spec["bottle"]["cap_colour"], "#1A1A1A")  # black on a light body
+        self.assertEqual(result.cap_change, {"field": "cap_colour", "from": "#D4AF37", "to": "#1A1A1A"})
+        self.assertTrue(result.cap_given)
+        # Left out by the model: the default, reported as set by code.
+        result = write_spec("a navy serum bottle", FakeBackend([round_reply("bottle", colour="#1B2A4A")]))
+        self.assertEqual(result.spec["bottle"]["cap_colour"], "#C0C0C0")  # silver-grey on a dark body
+        self.assertFalse(result.cap_given)
+        self.assertEqual(result.cap_change, {"field": "cap_colour", "from": None, "to": "#C0C0C0"})
+        # Named in the sentence: the model's colour stays.
+        result = write_spec("a black perfume bottle with a gold cap",
+                            FakeBackend([round_reply("bottle", colour="#111111", cap_colour="#D4AF37")]))
+        self.assertEqual(result.spec["bottle"]["cap_colour"], "#D4AF37")
+        self.assertIsNone(result.cap_change)
+        result = write_spec("a white jar with a lid in rose gold",
+                            FakeBackend([round_reply("jar", colour="#FFFFFF", lid_colour="#B76E79",
+                                                     diameter_cm=7, height_cm=5)]))
+        self.assertEqual(result.spec["jar"]["lid_colour"], "#B76E79")
+
+    def test_a_tube_or_can_is_drawn_as_a_cylinder(self):
+        # The prompt's own closest shape. The model named it but drew a jar (v2 step 2, dev sentences).
+        reply = round_reply("jar", "tube", ["squeeze tube"], diameter_cm=4.5, height_cm=12, colour="#FFFFFF")
+        parsed = parse_reply(json.dumps(reply))
+        self.assertEqual(parsed["spec"]["shape"], "cylinder")
+        self.assertNotIn("jar", parsed["spec"])
+        cylinder = parsed["spec"]["cylinder"]
+        self.assertEqual((cylinder["diameter_cm"], cylinder["height_cm"], cylinder["colour"], cylinder["roughness"]),
+                         (4.5, 12, "#FFFFFF", 0.4))
+        self.assertEqual(cylinder["cap_colour"], "#1A1A1A")  # the default cap, as for any cylinder
+        self.assertFalse(parsed["cap_given"])
+        self.assertEqual(parsed["shape_fixed"], {"real": "tube", "from": "jar", "to": "cylinder"})
+        self.assertEqual(parsed["unsupported"], ["squeeze tube"])  # already listed: no "tube shape" added
+        # A cap colour the model gave goes on the cylinder's cap.
+        reply = round_reply("bottle", "aerosol can", diameter_cm=5, height_cm=15, cap_colour="#FFFFFF")
+        parsed = parse_reply(json.dumps(reply))
+        self.assertEqual((parsed["spec"]["shape"], parsed["spec"]["cylinder"]["cap_colour"]), ("cylinder", "#FFFFFF"))
+        self.assertTrue(parsed["cap_given"])
+        self.assertEqual(parsed["unsupported"], ["aerosol can shape"])
+        # Left alone: drawn as a cylinder already, another real shape, a box.
+        for shape, real in (("cylinder", "tube"), ("bottle", "perfume bottle"), ("jar", "pot")):
+            with self.subTest(real=real):
+                parsed = parse_reply(json.dumps(round_reply(shape, real, diameter_cm=5, height_cm=6)))
+                self.assertEqual(parsed["spec"]["shape"], shape)
+                self.assertIsNone(parsed["shape_fixed"])
+        box = dict(GOOD, shape="tube")
+        self.assertEqual(parse_reply(json.dumps(box))["spec"]["shape"], "box")  # is_box true: a box
+
+    def test_code_draws_a_named_metal_cap(self):
+        # The model gives the colour; code alone decides the metal.
+        result = write_spec("a black perfume bottle with a gold cap",
+                            FakeBackend([round_reply("bottle", colour="#111111", cap_colour="#D4AF37")]))
+        self.assertEqual(result.spec["bottle"]["cap_metal"], "gold")
+        self.assertEqual(result.spec["bottle"]["cap_colour"], "#D4AF37")  # kept, for the colour checks
+        self.assertEqual(result.metal_change, {"field": "cap_metal", "metal": "gold"})
+        result = write_spec("a white serum bottle with a gold logo",
+                            FakeBackend([round_reply("bottle", colour="#FFFFFF")]))
+        self.assertIsNone(result.spec["bottle"]["cap_metal"])
+        self.assertIsNone(result.metal_change)
+        # A lipstick's cap, a v2 step 2 cylinder part.
+        result = write_spec("a nude lipstick with a silver cap",
+                            FakeBackend([round_reply("cylinder", colour="#EDC9AF", cap_colour="#C0C0C0")]))
+        self.assertEqual(result.spec["cylinder"]["cap_metal"], "silver")
+        # Without grounding, code sets nothing: no metal.
+        result = write_spec("a black perfume bottle with a gold cap",
+                            FakeBackend([round_reply("bottle", colour="#111111", cap_colour="#D4AF37")]),
+                            grounding=False)
+        self.assertIsNone(result.spec["bottle"]["cap_metal"])
+
+    def test_code_clamps_impossible_proportions(self):
+        # v2 step 3: a jar taller than it is wide is clamped, and the clamp is recorded.
+        result = write_spec("a body scrub", FakeBackend([round_reply("jar", diameter_cm=6.5, height_cm=10.5)]))
+        self.assertEqual((result.spec["jar"]["diameter_cm"], result.spec["jar"]["height_cm"]), (6.5, 6.5))
+        self.assertEqual(result.proportion_changes, [{"rule": "jar height at most 6.5 cm (1 x its diameter)",
+                                                      "field": "height_cm", "from": 10.5, "to": 6.5}])
+        # Sensible sizes are the model's.
+        result = write_spec("a toner bottle", FakeBackend([round_reply("bottle", diameter_cm=4, height_cm=14)]))
+        self.assertEqual(result.proportion_changes, [])
+        # Without grounding, code sets nothing.
+        result = write_spec("a body scrub", FakeBackend([round_reply("jar", diameter_cm=6.5, height_cm=10.5)]),
+                            grounding=False)
+        self.assertEqual(result.spec["jar"]["height_cm"], 10.5)
+        self.assertEqual(result.proportion_changes, [])
+
+    def test_code_rules_apply_to_every_shape(self):
+        # The style shift recolours the body, and the default cap follows the new body colour.
+        result = write_spec("a luxury blush serum bottle", FakeBackend([round_reply("bottle", colour="#F4C2C2")]))
+        self.assertEqual([c["style"] for c in result.style_changes], ["luxury"])
+        self.assertNotEqual(result.spec["bottle"]["colour"], "#F4C2C2")
+        # Glossy is clamped on a jar like on a box.
+        result = write_spec("a glossy black jar", FakeBackend([round_reply("jar", colour="#111111", roughness=0.2,
+                                                                            diameter_cm=7, height_cm=5)]))
+        self.assertEqual(result.spec["jar"]["roughness"], 0.05)
+        self.assertEqual(result.spec["jar"]["lid_colour"], "#C0C0C0")  # silver-grey on a dark body
+
+
 if __name__ == "__main__":
     unittest.main()

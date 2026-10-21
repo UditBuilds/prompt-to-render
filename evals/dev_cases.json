@@ -1,5 +1,5 @@
 {
-  "about": "Dev sentences for designing the grounding tables and prompt (Phase 3). They are deliberately different from the frozen eval sentences in cases.json, and use other products and colours where possible, so tuning on them doesn't tune on the eval. Same check types as cases.json.",
+  "about": "v2 step 2 added the cases marked \"added\": \"v2-step2\", for metal caps and lids and capped cylinders, with other products and metals than the eval; the eval's five out-of-table shape products are never used here (a test checks). v2 added the cases marked \"added\": \"v2\", for the shapes, with other products than the eval: dev_jade_bottle now wants the cap drawn (gold), not listed as unsupported. Dev sentences for designing the grounding tables and prompt (Phase 3). They are deliberately different from the frozen eval sentences in cases.json, and use other products and colours where possible, so tuning on them doesn't tune on the eval. Same check types as cases.json.",
   "cases": [
     {"id": "dev_rose_gold", "sentence": "a rose gold mascara box", "checks": [
       {"type": "hex", "equals": "#B76E79"},
@@ -15,7 +15,8 @@
     {"id": "dev_jade_bottle", "sentence": "a jade green perfume bottle with a gold cap", "checks": [
       {"type": "is_box", "equals": false},
       {"type": "shape_contains", "any": ["bottle"]},
-      {"type": "model_unsupported_mentions", "any": ["cap"]},
+      {"type": "model_unsupported_excludes", "any": ["cap"]},
+      {"type": "named_colour", "name": "gold", "target": "cap"},
       {"type": "hex", "equals": "#00A86B"}]},
     {"id": "dev_frosted_jar", "sentence": "a frosted glass jar of face cream", "checks": [
       {"type": "is_box", "equals": false},
@@ -45,8 +46,81 @@
       {"type": "hex", "equals": "#E2725B"},
       {"type": "camera", "equals": "top_down"},
       {"type": "dimension", "field": "height_cm", "max": 2.5}]},
+    {"id": "dev_lip_balm", "added": "v2", "sentence": "a coral lip balm", "checks": [
+      {"type": "shape", "equals": "cylinder"},
+      {"type": "shape_size", "field": "diameter_cm", "min": 1, "max": 2.5},
+      {"type": "shape_size", "field": "height_cm", "min": 5, "max": 9}]},
+    {"id": "dev_lip_balm_box", "added": "v2", "sentence": "a lip balm box", "checks": [
+      {"type": "shape", "equals": "box"}]},
+    {"id": "dev_nail_polish", "added": "v2", "sentence": "a burgundy nail polish", "checks": [
+      {"type": "shape", "equals": "bottle"},
+      {"type": "shape_size", "field": "diameter_cm", "min": 2.5, "max": 5},
+      {"type": "shape_size", "field": "height_cm", "min": 5, "max": 10}]},
+    {"id": "dev_toner", "added": "v2", "sentence": "a lavender toner bottle", "checks": [
+      {"type": "shape", "equals": "bottle"},
+      {"type": "model_unsupported_excludes", "any": ["cap"]},
+      {"type": "shape_size", "field": "height_cm", "min": 12, "max": 22}]},
+    {"id": "dev_hair_wax", "added": "v2", "sentence": "a matte black hair wax jar", "checks": [
+      {"type": "shape", "equals": "jar"},
+      {"type": "roughness", "min": 0.6},
+      {"type": "shape_ratio", "num": "height_cm", "den": "diameter_cm", "lt": 1}]},
+    {"id": "dev_toothpaste", "added": "v2", "sentence": "a toothpaste tube", "checks": [
+      {"type": "shape", "equals": "cylinder"},
+      {"type": "model_unsupported_mentions", "any": ["tube"]}]},
+    {"id": "dev_aerosol", "added": "v2", "sentence": "a dry shampoo aerosol can", "checks": [
+      {"type": "shape", "equals": "cylinder"},
+      {"type": "model_unsupported_mentions", "any": ["can", "aerosol"]}]},
+    {"id": "dev_soap_pump", "added": "v2", "sentence": "a frosted glass hand soap bottle with a pump", "checks": [
+      {"type": "shape", "equals": "bottle"},
+      {"type": "model_unsupported_mentions", "any": ["glass", "frosted"]},
+      {"type": "model_unsupported_mentions", "any": ["pump"]}]},
+    {"id": "dev_candle_lid", "added": "v2", "sentence": "an ivory candle jar with a copper lid", "checks": [
+      {"type": "shape", "equals": "jar"},
+      {"type": "hex", "equals": "#B87333", "target": "cap"},
+      {"type": "hex", "equals": "#FFFFF0"},
+      {"type": "model_unsupported_excludes", "any": ["lid", "cap"]}]},
+    {"id": "dev_white_cap", "added": "v2", "sentence": "a teal shampoo bottle with a white cap", "checks": [
+      {"type": "shape", "equals": "bottle"},
+      {"type": "lightness", "min": 85, "target": "cap"},
+      {"type": "hex", "equals": "#008080"},
+      {"type": "model_unsupported_excludes", "any": ["cap"]}]},
+    {"id": "dev_eye_cream", "added": "v2", "sentence": "a luxury rose gold eye cream", "checks": [
+      {"type": "shape", "equals": "jar"},
+      {"type": "shape_ratio", "num": "height_cm", "den": "diameter_cm", "lt": 1}]},
+    {"id": "dev_transparent", "added": "v2", "sentence": "a transparent shampoo bottle", "checks": [
+      {"type": "shape", "equals": "bottle"},
+      {"type": "model_unsupported_mentions", "any": ["transparen", "clear", "see-through"]}]},
+    {"id": "dev_glass_oil", "added": "v2", "sentence": "an amber glass hair oil bottle", "checks": [
+      {"type": "shape", "equals": "bottle"},
+      {"type": "model_unsupported_mentions", "any": ["glass"]}]},
+    {"id": "dev_setting_spray", "added": "v2", "sentence": "a makeup setting spray bottle", "checks": [
+      {"type": "shape", "equals": "bottle"},
+      {"type": "model_unsupported_mentions", "any": ["spray", "nozzle", "mist"]}]},
+    {"id": "dev_room_spray", "added": "v2", "sentence": "a white room spray bottle", "checks": [
+      {"type": "shape", "equals": "bottle"},
+      {"type": "model_unsupported_mentions", "any": ["spray", "nozzle", "mist"]}]},
     {"id": "dev_backdrop", "sentence": "a white serum box on a mint backdrop", "checks": [
       {"type": "hex", "equals": "#3EB489", "target": "background"},
-      {"type": "lightness", "min": 85}]}
+      {"type": "lightness", "min": 85}]},
+    {"id": "dev_concealer_gold", "added": "v2-step2", "sentence": "a beige concealer stick with a gold cap", "checks": [
+      {"type": "shape", "equals": "cylinder"},
+      {"type": "cap_part"},
+      {"type": "metal", "target": "cap", "equals": "gold"},
+      {"type": "model_unsupported_excludes", "any": ["lid", "cap"]}]},
+    {"id": "dev_chrome_lid", "added": "v2-step2", "sentence": "a lavender night cream jar with a chrome lid", "checks": [
+      {"type": "shape", "equals": "jar"},
+      {"type": "metal", "target": "cap", "equals": "chrome"},
+      {"type": "model_unsupported_excludes", "any": ["lid", "cap"]}]},
+    {"id": "dev_silver_toner", "added": "v2-step2", "sentence": "a white toner bottle with a silver cap", "checks": [
+      {"type": "shape", "equals": "bottle"},
+      {"type": "metal", "target": "cap", "equals": "silver"},
+      {"type": "model_unsupported_excludes", "any": ["lid", "cap"]}]},
+    {"id": "dev_deodorant", "added": "v2-step2", "sentence": "a teal deodorant stick", "checks": [
+      {"type": "shape", "equals": "cylinder"},
+      {"type": "cap_part"}]},
+    {"id": "dev_silver_logo_jar", "added": "v2-step2", "sentence": "a black jar with a silver logo", "checks": [
+      {"type": "shape", "equals": "jar"},
+      {"type": "metal", "target": "cap", "equals": null},
+      {"type": "model_unsupported_mentions", "any": ["logo"]}]}
   ]
 }

@@ -15,13 +15,17 @@ A run passes when it produced a valid spec within 2 attempts AND every check
 passes.
 
 Reports the pass rate per case and overall, the named-colour score of the
-in-table and out-of-table colour cases separately, how often the retry loop
-fired, and the average LLM time. Results are saved to
-evals/results/<timestamp>_<label>.json, with a Markdown summary next to it.
+in-table and out-of-table colour cases separately, the shape scores (the
+out-of-table products apart), the unsupported lists, the rules code decides,
+the labels (v2 step 4: code's alone, from the sentence's quoted text), how
+often the retry loop fired, the average LLM time and the peak GPU memory.
+Results are saved to evals/results/<timestamp>_<label>.json, with a Markdown
+summary next to it.
 """
 
 import argparse
 import colorsys
+import copy
 import json
 import os
 import re
@@ -32,6 +36,8 @@ from datetime import datetime
 EVALS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(EVALS_DIR))
 
+import gpu  # noqa: E402
+import shapes  # noqa: E402
 from check_colour import hex_to_lab  # noqa: E402
 from grounding import TABLES, load_tables  # noqa: E402
 from llm_backend import DEFAULT_MODEL, BackendUnavailable, OllamaBackend  # noqa: E402
@@ -95,15 +101,64 @@ def hue_in(hue, low, high):
     return low <= hue <= high if low <= high else (hue >= low or hue <= high)
 
 
+def shape_of(spec):
+    """The spec's shape. A spec without one (v1.3 and earlier) is a box, the default."""
+    return spec.get("shape", "box")
+
+
+def product_of(spec):
+    """The fields of the spec's own shape: spec["box"] for a box, spec["cylinder"] for a cylinder, ..."""
+    return spec[shape_of(spec)]
+
+
+def box_of(result):
+    """The box's fields, or None if the spec's shape isn't a box (then there are none)."""
+    return result.spec["box"] if shape_of(result.spec) == "box" else None
+
+
+def not_a_box(result):
+    return False, f"shape {shape_of(result.spec)}, not a box: no box sides to check"
+
+
+# The field holding the cap or lid colour, per shape. Other shapes have none.
+CAP_FIELDS = {"cylinder": "cap_colour", "bottle": "cap_colour", "jar": "lid_colour"}
+# The field naming the metal a cap or lid is drawn in (v2 step 2). Code sets
+# it from the sentence; a spec without it has no metal part.
+METAL_FIELDS = {"cylinder": "cap_metal", "bottle": "cap_metal", "jar": "lid_metal"}
+
+
+def label_of(spec):
+    """The spec's text label ({"text", "colour", "metal"}), or None. Set by code from the
+    sentence (v2 step 4); a spec from before step 4 has none."""
+    return spec.get("label")
+
+
 def colour_of(check, result):
-    """The box colour, or the backdrop colour with "target": "background"."""
+    """(where, colour): the product's colour, the backdrop's with "target": "background",
+    the cap's or lid's with "target": "cap" (colour None if the shape has no cap), or
+    the label's with "target": "label" (None if there is no label)."""
     if check.get("target") == "background":
         return "backdrop", result.spec["background_colour"]
-    return "box", result.spec["box"]["colour"]
+    if check.get("target") == "label":
+        label = label_of(result.spec)
+        return "label", label["colour"] if label else None
+    shape = shape_of(result.spec)
+    if check.get("target") == "cap":
+        field = CAP_FIELDS.get(shape)
+        return f"{shape} {field or 'cap'}", product_of(result.spec).get(field) if field else None
+    return shape, product_of(result.spec)["colour"]
+
+
+def no_colour(where):
+    if where == "label":
+        return False, "no label"
+    return False, f"no {where}: this shape has none"
 
 
 def check_hue(check, result, done):
     where, colour = colour_of(check, result)
+    if colour is None:
+        return no_colour(where)
     hue = hex_to_hsv(colour)[0]
     return (hue_in(hue, check["min"], check["max"]),
             f"hue {hue:.0f} deg of {where} {colour} (want {check['min']}..{check['max']})")
@@ -111,12 +166,16 @@ def check_hue(check, result, done):
 
 def check_saturation(check, result, done):
     where, colour = colour_of(check, result)
+    if colour is None:
+        return no_colour(where)
     saturation = hex_to_hsv(colour)[1]
     return in_range(saturation, check), f"saturation {saturation:.2f} of {where} {colour} (want {describe_range(check)})"
 
 
 def check_lightness(check, result, done):
     where, colour = colour_of(check, result)
+    if colour is None:
+        return no_colour(where)
     lightness = hex_to_lab(colour)[0]
     return in_range(lightness, check), f"L* {lightness:.0f} of {where} {colour} (want {describe_range(check)})"
 
@@ -130,6 +189,8 @@ def check_named_colour(check, result, done):
     name = check["name"]
     definition = COLOUR_DEFINITIONS[name]
     where, colour = colour_of(check, result)
+    if colour is None:
+        return no_colour(where)
     if definition.get("space") == "hsl":
         hue, saturation, lightness = hex_to_hsl(colour)
         names = ("HSL saturation", "HSL lightness")
@@ -169,11 +230,13 @@ def check_neutral_backdrop(check, result, done):
 
 def check_hex(check, result, done):
     where, colour = colour_of(check, result)
+    if colour is None:
+        return no_colour(where)
     return colour.upper() == check["equals"].upper(), f"{where} colour {colour} (want {check['equals']})"
 
 
 def check_roughness(check, result, done):
-    roughness = result.spec["box"]["roughness"]
+    roughness = product_of(result.spec)["roughness"]
     return in_range(roughness, check), f"roughness {roughness:g} (want {describe_range(check)})"
 
 
@@ -183,27 +246,36 @@ def check_camera(check, result, done):
 
 
 def check_ratio(check, result, done):
-    box = result.spec["box"]
+    box = box_of(result)
+    if box is None:
+        return not_a_box(result)
     ratio = box[check["num"]] / box[check["den"]]
     return in_range(ratio, check), (f"{check['num']}/{check['den']} = {box[check['num']]:g}/{box[check['den']]:g} "
                                     f"= {ratio:.2f} (want {describe_range(check)})")
 
 
 def check_size(check, result, done):
-    box = result.spec["box"]
+    box = box_of(result)
+    if box is None:
+        return not_a_box(result)
     sides = [box["width_cm"], box["height_cm"], box["depth_cm"]]
     side = max(sides) if check["side"] == "longest" else min(sides)
     return in_range(side, check), f"{check['side']} side {side:g} cm (want {describe_range(check)})"
 
 
 def check_dimension(check, result, done):
-    value = result.spec["box"][check["field"]]
+    box = box_of(result)
+    if box is None:
+        return not_a_box(result)
+    value = box[check["field"]]
     return in_range(value, check), f"{check['field']} {value:g} cm (want {describe_range(check)})"
 
 
 def check_top_aspect(check, result, done):
     """Long side / short side of the top face (width x depth)."""
-    box = result.spec["box"]
+    box = box_of(result)
+    if box is None:
+        return not_a_box(result)
     width, depth = box["width_cm"], box["depth_cm"]
     aspect = max(width, depth) / min(width, depth)
     return (in_range(aspect, check),
@@ -228,24 +300,150 @@ def check_model_unsupported_mentions(check, result, done):
                 f"(want a mention of {' or '.join(check['any'])})")
 
 
+def check_model_unsupported_excludes(check, result, done):
+    """The model must not list these as unsupported (e.g. a cap or lid, which v2 draws)."""
+    text = " | ".join(result.model_unsupported).lower()
+    found = [word for word in check["any"] if word in text]
+    return not found, (f"model's own unsupported list {json.dumps(result.model_unsupported)} "
+                       f"(want no mention of {' or '.join(check['any'])})")
+
+
+def check_shape(check, result, done):
+    """The shape the spec draws (box, cylinder, bottle or jar), not the model's free-text shape."""
+    shape = shape_of(result.spec)
+    return shape == check["equals"], f"spec shape {shape} (want {check['equals']})"
+
+
+def check_shape_size(check, result, done):
+    """A size field of the spec's own shape. A shape without that field fails: a box has no diameter_cm."""
+    shape, fields = shape_of(result.spec), product_of(result.spec)
+    if check["field"] not in fields:
+        return False, f"shape {shape} has no {check['field']} (want {describe_range(check)})"
+    value = fields[check["field"]]
+    return in_range(value, check), f"{shape} {check['field']} {value:g} cm (want {describe_range(check)})"
+
+
+def check_shape_ratio(check, result, done):
+    shape, fields = shape_of(result.spec), product_of(result.spec)
+    missing = [f for f in (check["num"], check["den"]) if f not in fields]
+    if missing:
+        return False, (f"shape {shape} has no {' or '.join(missing)} "
+                       f"(want {check['num']}/{check['den']} {describe_range(check)})")
+    ratio = fields[check["num"]] / fields[check["den"]]
+    return in_range(ratio, check), (f"{shape} {check['num']}/{check['den']} = {fields[check['num']]:g}/"
+                                    f"{fields[check['den']]:g} = {ratio:.2f} (want {describe_range(check)})")
+
+
+def round_parts(result):
+    """(shape, the names of the parts the renderer draws), from shapes.py. A box is one part."""
+    shape = shape_of(result.spec)
+    if shape == "box":
+        return shape, ["Box"]
+    return shape, [part.name for part in shapes.parts(shape, product_of(result.spec))]
+
+
+def check_cap_part(check, result, done):
+    """The product is drawn with a separate cap or lid (e.g. a lipstick: base + cap). Decided by code."""
+    shape, names = round_parts(result)
+    return (any(name in ("Cap", "Lid") for name in names),
+            f"{shape} drawn as {' + '.join(names)} (want a cap or lid part)")
+
+
+def check_lid_share(check, result, done):
+    """The lid's height as a share of the whole jar's, measured on the profile the renderer draws. Decided by code.
+
+    Rounded to 6 decimals, like hex_to_hsl, so a lid exactly on a range's
+    edge isn't pushed past it by floating point: a lid of 0.30 of a 3.5 cm
+    jar computes as 0.30000000000000004, of a 4.5 cm jar as 0.3.
+    """
+    shape = shape_of(result.spec)
+    lid = None
+    if shape != "box":
+        lid = next((p for p in shapes.parts(shape, product_of(result.spec)) if p.name == "Lid"), None)
+    if lid is None:
+        return False, f"shape {shape} has no lid (want lid share {describe_range(check)})"
+    heights = [z for _, z in lid.profile]
+    share = round((max(heights) - min(heights)) / (product_of(result.spec)["height_cm"] / 100), 6)
+    return in_range(share, check), f"lid {share:.3f} of the jar's height (want {describe_range(check)})"
+
+
+def check_metal(check, result, done):
+    """The metal the cap or lid is drawn in, null for none. Set by code from the sentence, never by the model.
+
+    A spec without the field (v2 step 1 and earlier) has no metal part.
+    """
+    shape = shape_of(result.spec)
+    field = METAL_FIELDS.get(shape)
+    if field is None:
+        return False, f"shape {shape} has no cap or lid (want metal {json.dumps(check['equals'])})"
+    metal = product_of(result.spec).get(field)
+    return metal == check["equals"], f"{shape} {field} {json.dumps(metal)} (want {json.dumps(check['equals'])})"
+
+
 def check_unsupported_empty(check, result, done):
     return not result.unsupported, f"unsupported {json.dumps(result.unsupported)} (want [])"
+
+
+def check_unsupported_mentions(check, result, done):
+    """The unsupported list the user sees: the model's items and the code's (a second
+    quoted text, a label over 20 characters), unlike model_unsupported_mentions."""
+    text = " | ".join(result.unsupported).lower()
+    ok = any(word in text for word in check["any"])
+    return ok, (f"unsupported {json.dumps(result.unsupported, ensure_ascii=False)} "
+                f"(want a mention of {' or '.join(check['any'])})")
+
+
+def check_unsupported_excludes(check, result, done):
+    """The unsupported list the user sees must not name these, e.g. the label text code drew."""
+    text = " | ".join(result.unsupported).lower()
+    found = [word for word in check["any"] if word in text]
+    return not found, (f"unsupported {json.dumps(result.unsupported, ensure_ascii=False)} "
+                       f"(want no mention of {' or '.join(check['any'])})")
+
+
+def check_label_text(check, result, done):
+    """The label's text, exactly, or null for no label. Set by code from the sentence's
+    quoted text, never by the model. A spec without a label has none."""
+    label = label_of(result.spec)
+    text = label["text"] if label else None
+    return text == check["equals"], (f"label {json.dumps(text, ensure_ascii=False)} "
+                                     f"(want {json.dumps(check['equals'], ensure_ascii=False)})")
+
+
+def check_label_metal(check, result, done):
+    """The metal the label is drawn in, null for a plain colour. No label at all fails either way."""
+    label = label_of(result.spec)
+    if not label:
+        return False, f"no label (want label metal {json.dumps(check['equals'])})"
+    metal = label.get("metal")
+    return metal == check["equals"], f"label metal {json.dumps(metal)} (want {json.dumps(check['equals'])})"
+
+
+def check_label_lightness(check, result, done):
+    """check_lightness on the label's colour. No label fails."""
+    return check_lightness(dict(check, target="label"), result, done)
+
+
+def check_label_named_colour(check, result, done):
+    """check_named_colour on the label's colour. No label fails."""
+    return check_named_colour(dict(check, target="label"), result, done)
 
 
 def check_style_shift(check, result, done):
     """Compare the box colour with another case's (e.g. "a luxury red box" vs "a red box").
 
     The reference is the mean L* and saturation over that case's valid runs.
+    The colour is the product's, whatever its shape.
     The colour must move in the given direction by at least min_lightness L*
     OR by min_saturation of saturation.
     """
     reference = done.get(check["than"])
-    colours = [r["spec"]["box"]["colour"] for r in reference["runs"] if r["valid"]] if reference else []
+    colours = [product_of(r["spec"])["colour"] for r in reference["runs"] if r["valid"]] if reference else []
     if not colours:
         return False, f"no valid spec from {check['than']} to compare with"
     ref_lightness = sum(hex_to_lab(c)[0] for c in colours) / len(colours)
     ref_saturation = sum(hex_to_hsv(c)[1] for c in colours) / len(colours)
-    colour = result.spec["box"]["colour"]
+    colour = product_of(result.spec)["colour"]
     lightness, saturation = hex_to_lab(colour)[0], hex_to_hsv(colour)[1]
     if check["direction"] == "darker_or_less_saturated":
         light_shift, sat_shift = ref_lightness - lightness, ref_saturation - saturation
@@ -275,8 +473,21 @@ CHECKS = {
     "is_box": check_is_box,
     "shape_contains": check_shape_contains,
     "model_unsupported_mentions": check_model_unsupported_mentions,
+    "model_unsupported_excludes": check_model_unsupported_excludes,
     "unsupported_empty": check_unsupported_empty,
+    "shape": check_shape,
+    "shape_size": check_shape_size,
+    "shape_ratio": check_shape_ratio,
     "style_shift": check_style_shift,
+    "cap_part": check_cap_part,
+    "lid_share": check_lid_share,
+    "metal": check_metal,
+    "unsupported_mentions": check_unsupported_mentions,
+    "unsupported_excludes": check_unsupported_excludes,
+    "label_text": check_label_text,
+    "label_metal": check_label_metal,
+    "label_lightness": check_label_lightness,
+    "label_named_colour": check_label_named_colour,
 }
 
 
@@ -290,6 +501,31 @@ def run_checks(case, result, done=None):
         passed, found = CHECKS[check["type"]](check, result, done or {})
         outcomes.append({"check": check["type"], "passed": passed, "found": found})
     return outcomes
+
+
+def unclamped_spec(spec, changes):
+    """The spec as the model wrote it, before code clamped its proportions (v2 step 3).
+
+    `changes` is the run's proportion_changes: {"rule", "field", "from", "to"}
+    per clamp, in the order they fired, each on a field of the spec's own shape.
+    """
+    spec = json.loads(json.dumps(spec))
+    for change in reversed(changes):
+        product_of(spec)[change["field"]] = change["from"]
+    return spec
+
+
+def checks_without_clamps(case, result, changes, done=None):
+    """The checks run again on the spec before any proportion clamp, or None if no clamp fired.
+
+    A run that passes with the clamps but not without them passed only
+    because code clamped a size: that is code's pass, not the model's.
+    """
+    if not (result.ok and changes):
+        return None
+    model = copy.copy(result)
+    model.spec = unclamped_spec(result.spec, changes)
+    return run_checks(case, model, done)
 
 
 # ---------------------------------------------------------------------------
@@ -345,10 +581,12 @@ def main():
     done = {}
     stopped_early = None
     started = time.perf_counter()
+    memory = gpu.PeakMemory()
     try:
-        for case in cases:
-            results.append(run_case(case, backend, args.runs, done, not args.no_grounding, tables))
-            done[case["id"]] = results[-1]
+        with memory:
+            for case in cases:
+                results.append(run_case(case, backend, args.runs, done, not args.no_grounding, tables))
+                done[case["id"]] = results[-1]
     except (BackendUnavailable, RuntimeError, KeyboardInterrupt) as e:
         # Keep what was collected so far rather than losing it all.
         stopped_early = str(e) or type(e).__name__
@@ -363,7 +601,7 @@ def main():
         print("No case finished, so there are no results to save.")
         return 1
 
-    summary = summarise(results)
+    summary = summarise(results, memory.peak)
     report = {
         "created": datetime.now().isoformat(timespec="seconds"),
         "label": args.label,
@@ -435,6 +673,10 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
         result = write_spec(case["sentence"], backend, grounding=grounding, tables=tables)
         outcomes = run_checks(case, result, done)
         passed = all(o["passed"] for o in outcomes)
+        # v2 step 3: the sizes code clamped ({"rule", "field", "from", "to"}), and the
+        # checks on the spec before them (None if no clamp fired).
+        clamps = getattr(result, "proportion_changes", None) or []
+        unclamped = checks_without_clamps(case, result, clamps, done)
         retry_note = ", retried" if result.retried else ""
         print(f"  run {n}: {'PASS' if passed else 'FAIL'}  "
               f"({len(result.attempts)} attempt{'s' if result.retried else ''}{retry_note}, "
@@ -442,6 +684,8 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
         for o in outcomes:
             if not o["passed"]:
                 print(f"         x {o['found']}")
+        if passed and unclamped and not all(o["passed"] for o in unclamped):
+            print("         (passed only because code clamped a size)")
         case_runs.append({
             "run": n,
             "passed": passed,
@@ -464,6 +708,20 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
             "finish_change": result.finish_change,
             "backdrop_change": result.backdrop_change,
             "backdrop_given": result.backdrop_given,
+            "cap_change": result.cap_change,
+            "cap_given": result.cap_given,
+            # v2 step 2: the metal code gave a cap or lid ({"field", "metal"}), None if none.
+            "metal_change": getattr(result, "metal_change", None),
+            # v2 step 2: a tube or can code redrew as a cylinder ({"real", "from", "to"}), None if none.
+            "shape_fixed": getattr(result, "shape_fixed", None),
+            # v2 step 3: proportion clamps, and whether the run passes without them (None: no clamp fired).
+            "proportion_changes": clamps,
+            "checks_without_clamps": unclamped,
+            "passed_without_clamps": None if unclamped is None else all(o["passed"] for o in unclamped),
+            # v2 step 4: the label code set from the sentence's quoted text, None if none,
+            # and the sentence the model and the tables saw (the quoted text left out).
+            "label_change": getattr(result, "label_change", None),
+            "model_sentence": getattr(result, "model_sentence", None),
             "spec": result.spec,
             "validation_errors": [a.errors for a in result.attempts],
             "outputs": [a.reply.text for a in result.attempts],
@@ -473,21 +731,27 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
     # distinct specs shows how much the runs actually varied.
     distinct = len({json.dumps(r["spec"], sort_keys=True) for r in case_runs if r["valid"]})
     return {"id": case["id"], "sentence": case["sentence"], "covers": case.get("covers", ""),
-            "colour_group": case.get("colour_group"), "checks": case["checks"], "passed_runs": passes,
+            "colour_group": case.get("colour_group"), "shape_group": case.get("shape_group"),
+            "added": case.get("added"),
+            "checks": case["checks"], "passed_runs": passes,
             "total_runs": len(case_runs), "distinct_specs": distinct, "runs": case_runs}
 
 
-# colour_group in cases.json -> how the summary names it.
-COLOUR_GROUPS = {"in_table": "In-table colours", "out_of_table": "Out-of-table colours"}
+# colour_group in cases.json -> how the summary names it. The five held-out
+# names of v1.1 and the five of v2 step 3 are scored apart: the first five had
+# been looked at across many sessions, so only the new five are fully clean.
+COLOUR_GROUPS = {"in_table": "In-table colours", "out_of_table": "Out-of-table colours, old 5",
+                 "out_of_table_new": "Out-of-table colours, new 5"}
 
 
 def box_colour_passed(case, run):
-    """Did the run pass the case's named-colour check on the box? None if the case has none.
+    """Did the run pass the case's named-colour check on the box (the product, not its
+    backdrop or cap)? None if the case has none.
 
     An invalid spec has no colour, so it counts as a fail.
     """
     index = next((i for i, c in enumerate(case["checks"])
-                  if c["type"] == "named_colour" and c.get("target") != "background"), None)
+                  if c["type"] == "named_colour" and c.get("target") is None), None)
     if index is None:
         return None
     return run["valid"] and run["checks"][index]["passed"]
@@ -515,11 +779,128 @@ def summarise_groups(results):
     return groups
 
 
-def summarise(results):
+# The check types behind the shape scores: the shape chosen, the sizes of
+# that shape, and both in the same run (v2 step 3; only over the cases that
+# check both, since a size check on the wrong shape reads that shape's
+# fields). The products in no table and no prompt example (shape_group
+# "out_of_table", v2 step 2) are scored apart: only they measure the model's
+# own knowledge of shapes.
+SHAPE_SCORES = {"choice": ("shape",), "sizes": ("shape_size", "shape_ratio"),
+                "both": ("shape", "shape_size", "shape_ratio")}
+SHAPE_SCORE_NAMES = {"choice": "Shape choice", "sizes": "Shape sizes",
+                     "both": "Shape choice and sizes in the same run",
+                     "oot_choice": "Out-of-table products: shape choice",
+                     "oot_sizes": "Out-of-table products: shape sizes",
+                     "oot_both": "Out-of-table products: shape and size in the same run"}
+# Other checks scored on their own, over every case that has them. The rules
+# code decides measure the code, not the model.
+CHECK_SCORES = {"unsupported": ("model_unsupported_mentions", "model_unsupported_excludes"),
+                "code_rules": ("cap_part", "lid_share", "metal"),
+                # v2 step 4: labels are code's alone, from the sentence's quoted text.
+                "label_text": ("label_text",),
+                "label_colour": ("label_metal", "label_lightness", "label_named_colour"),
+                "label_lists": ("unsupported_mentions", "unsupported_excludes")}
+CHECK_SCORE_NAMES = {"unsupported": "Unsupported lists (the model's own)",
+                     "code_rules": "Rules decided by code (metal cap or lid, cylinder cap, lid share)",
+                     "label_text": "Label text (code; none when nothing is quoted)",
+                     "label_colour": "Label colour (code: named, metal, or black/white for the body)",
+                     "label_lists": "Unsupported lists as the user sees them (label cases)"}
+# "added" in cases.json -> the summary's group, and how it is named.
+ADDED_GROUPS = {"before_v2": (None, "Cases from before v2"), "v2": ("v2", "Cases added in v2"),
+                "v2_step2": ("v2-step2", "Cases added in v2 step 2"),
+                "v2_step3": ("v2-step3", "Cases added in v2 step 3"),
+                "v2_step4": ("v2-step4", "Cases added in v2 step 4")}
+
+
+def checks_passed(case, run, types, unclamped=False):
+    """Did the run pass every check of these types? None if the case has none.
+
+    An invalid spec counts as a fail. With unclamped, the checks on the spec
+    before code clamped its proportions (the same checks if no clamp fired).
+    """
+    indexes = [i for i, c in enumerate(case["checks"]) if c["type"] in types]
+    if not indexes:
+        return None
+    checks = (unclamped and run.get("checks_without_clamps")) or run["checks"]
+    return run["valid"] and all(checks[i]["passed"] for i in indexes)
+
+
+def clamp_only(run):
+    """True if the run passed only because code clamped a size: it fails on the spec before the clamps."""
+    return run["passed"] and run.get("passed_without_clamps") is False
+
+
+def score(results, types):
+    """Runs passing every check of these types, over the cases that have any. None if no case has one.
+
+    clamp_only_runs: of those passes, the ones that pass only because code
+    clamped a size. They count for the code, not the model.
+    """
+    runs = [(c, r) for c in results for r in c["runs"] if checks_passed(c, r, types) is not None]
+    if not runs:
+        return None
+    return {"cases": len({c["id"] for c, _ in runs}), "total_runs": len(runs),
+            "passed_runs": sum(bool(checks_passed(c, r, types)) for c, r in runs),
+            "clamp_only_runs": sum(bool(checks_passed(c, r, types)) and not checks_passed(c, r, types, True)
+                                   for c, r in runs)}
+
+
+def summarise_shapes(results):
+    """The shape checks alone, the size checks alone, and both in the same run, over the cases
+    that have them; the out-of-table products ("oot_choice", "oot_sizes", "oot_both") apart
+    from the others.
+
+    Counted like the named-colour check of the colour groups: the other
+    checks of these cases (e.g. the neutral backdrop) are set by code.
+    """
+    groups = {"": [c for c in results if c.get("shape_group") != "out_of_table"],
+              "oot_": [c for c in results if c.get("shape_group") == "out_of_table"]}
+    scores = {}
+    for prefix, cases in groups.items():
+        for name, types in SHAPE_SCORES.items():
+            scored = cases
+            if name == "both":
+                scored = [c for c in cases if "shape" in check_types(c)
+                          and {"shape_size", "shape_ratio"} & check_types(c)]
+            found = score(scored, types)
+            if found:
+                scores[prefix + name] = found
+    return scores
+
+
+def check_types(case):
+    return {c["type"] for c in case["checks"]}
+
+
+def summarise_checks(results):
+    """CHECK_SCORES: each set of check types alone, over every case that has them."""
+    scores = {name: score(results, types) for name, types in CHECK_SCORES.items()}
+    return {name: found for name, found in scores.items() if found}
+
+
+def summarise_added(results):
+    """Every check, for the cases from before v2, those v2 added and those v2 step 2 added, separately.
+
+    The cases from before v2 and the ones v2 added are the regression gate: they must not get worse.
+    """
+    groups = {}
+    for name, (added, _) in ADDED_GROUPS.items():
+        cases = [c for c in results if c.get("added") == added]
+        if cases:
+            groups[name] = {"cases": len(cases), "total_runs": sum(c["total_runs"] for c in cases),
+                            "passed_runs": sum(c["passed_runs"] for c in cases),
+                            "clamp_only_runs": sum(clamp_only(r) for c in cases for r in c.get("runs", []))}
+    return groups
+
+
+def summarise(results, peak_gpu_mib=None):
     runs = [r for case in results for r in case["runs"]]
     total = len(runs)
     return {
         "colour_groups": summarise_groups(results),
+        "shape_scores": summarise_shapes(results),
+        "check_scores": summarise_checks(results),
+        "added_groups": summarise_added(results),
         "passed_runs": sum(r["passed"] for r in runs),
         "total_runs": total,
         "pass_rate": round(sum(r["passed"] for r in runs) / total, 3) if total else None,
@@ -532,6 +913,10 @@ def summarise(results):
         # Runs where the "<shape> shape" item in unsupported came from the
         # code (from the model's shape field), not from the model's own list.
         "shape_added_by_code_runs": sum(bool(r.get("shape_added_by_code")) for r in runs),
+        # v2 step 3: runs where code clamped a size, and the passes that hold only because of it.
+        "clamp_runs": sum(bool(r.get("proportion_changes")) for r in runs),
+        "clamp_only_runs": sum(clamp_only(r) for r in runs),
+        "clamp_only": [f"{case['id']} run {r['run']}" for case in results for r in case["runs"] if clamp_only(r)],
         "avg_llm_seconds": round(sum(r["llm_seconds"] for r in runs) / total, 2) if total else None,
         "avg_prompt_tokens": round(sum(r["prompt_tokens"] for r in runs) / total) if total else None,
         # Per LLM call, not per run: a retry sends a longer prompt, and the
@@ -539,6 +924,9 @@ def summarise(results):
         "max_prompt_tokens_per_call": max(
             (max(r["call_prompt_tokens"]) for r in runs if r.get("call_prompt_tokens")), default=None),
         "avg_output_tokens": round(sum(r["output_tokens"] for r in runs) / total) if total else None,
+        # Whole card (nvidia-smi), sampled while the cases ran: the model plus
+        # the desktop's few hundred MiB. None if it wasn't measured.
+        "peak_gpu_mib": peak_gpu_mib,
     }
 
 
@@ -549,6 +937,12 @@ def percent(part, total):
     rounding it again turned 66/111 (59.46%) into 0.595 and then 60%.
     """
     return f"{(200 * part + total) // (2 * total)}%"
+
+
+def clamped(group):
+    """ ", N of them only because code clamped a size", or "" if none."""
+    n = group.get("clamp_only_runs", 0)
+    return f", {n} of them only because code clamped a size" if n else ""
 
 
 def markdown_table(report):
@@ -577,13 +971,29 @@ def markdown_table(report):
     lines += [
         "",
         f"- **Overall:** {s['passed_runs']}/{s['total_runs']} runs passed "
-        f"({percent(s['passed_runs'], s['total_runs'])}); "
+        f"({percent(s['passed_runs'], s['total_runs'])}){clamped(s)}; "
         f"{s['cases_passing_all_runs']}/{s['total_cases']} cases passed every run.",
     ]
+    added = s.get("added_groups", {})
+    if len(added) > 1:
+        for name, (_, title) in ADDED_GROUPS.items():
+            g = added.get(name)
+            if g:
+                lines.append(f"- **{title}** ({g['cases']} cases): {g['passed_runs']}/{g['total_runs']} runs "
+                             f"passed ({percent(g['passed_runs'], g['total_runs'])}){clamped(g)}.")
     for group, g in s.get("colour_groups", {}).items():
         lines.append(f"- **{COLOUR_GROUPS[group]}** ({g['cases']} cases): the named-colour check passed in "
                      f"{g['colour_passed_runs']}/{g['total_runs']} runs; every check in "
                      f"{g['passed_runs']}/{g['total_runs']}.")
+    for names, scores in ((SHAPE_SCORE_NAMES, s.get("shape_scores", {})),
+                          (CHECK_SCORE_NAMES, s.get("check_scores", {}))):
+        for name, g in scores.items():
+            lines.append(f"- **{names[name]}** ({g['cases']} cases): passed in {g['passed_runs']}/"
+                         f"{g['total_runs']} runs ({percent(g['passed_runs'], g['total_runs'])}){clamped(g)}.")
+    if s.get("clamp_runs"):
+        lines.append(f"- **Sizes clamped by code:** in {s['clamp_runs']}/{s['total_runs']} runs. Passed only "
+                     f"because of a clamp (they fail on the model's own sizes): "
+                     f"{', '.join(s['clamp_only']) or 'none'}.")
     lines += [
         f"- **Retry loop fired:** {s['retry_runs']}/{s['total_runs']} runs "
         f"({percent(s['retry_runs'], s['total_runs'])}); "
@@ -595,8 +1005,11 @@ def markdown_table(report):
         f"- **Average LLM time per run:** {s['avg_llm_seconds']:.1f} s "
         f"({s['avg_prompt_tokens']} prompt + {s['avg_output_tokens']} output tokens), model already loaded. "
         f"Largest prompt of any single call: {s['max_prompt_tokens_per_call']} tokens.",
-        "",
     ]
+    if s.get("peak_gpu_mib") is not None:
+        lines.append(f"- **Peak GPU memory while the cases ran:** {s['peak_gpu_mib']} MiB "
+                     f"(whole card, nvidia-smi, model loaded).")
+    lines.append("")
     return "\n".join(lines)
 
 

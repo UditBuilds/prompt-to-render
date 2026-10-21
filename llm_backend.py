@@ -31,9 +31,11 @@ DEFAULT_MODEL = "qwen3:8b"
 
 # The spec fields the LLM writes: what is in the shot. The render settings
 # (colour_mode, lighting, resolution, samples) keep their defaults.
-LLM_FIELDS = ("description", "box", "background_colour", "camera")
+LLM_FIELDS = ("description", "shape", *spec.SHAPES, "background_colour", "camera")
 # The LLM may leave these out. It sets the backdrop only when the sentence
 # names one; otherwise code sets a neutral one (grounding.neutral_backdrop).
+# Of the shapes' objects it writes exactly one, its own shape's: see
+# spec_schema().
 LLM_OPTIONAL = ("background_colour",)
 
 # Sent back to the model when its spec fails validation.
@@ -73,23 +75,39 @@ def output_schema():
         "properties": {
             "is_box": {
                 "type": "boolean",
-                "description": "false if the main object is clearly not a box (a bottle, jar, tube, ...).",
+                "description": "false if the main object is not a box, carton, case or package.",
             },
             "shape": {
                 "type": "string",
-                "description": 'The real shape of the main object, in one or two words: "box" for any '
-                               'box, carton or case; otherwise e.g. "bottle", "jar", "tube", "can".',
+                "description": 'The real shape of the main object, in one or two words: "box", "cylinder", '
+                               '"bottle" or "jar" when it is one of those; otherwise e.g. "tube", "pouch", "can".',
             },
             "unsupported": {
                 "type": "array",
                 "items": {"type": "string"},
                 "description": "Everything requested that the renderer can't draw, a few words each.",
             },
-            "spec": spec.json_schema(only=LLM_FIELDS, optional=LLM_OPTIONAL),
+            "spec": spec_schema(),
         },
         "required": ["is_box", "shape", "unsupported", "spec"],
         "additionalProperties": False,
     }
+
+
+def spec_schema():
+    """The "spec" part of the reply: one of four, one per shape.
+
+    Each requires its own shape's object and has no other shape's. With the
+    four objects merely optional in one schema, Ollama's grammar let the
+    model close the spec after "camera" without any (7 of 30 dev runs).
+    """
+    variants = []
+    for shape in spec.SHAPES:
+        fields = [f for f in LLM_FIELDS if f not in spec.SHAPES or f == shape]
+        variant = spec.json_schema(only=fields, optional=LLM_OPTIONAL)
+        variant["properties"]["shape"] = dict(variant["properties"]["shape"], enum=[shape])
+        variants.append(variant)
+    return {"anyOf": variants}
 
 
 def system_prompt():
@@ -158,8 +176,10 @@ class OllamaBackend(LLMBackend):
     TEMPERATURE = 0.2
     # Context window in tokens. Ollama silently drops the start of a prompt
     # that doesn't fit, which would cut off the system prompt, so it is set
-    # explicitly and every reply is checked against it.
-    NUM_CTX = 4096
+    # explicitly and every reply is checked against it. v2's four shapes
+    # took the prompt to about 3,900 tokens, past 4096 minus the reply's
+    # 512; 8192 costs about 0.6 GB more GPU memory while the model is loaded.
+    NUM_CTX = 8192
     # A spec is about 200 tokens. The cap stops a runaway reply.
     NUM_PREDICT = 512
     TIMEOUT = 300  # seconds; a cold start loads ~5 GB from disk
@@ -288,9 +308,10 @@ class BrokenFirstReply(LLMBackend):
     """For testing the repair loop with a real model (prompt.py --break-first-reply).
 
     Wraps a real backend. The model's first reply is corrupted before it is
-    validated: roughness is set out of range and the bevel is made far too
-    big for the box. The validator rejects it, and the real model receives
-    its own (corrupted) reply plus the real error messages, and must fix them.
+    validated: roughness is set out of range, and the bevel is made far too
+    big for a box, or the diameter far too big for a round shape. The
+    validator rejects it, and the real model receives its own (corrupted)
+    reply plus the real error messages, and must fix them.
     """
 
     def __init__(self, inner):
@@ -304,9 +325,13 @@ class BrokenFirstReply(LLMBackend):
         reply = self.inner.generate_spec(sentence, previous_errors, previous_output, reference)
         if self.calls == 1:
             data = json.loads(reply.text)
-            box = data["spec"]["box"]
-            box["roughness"] = 1.4
-            box["bevel_cm"] = box["width_cm"]
+            shape = data["spec"].get("shape", "box")
+            product = data["spec"][shape]
+            product["roughness"] = 1.4
+            if shape == "box":
+                product["bevel_cm"] = product["width_cm"]
+            else:
+                product["diameter_cm"] = spec.MAX_SIZE_CM * 2
             reply.text = json.dumps(data, indent=2)
             reply.note = "first reply corrupted on purpose (--break-first-reply)"
         return reply
