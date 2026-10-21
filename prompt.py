@@ -35,6 +35,7 @@ import gpu
 from grounding import lookup
 from llm_backend import DEFAULT_MODEL, BackendUnavailable, BrokenFirstReply, OllamaBackend
 from run import PROJECT_DIR, find_blender, print_blender_not_found, print_cpu_warning, print_render_failed, render
+from spec import METAL_FIELDS
 from spec_writer import MAX_ATTEMPTS, write_spec
 
 RUNS_DIR = os.path.join(PROJECT_DIR, "runs")
@@ -218,6 +219,10 @@ def show_spec(sentence, result):
         part = "lid" if change["field"] == "lid_colour" else "cap"
         print(f"[grounding] the sentence gives the {part} no colour, so it is the default for the body: "
               f"{change['from'] or '(left out by the model)'} -> {change['to']}")
+    if result.metal_change:
+        change = result.metal_change
+        part = "lid" if change["field"] == "lid_metal" else "cap"
+        print(f"[grounding] the sentence names a metal for the {part}, so it is drawn in {change['metal']}")
     shape = result.spec["shape"]
     product = result.spec[shape]
     print()
@@ -229,7 +234,9 @@ def show_spec(sentence, result):
               f"bevel {product['bevel_cm']:g} cm")
     else:
         print(f"  {shape:<10} {product['diameter_cm']:g} cm across x {product['height_cm']:g} cm tall")
-        cap = {"bottle": ", cap {cap_colour}", "jar": ", lid {lid_colour}"}.get(shape, "").format(**product)
+        cap = ", lid {lid_colour}" if shape == "jar" else ", cap {cap_colour}"
+        metal = product.get(METAL_FIELDS[shape])
+        cap = cap.format(**product) + (f" ({metal})" if metal else "")
         print(f"  finish     colour {product['colour']}{cap}, roughness {product['roughness']:g}")
     print(f"  backdrop   {result.spec['background_colour']}")
     print(f"  camera     {result.spec['camera']}")
@@ -308,6 +315,7 @@ def log_llm(log, result):
         backdrop_given=result.backdrop_given,
         cap_change=result.cap_change,
         cap_given=result.cap_given,
+        metal_change=result.metal_change,
         llm_calls=[a.to_log() for a in result.attempts],
     )
 

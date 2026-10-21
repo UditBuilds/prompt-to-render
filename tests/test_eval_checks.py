@@ -408,6 +408,21 @@ class Cases(unittest.TestCase):
                 # The sentence names the product only, never a shape.
                 self.assertNotRegex(case["sentence"], r"\b(?:box|carton|case|package|cylinder|bottle|jar|tube|stick)\b")
 
+    def test_the_material_rule_examples_are_in_no_eval_sentence(self):
+        # The prompt rule that a material or dispenser in the product's name stays
+        # unsupported was written after unsup_glass and unsup_spray failed in v2's
+        # first run, with examples close to them ("a glass bottle", "a spray
+        # bottle"). Since v2 step 2 its examples share no word with any eval sentence.
+        with open(os.path.join(ROOT, "prompts", "spec_writer.md"), encoding="utf-8") as f:
+            rule = next(line for line in f if "plain and opaque" in line)
+        examples = re.findall(r'"([^"]+)"', rule)
+        self.assertGreaterEqual(len(examples), 4)
+        words = {w for e in examples for w in re.findall(r"[a-z]+(?:-[a-z]+)*", e.lower())} - {"a", "an", "bottle", "jar"}
+        sentences = " ".join(c["sentence"].lower() for c in run_evals.load_cases())
+        for word in sorted(words):
+            with self.subTest(word=word):
+                self.assertNotRegex(sentences, r"(?<![\w-])" + re.escape(word) + r"(?![\w-])")
+
     def test_colour_group_summary_counts_the_box_colour_only(self):
         checks = [{"type": "named_colour", "name": "blush", "target": "background"},
                   {"type": "named_colour", "name": "emerald"}]

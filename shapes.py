@@ -9,8 +9,9 @@ smooth-shaded mesh.
 
 Every corner is rounded with a small arc, so smooth shading never smears
 across a sharp edge. The spec gives only the diameter and the height; the
-proportions of a bottle's shoulder, neck and cap, and of a jar's lid, are
-fixed shares of those, chosen to look like common cosmetics packaging.
+proportions of a cylinder's cap, a bottle's shoulder, neck and cap, and a
+jar's lid, are fixed shares of those, chosen to look like common cosmetics
+packaging.
 
 Plain Python (no Blender), so it can be tested. The box is built by
 render_scene.py itself, as before.
@@ -34,19 +35,27 @@ BOTTLE_SHOULDER_HEIGHT = 0.14  # of H, and at most 0.8 R so a squat bottle keeps
 # Above 1 the shoulder stays rounded for longer before it turns in to the neck.
 SHOULDER_CURVE = 1.5
 
-# Jar: the lid is this share of the height (at most 0.4 of the diameter), and
-# a little wider than the body, so the seam between them shows.
-JAR_LID_HEIGHT = 0.36
+# Cylinder (a lipstick, a mascara, a balm): a base and a cap. The cap is this
+# share of the height, and a little wider than the base, so the seam shows.
+CYLINDER_CAP_HEIGHT = 0.42
+CYLINDER_CAP_OVERHANG = 1.04
+
+# Jar: the lid is about a third of the height (at most 0.4 of the diameter),
+# and a little wider than the body, so the seam between them shows. (v2 step
+# 1 had 0.36, which looked nearly half: from above, the lid's top shows too.)
+JAR_LID_HEIGHT = 0.30
 JAR_LID_OVERHANG = 1.02
 
 
 class Part:
-    """One mesh of a round shape: its name, its profile, and the spec field holding its colour."""
+    """One mesh of a round shape: its name, its profile, the spec field holding its
+    colour, and for a cap or lid the spec field naming its metal."""
 
-    def __init__(self, name, profile, colour):
+    def __init__(self, name, profile, colour, metal=None):
         self.name = name
         self.profile = _dedupe(profile)
         self.colour = colour
+        self.metal = metal
 
 
 class Hero:
@@ -78,11 +87,17 @@ def hero(shape, fields, face):
 
 def _cylinder(fields):
     radius, height = fields["diameter_cm"] / 200, fields["height_cm"] / 100
-    edge = _edge(radius, height)
-    body = Part("Body", rounded_cylinder(radius, 0.0, height, edge, edge), "colour")
-    heroes = {"front": Hero((0.0, -radius, height / 2), (2 * radius, height - 2 * edge), "colour"),
-              "top": Hero((0.0, 0.0, height), (2 * (radius - edge),) * 2, "colour")}
-    return [body], heroes
+    cap_height, cap_radius = CYLINDER_CAP_HEIGHT * height, CYLINDER_CAP_OVERHANG * radius
+    cap_bottom = height - cap_height
+    edge = _edge(radius, cap_bottom)
+    # Like a jar's body, the base goes on up a little inside the cap, out of
+    # sight, so the two never share a face.
+    body = rounded_cylinder(radius, 0.0, cap_bottom + cap_height / 4, edge, 0.03 * radius)
+    cap_edge = _edge(cap_radius, cap_height)
+    cap = rounded_cylinder(cap_radius, cap_bottom, height, min(0.04 * cap_radius, cap_height / 6), cap_edge)
+    heroes = {"front": Hero((0.0, -radius, cap_bottom / 2), (2 * radius, cap_bottom - edge), "colour"),
+              "top": Hero((0.0, 0.0, height), (2 * (cap_radius - cap_edge),) * 2, "cap_colour")}
+    return [Part("Body", body, "colour"), Part("Cap", cap, "cap_colour", "cap_metal")], heroes
 
 
 def _bottle(fields):
@@ -111,7 +126,7 @@ def _bottle(fields):
     cap = rounded_cylinder(cap_radius, cap_bottom, height, min(0.05 * cap_radius, cap_height / 6), cap_edge)
     heroes = {"front": Hero((0.0, -radius, wall / 2), (2 * radius, wall - edge), "colour"),
               "top": Hero((0.0, 0.0, height), (2 * (cap_radius - cap_edge),) * 2, "cap_colour")}
-    return [Part("Body", body, "colour"), Part("Cap", cap, "cap_colour")], heroes
+    return [Part("Body", body, "colour"), Part("Cap", cap, "cap_colour", "cap_metal")], heroes
 
 
 def _jar(fields):
@@ -127,7 +142,7 @@ def _jar(fields):
     lid = rounded_cylinder(lid_radius, lid_bottom, height, min(0.04 * lid_radius, lid_height / 6), lid_edge)
     heroes = {"front": Hero((0.0, -radius, lid_bottom / 2), (2 * radius, lid_bottom - edge), "colour"),
               "top": Hero((0.0, 0.0, height), (2 * (lid_radius - lid_edge),) * 2, "lid_colour")}
-    return [Part("Body", body, "colour"), Part("Lid", lid, "lid_colour")], heroes
+    return [Part("Body", body, "colour"), Part("Lid", lid, "lid_colour", "lid_metal")], heroes
 
 
 _BUILDERS = {"cylinder": _cylinder, "bottle": _bottle, "jar": _jar}

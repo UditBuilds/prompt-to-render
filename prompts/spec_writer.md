@@ -12,7 +12,7 @@ Exactly ONE product, in one of four shapes, with slightly rounded edges. It stan
 You control only:
 
 - the shape, and its size in cm: a box's width (left to right), height (bottom to top) and depth (front to back); a round shape's diameter and height
-- one solid colour for the product, as a hex code, and the colour of a bottle's cap or a jar's lid
+- one solid colour for the product, as a hex code, and the colour of a cylinder's or bottle's cap or a jar's lid
 - the surface finish (roughness), and for a box how rounded its edges are (bevel)
 - the backdrop colour, only when the sentence names one
 - the camera angle: front, three_quarter or top_down
@@ -47,7 +47,7 @@ In the spec, "shape" is the shape drawn. Fill in only the object with that name 
 - The user names a colour: choose a hex a packaging designer would use for that colour. Keep the hue true to the name. Red stays red, not pink or orange. Grey stays neutral.
 - No colour given: choose one that suits the product.
 - "colour" is the main colour of the product. Details such as a logo, text, foil, ribbon or trim never change it: "a black box with a silver logo" is a black box.
-- cap_colour (bottle) and lid_colour (jar): set them only when the sentence names the colour of the cap or lid, and then use that colour. Otherwise leave them out: a cap or lid that suits the body is set for you.
+- cap_colour (cylinder, bottle) and lid_colour (jar): set them only when the sentence names the colour of the cap or lid, and then use that colour. Otherwise leave them out: a cap or lid that suits the body is set for you.
 - background_colour: set it only when the sentence names a backdrop or background colour, and then use that colour. Otherwise leave background_colour out: a neutral studio backdrop is set for you.
 
 ## Finish (roughness)
@@ -72,13 +72,13 @@ Words like "luxury", "premium", "elegant", "minimal" or "nice" have no direct se
 
 Never fake something the renderer can't draw. Don't bend the colour, size, shape or finish to hint at a logo, text, pattern or other shape. Instead, list every such request in "unsupported", a few words each, for example "silver logo", "brand name text", "striped pattern", "wooden table". If everything is supported, "unsupported" is [].
 
-A cap on a bottle and a lid on a jar are drawn: their colour goes in cap_colour or lid_colour, never in "unsupported".
+A cap on a cylinder or bottle and a lid on a jar are drawn: their colour goes in cap_colour or lid_colour, never in "unsupported".
 
 ## is_box and shape
 - is_box true: the product is a box (see "Shape"). Its shape is "box".
 - is_box false: anything else. Put its real shape in "shape": "cylinder", "bottle" or "jar" when it is one of those, otherwise its own shape in a word or two, e.g. "pouch".
 - The shape is not the only thing to report. Whatever the shape, everything else the renderer can't draw still goes in "unsupported": materials and effects (glass, frosted, transparent, metallic, glitter), pumps and sprays, labels, logos, text.
-- A drawn bottle or jar is plain and opaque. A material or a dispenser stays unsupported even when it is part of the product's name: for "a glass bottle" list "glass", for "a spray bottle" list "spray nozzle", for "a pump bottle" list "pump".
+- A drawn bottle or jar is plain and opaque. A material or a dispenser stays unsupported even when it is part of the product's name: for "a ceramic jar" list "ceramic", for "a roll-on bottle" list "roller ball".
 
 # Reference data
 

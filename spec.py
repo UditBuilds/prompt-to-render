@@ -40,10 +40,35 @@ MIN_SAMPLES, MAX_SAMPLES = 1, 8192
 BEVEL_MAX_SHARE = 0.10
 
 # The cap or lid colour when none is given: black on a light body, a light
-# silver-grey on a dark one, as is common in cosmetics. Both are flat colours:
-# the renderer doesn't do metallic. Light means CIE L* of at least 50.
+# silver-grey on a dark one, as is common in cosmetics. Both are flat colours,
+# not metal: only a metal named for the cap or lid makes it metal (METALS).
+# Light means CIE L* of at least 50.
 CAP_ON_LIGHT, CAP_ON_DARK = "#1A1A1A", "#C0C0C0"
 CAP_LIGHTNESS_SPLIT = 50
+
+# The metals a cap or lid can be drawn in, and the colour each one reflects
+# (its base colour as a metal, sRGB). Code picks the metal from the sentence
+# ("with a gold cap"); the model never does. Gold, silver, chrome and copper
+# are measured values (Unreal Engine docs, "Physically Based Materials":
+# linear 1.000/0.766/0.336, 0.972/0.960/0.915, 0.550/0.556/0.554,
+# 0.955/0.637/0.538). Bronze and rose gold have no measured value there;
+# theirs are estimates: bronze a browner copper (0.78/0.52/0.28), rose gold
+# a paler, pinker copper (0.96/0.68/0.60).
+METALS = {
+    "gold": "#FFE39D",
+    "silver": "#FCFAF5",
+    "chrome": "#C4C5C4",
+    "copper": "#FAD1C2",
+    "bronze": "#E5BF90",
+    "rose gold": "#FAD7CB",
+}
+# Polished metal: sharp but not mirror-perfect reflections, whatever the body's finish.
+METAL_ROUGHNESS = 0.15
+
+# The renderer adds strip lights for sharp highlights only when something in
+# the scene is glossy (roughness at most this) or metal, so a matte render
+# stays exactly as it was. The model's own "glossy" is 0.1-0.3, code's 0.05.
+GLOSSY_ROUGHNESS = 0.2
 
 
 class SpecError(Exception):
@@ -126,6 +151,26 @@ class CapColour(Colour):
         super().__init__(None, doc)
 
 
+class Metal(Field):
+    """The metal a cap or lid is drawn in (a METALS name), or null for none.
+
+    Set by code from the sentence, never by the model: it is left out of the
+    JSON schema the model reads. A spec file may set it.
+    """
+    optional = True
+    code_only = True
+
+    def __init__(self, doc):
+        super().__init__(None, doc)
+
+    def check(self, value, name, problems):
+        if value is not None and value not in METALS:
+            options = ", ".join(f'"{m}"' for m in METALS)
+            problems.append(f"{name}: must be null or one of {options}, got {_show(value)}")
+            return False
+        return True
+
+
 class Choice(Field):
     def __init__(self, default, choices, doc):
         super().__init__(default, doc)
@@ -183,13 +228,16 @@ FIELDS = {
                            f"At most {BEVEL_MAX_SHARE:.0%} of the smallest box side."),
     },
     # Round shapes stand upright. The renderer rounds their edges itself, and
-    # works out a bottle's shoulder, neck and cap, and a jar's lid, from the
-    # diameter and height.
+    # works out a cylinder's cap, a bottle's shoulder, neck and cap, and a
+    # jar's lid, from the diameter and height. The metal of a cap or lid is
+    # set by code only (see Metal).
     "cylinder": {
         "diameter_cm": Number(4.0, MIN_SIZE_CM, MAX_SIZE_CM, "Width across in cm."),
-        "height_cm": Number(10.0, MIN_SIZE_CM, MAX_SIZE_CM, "Bottom-to-top size in cm."),
-        "colour": Colour("#D9D9D9", 'Colour as a hex code, "#RRGGBB".'),
+        "height_cm": Number(10.0, MIN_SIZE_CM, MAX_SIZE_CM, "Bottom-to-top size in cm, with the cap on."),
+        "colour": Colour("#D9D9D9", 'Body colour as a hex code, "#RRGGBB".'),
         "roughness": Number(0.5, 0.0, 1.0, "Surface finish: 0 = mirror-glossy, 1 = fully matte."),
+        "cap_colour": CapColour('Cap colour as a hex code, "#RRGGBB". Only if the sentence names one.'),
+        "cap_metal": Metal("The metal the cap is drawn in, or null. Set by code from the sentence."),
     },
     "bottle": {
         "diameter_cm": Number(5.0, MIN_SIZE_CM, MAX_SIZE_CM, "Width of the body across in cm, at its widest."),
@@ -198,6 +246,7 @@ FIELDS = {
         "colour": Colour("#D9D9D9", 'Body colour as a hex code, "#RRGGBB".'),
         "roughness": Number(0.5, 0.0, 1.0, "Surface finish: 0 = mirror-glossy, 1 = fully matte."),
         "cap_colour": CapColour('Cap colour as a hex code, "#RRGGBB". Only if the sentence names one.'),
+        "cap_metal": Metal("The metal the cap is drawn in, or null. Set by code from the sentence."),
     },
     "jar": {
         "diameter_cm": Number(7.0, MIN_SIZE_CM, MAX_SIZE_CM, "Width across in cm."),
@@ -206,6 +255,7 @@ FIELDS = {
         "colour": Colour("#D9D9D9", 'Jar colour as a hex code, "#RRGGBB".'),
         "roughness": Number(0.5, 0.0, 1.0, "Surface finish: 0 = mirror-glossy, 1 = fully matte."),
         "lid_colour": CapColour('Lid colour as a hex code, "#RRGGBB". Only if the sentence names one.'),
+        "lid_metal": Metal("The metal the lid is drawn in, or null. Set by code from the sentence."),
     },
     "background_colour": Colour("#EDEDED", 'Studio backdrop colour as a hex code, "#RRGGBB".'),
     "colour_mode": Choice("accurate", COLOUR_MODES,
@@ -226,8 +276,10 @@ def _defaults(fields):
 
 DEFAULTS = _defaults(FIELDS)
 
-# The field holding the cap or lid colour, for the shapes that have one.
-CAP_FIELDS = {"bottle": "cap_colour", "jar": "lid_colour"}
+# The fields holding the cap or lid colour, and its metal, for the shapes that
+# have one: every round shape.
+CAP_FIELDS = {"cylinder": "cap_colour", "bottle": "cap_colour", "jar": "lid_colour"}
+METAL_FIELDS = {"cylinder": "cap_metal", "bottle": "cap_metal", "jar": "lid_metal"}
 
 
 def json_schema(fields=FIELDS, only=None, optional=SHAPES):
@@ -236,13 +288,16 @@ def json_schema(fields=FIELDS, only=None, optional=SHAPES):
     `only` limits it to some top-level fields. Every field in the schema is
     required, so whoever fills it in has to choose each value, except the
     top-level fields named in `optional` (by default the shapes' objects:
-    only the spec's own shape is given) and the cap and lid colours. Three
+    only the spec's own shape is given) and the cap and lid colours. The
+    fields code sets alone (a cap's or lid's metal) are left out. Three
     rules can't be written as JSON schema (only the spec's own shape may be
     given, the bevel must suit the box, a bottle is at least as tall as it is
     wide); they are in the descriptions and validate_spec() checks them.
     """
     properties = {}
     for key, field in fields.items():
+        if getattr(field, "code_only", False):
+            continue
         if only is None or key in only:
             properties[key] = json_schema(field, optional=()) if isinstance(field, dict) else field.schema()
     return {
@@ -413,6 +468,16 @@ def _check_unknown_keys(given, allowed, prefix, problems):
 def product(spec):
     """The fields of a full spec's own shape, e.g. spec["jar"] for a jar."""
     return spec[spec["shape"]]
+
+
+def has_shine(spec):
+    """True if anything in a full spec is glossy (roughness <= GLOSSY_ROUGHNESS) or metal.
+
+    The renderer adds its strip lights only then.
+    """
+    fields = product(spec)
+    metal = METAL_FIELDS.get(spec["shape"])
+    return fields["roughness"] <= GLOSSY_ROUGHNESS or bool(metal and fields[metal])
 
 
 def lightness(hex_colour):

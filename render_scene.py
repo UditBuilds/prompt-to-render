@@ -35,7 +35,7 @@ from mathutils import Matrix, Vector
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import shapes  # noqa: E402
 from check_colour import delta_e76, describe_delta_e, measure_patch  # noqa: E402
-from spec import SpecError, hex_to_linear_rgb, load_spec  # noqa: E402
+from spec import METAL_ROUGHNESS, METALS, SpecError, has_shine, hex_to_linear_rgb, load_spec  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Presets. Distances and sizes are multiples of the product's "radius" (half
@@ -96,6 +96,27 @@ LIGHTING_PRESETS = {
 # Irradiance (W/m^2) the key light delivers at the box. Light power is scaled
 # by distance^2 so this stays the same for every box size.
 BASE_IRRADIANCE = 3.5
+
+# Strip lights: tall, bright softboxes that give glossy and metal surfaces
+# sharp highlights. Added only when something in the scene is glossy or metal
+# (spec.has_shine), so a matte render is exactly as before. They light nothing
+# diffusely, so the light meter, matte colours and shadows don't change; they
+# light only the product (light linking), and the camera never sees them:
+# they only show up in its reflections.
+# Seen from 22 degrees above, an upright face reflects what is below its own
+# height, so the strips stand close and reach down to the floor; the upper
+# part of each upright face or wall shows them. A thin strip on the left
+# draws a line on round shapes; a wider card on the right, where the camera
+# sees a box's side face mirrored, puts a broad reflection on it.
+#   azimuth, elevation, distance: as for the lights above, aimed at the product
+#   width, height: the strip's size as a fraction of its distance
+#   radiance: its brightness, as a multiple of a white card's under the key light
+STRIP_LIGHTS = [
+    {"name": "StripLeft", "azimuth": -100, "elevation": 0, "distance": 1.4, "width": 0.12, "height": 2.0,
+     "radiance": 20},
+    {"name": "CardRight", "azimuth": 110, "elevation": 0, "distance": 1.4, "width": 0.6, "height": 2.0,
+     "radiance": 8},
+]
 
 # The environment around the set: the background colour, dimmed.
 WORLD_STRENGTH = 0.3
@@ -221,14 +242,21 @@ def clear_scene():
     return bpy.context.scene
 
 
-def new_principled_material(name, hex_colour, roughness):
+def new_principled_material(name, hex_colour, roughness, metallic=0.0):
     mat = bpy.data.materials.new(name)
     if mat.node_tree is None:
         mat.use_nodes = True  # older Blender versions start without nodes
     bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
     bsdf.inputs["Base Color"].default_value = (*hex_to_linear_rgb(hex_colour), 1.0)
     bsdf.inputs["Roughness"].default_value = roughness
+    if metallic:
+        bsdf.inputs["Metallic"].default_value = metallic
     return mat
+
+
+def new_metal_material(name, metal):
+    """Polished metal: the metal's own reflected colour (spec.METALS), fully metallic."""
+    return new_principled_material(name, METALS[metal], METAL_ROUGHNESS, metallic=1.0)
 
 
 def add_object(scene, name, data):
@@ -240,9 +268,10 @@ def add_object(scene, name, data):
 def build_product(scene, spec):
     """The product, standing on the floor. Returns its objects, the body first.
 
-    A box is one object. A round shape is a body, plus a cap or lid for a
-    bottle or jar, each with its own colour and the shape's roughness.
-    Every part is tagged "product_part" for the light meter.
+    A box is one object. A round shape is a body plus a cap or lid, each
+    with its own colour and the shape's roughness; a cap or lid the spec
+    names a metal for is drawn in that metal instead. Every part is tagged
+    "product_part" for the light meter.
     """
     shape = spec["shape"]
     fields = spec[shape]
@@ -252,8 +281,10 @@ def build_product(scene, spec):
         objects = []
         for part in shapes.parts(shape, fields):
             obj = add_object(scene, part.name, lathe(part.name, part.profile))
-            obj.data.materials.append(
-                new_principled_material(f"{part.name}Material", fields[part.colour], fields["roughness"]))
+            metal = fields.get(part.metal) if part.metal else None
+            name = f"{part.name}Material"
+            obj.data.materials.append(new_metal_material(name, metal) if metal else
+                                      new_principled_material(name, fields[part.colour], fields["roughness"]))
             objects.append(obj)
     for obj in objects:
         obj["product_part"] = True
@@ -422,6 +453,37 @@ def build_lights(scene, target, radius, preset_name, camera_preset):
         obj.visible_camera = False
 
 
+def build_strip_lights(scene, target, radius, camera_preset):
+    """STRIP_LIGHTS: upright softboxes beside the product, seen only in its reflections."""
+    # Light linking: only the product receives their light. The backdrop's
+    # faint sheen would otherwise show a glow on the floor beside them.
+    receivers = bpy.data.collections.new("StripLightReceivers")
+    for obj in product_parts():
+        receivers.objects.link(obj)
+    for setup in STRIP_LIGHTS:
+        distance = setup["distance"] * radius
+        position = target + distance * direction_from_angles(
+            camera_preset["azimuth"] + setup["azimuth"], setup["elevation"])
+
+        light = bpy.data.lights.new(setup["name"], "AREA")
+        light.shape = "RECTANGLE"
+        light.size = setup["width"] * distance
+        light.size_y = setup["height"] * distance
+        # An area light's radiance is power / (pi * area), and a white card
+        # under the key reads BASE_IRRADIANCE / pi.
+        light.energy = setup["radiance"] * BASE_IRRADIANCE * light.size * light.size_y
+
+        obj = add_object(scene, setup["name"], light)
+        obj.location = position
+        # Shine along local -Z at the product, local Y (the strip's length) upright.
+        obj.rotation_euler = (target - position).to_track_quat("-Z", "Y").to_euler()
+        obj.visible_camera = False
+        obj.visible_diffuse = False
+        obj.visible_transmission = False
+        obj.visible_volume_scatter = False
+        obj.light_linking.receiver_collection = receivers
+
+
 def build_camera(scene, objects, shape, preset_name, resolution):
     """Place the camera for a preset and auto-frame it tightly on the product."""
     preset = CAMERA_PRESETS[preset_name]
@@ -510,6 +572,8 @@ def build_scene(spec):
     build_backdrop(scene, spec["background_colour"], radius, CAMERA_PRESETS[spec["camera"]]["azimuth"])
     build_world(scene, spec["background_colour"])
     build_lights(scene, target, radius, spec["lighting"], CAMERA_PRESETS[spec["camera"]])
+    if has_shine(spec):
+        build_strip_lights(scene, target, radius, CAMERA_PRESETS[spec["camera"]])
     return scene
 
 
@@ -669,8 +733,8 @@ def main():
     scene = build_scene(spec)
     device = setup_render(scene, spec, output_path)
     log(f"device: {device}")
-    log(f"shape: {spec['shape']}, camera: {spec['camera']}, lighting: {spec['lighting']}, "
-        f"colour mode: {spec['colour_mode']}, "
+    log(f"shape: {spec['shape']}, camera: {spec['camera']}, lighting: {spec['lighting']}"
+        f"{' + strip lights (glossy or metal)' if has_shine(spec) else ''}, colour mode: {spec['colour_mode']}, "
         f"{spec['resolution'][0]}x{spec['resolution'][1]}, {spec['samples']} samples")
 
     if spec["colour_mode"] == "accurate":

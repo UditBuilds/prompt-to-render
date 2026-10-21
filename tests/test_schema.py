@@ -68,10 +68,13 @@ class SchemaMatchesValidator(unittest.TestCase):
         full = spec.json_schema()
         self.assertEqual(list(full["properties"]), list(spec.DEFAULTS))
         for shape in spec.SHAPES:
-            self.assertEqual(list(full["properties"][shape]["properties"]), list(spec.DEFAULTS[shape]))
+            # Every field but the metal of a cap or lid, which code alone sets.
+            self.assertEqual(list(full["properties"][shape]["properties"]),
+                             [k for k in spec.DEFAULTS[shape] if k != spec.METAL_FIELDS.get(shape)])
             # Every field of a shape is required, except a cap or lid colour (code sets it).
             self.assertEqual(full["properties"][shape]["required"],
-                             [k for k in spec.DEFAULTS[shape] if k != spec.CAP_FIELDS.get(shape)])
+                             [k for k in spec.DEFAULTS[shape] if k not in (spec.CAP_FIELDS.get(shape),
+                                                                           spec.METAL_FIELDS.get(shape))])
         # Only the spec's own shape is given, so no shape's object is required.
         self.assertEqual(full["required"], [k for k in spec.DEFAULTS if k not in spec.SHAPES])
         self.assertFalse(full["additionalProperties"])
@@ -158,6 +161,46 @@ class SchemaMatchesValidator(unittest.TestCase):
         given = spec.validate_spec({"shape": "jar", "jar": {"colour": "#FFFFFF", "lid_colour": "#D4AF37"}})
         self.assertEqual(given["jar"]["lid_colour"], "#D4AF37")
         self.assertEqual(round(spec.lightness("#777777")), 50)  # the split: about mid grey
+
+    def test_every_round_shape_has_a_cap_or_lid(self):
+        # v2 step 2: a cylinder has a cap too, coloured by the same rule.
+        cylinder = spec.validate_spec({"shape": "cylinder", "cylinder": {"colour": "#EDC9AF"}})["cylinder"]
+        self.assertEqual(cylinder["cap_colour"], spec.CAP_ON_LIGHT)
+        self.assertEqual(spec.validate_spec({"shape": "cylinder", "cylinder": {"colour": "#000080"}})
+                         ["cylinder"]["cap_colour"], spec.CAP_ON_DARK)
+        self.assertEqual(set(spec.CAP_FIELDS), {"cylinder", "bottle", "jar"})
+        self.assertEqual(set(spec.METAL_FIELDS), set(spec.CAP_FIELDS))
+
+    def test_metal_is_a_named_metal_or_null(self):
+        for shape, field in spec.METAL_FIELDS.items():
+            with self.subTest(shape=shape):
+                self.assertIsNone(spec.validate_spec({"shape": shape})[shape][field])  # no metal by default
+                for metal in spec.METALS:
+                    self.assertTrue(is_valid({"shape": shape, shape: {field: metal}}))
+                self.assertTrue(is_valid({"shape": shape, shape: {field: None}}))
+                for bad in ("platinum", "Gold", True, "#D4AF37"):
+                    self.assertFalse(is_valid({"shape": shape, shape: {field: bad}}), bad)
+        for metal, colour in spec.METALS.items():
+            self.assertRegex(colour, spec.HEX_COLOUR)
+
+    def test_the_model_never_sees_the_metal(self):
+        # Code sets it from the sentence; the model's schema has no field for it.
+        text = json.dumps(llm_backend.output_schema())
+        for field in set(spec.METAL_FIELDS.values()):
+            self.assertNotIn(f'"{field}"', text)
+        self.assertNotIn("metal", text.lower())
+
+    def test_strip_lights_only_for_glossy_or_metal(self):
+        def full(shape, **fields):
+            return spec.validate_spec({"shape": shape, shape: fields})
+
+        self.assertFalse(spec.has_shine(full("box", roughness=0.4)))     # the sage gift box
+        self.assertFalse(spec.has_shine(full("bottle", roughness=0.4)))  # the blush serum bottle
+        self.assertFalse(spec.has_shine(full("cylinder", roughness=0.7)))
+        self.assertTrue(spec.has_shine(full("box", roughness=0.05)))     # glossy, set by code
+        self.assertTrue(spec.has_shine(full("jar", roughness=spec.GLOSSY_ROUGHNESS)))
+        self.assertTrue(spec.has_shine(full("cylinder", roughness=0.7, cap_metal="silver")))
+        self.assertTrue(spec.has_shine(full("jar", roughness=0.8, lid_metal="copper")))
 
     def test_bevel_share_of_smallest_side(self):
         box = {"width_cm": 12, "height_cm": 18, "depth_cm": 8}

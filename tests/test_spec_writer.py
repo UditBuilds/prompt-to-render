@@ -271,6 +271,27 @@ class Shapes(unittest.TestCase):
                                                      diameter_cm=7, height_cm=5)]))
         self.assertEqual(result.spec["jar"]["lid_colour"], "#B76E79")
 
+    def test_code_draws_a_named_metal_cap(self):
+        # The model gives the colour; code alone decides the metal.
+        result = write_spec("a black perfume bottle with a gold cap",
+                            FakeBackend([round_reply("bottle", colour="#111111", cap_colour="#D4AF37")]))
+        self.assertEqual(result.spec["bottle"]["cap_metal"], "gold")
+        self.assertEqual(result.spec["bottle"]["cap_colour"], "#D4AF37")  # kept, for the colour checks
+        self.assertEqual(result.metal_change, {"field": "cap_metal", "metal": "gold"})
+        result = write_spec("a white serum bottle with a gold logo",
+                            FakeBackend([round_reply("bottle", colour="#FFFFFF")]))
+        self.assertIsNone(result.spec["bottle"]["cap_metal"])
+        self.assertIsNone(result.metal_change)
+        # A lipstick's cap, a v2 step 2 cylinder part.
+        result = write_spec("a nude lipstick with a silver cap",
+                            FakeBackend([round_reply("cylinder", colour="#EDC9AF", cap_colour="#C0C0C0")]))
+        self.assertEqual(result.spec["cylinder"]["cap_metal"], "silver")
+        # Without grounding, code sets nothing: no metal.
+        result = write_spec("a black perfume bottle with a gold cap",
+                            FakeBackend([round_reply("bottle", colour="#111111", cap_colour="#D4AF37")]),
+                            grounding=False)
+        self.assertIsNone(result.spec["bottle"]["cap_metal"])
+
     def test_code_rules_apply_to_every_shape(self):
         # The style shift recolours the body, and the default cap follows the new body colour.
         result = write_spec("a luxury blush serum bottle", FakeBackend([round_reply("bottle", colour="#F4C2C2")]))

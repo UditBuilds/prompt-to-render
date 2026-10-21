@@ -48,22 +48,47 @@ class Profiles(unittest.TestCase):
                     for (r0, z0), (r1, z1) in zip(part.profile, part.profile[1:]):
                         self.assertGreater(math.hypot(r1 - r0, z1 - z0), 1e-9)
                 points = [p for part in parts for p in part.profile]
-                # The body is the spec's diameter (a jar's lid overhangs it a little),
-                # and the whole product the spec's height, standing on the floor.
+                # The body is the spec's diameter (a cylinder's cap and a jar's lid
+                # overhang it a little), and the whole product the spec's height,
+                # standing on the floor.
                 self.assertAlmostEqual(max(r for r, _ in parts[0].profile), diameter / 200)
-                self.assertLessEqual(max(r for r, _ in points), diameter / 200 * shapes.JAR_LID_OVERHANG + 1e-12)
+                overhang = max(shapes.CYLINDER_CAP_OVERHANG, shapes.JAR_LID_OVERHANG)
+                self.assertLessEqual(max(r for r, _ in points), diameter / 200 * overhang + 1e-12)
                 self.assertAlmostEqual(min(z for _, z in points), 0.0)
                 self.assertAlmostEqual(max(z for _, z in points), height / 100)
 
     def test_caps_and_lids(self):
         bottle = shapes.parts("bottle", fields("bottle", 5.5, 11.5))
-        self.assertEqual([(p.name, p.colour) for p in bottle], [("Body", "colour"), ("Cap", "cap_colour")])
+        self.assertEqual([(p.name, p.colour, p.metal) for p in bottle],
+                         [("Body", "colour", None), ("Cap", "cap_colour", "cap_metal")])
         cap_radius = max(r for r, _ in bottle[1].profile)
         self.assertLess(cap_radius, 5.5 / 200)  # narrower than the body
         jar = shapes.parts("jar", fields("jar", 6.5, 4.5))
-        self.assertEqual([(p.name, p.colour) for p in jar], [("Body", "colour"), ("Lid", "lid_colour")])
+        self.assertEqual([(p.name, p.colour, p.metal) for p in jar],
+                         [("Body", "colour", None), ("Lid", "lid_colour", "lid_metal")])
         self.assertGreater(max(r for r, _ in jar[1].profile), 6.5 / 200)  # a little wider: the seam shows
-        self.assertEqual(len(shapes.parts("cylinder", fields("cylinder", 2, 8))), 1)
+        # v2 step 2: a cylinder is a base and a cap, the cap a little wider so the seam shows.
+        cylinder = shapes.parts("cylinder", fields("cylinder", 2, 8))
+        self.assertEqual([(p.name, p.colour, p.metal) for p in cylinder],
+                         [("Body", "colour", None), ("Cap", "cap_colour", "cap_metal")])
+        self.assertGreater(max(r for r, _ in cylinder[1].profile), 2 / 200)
+
+    def test_cap_and_lid_heights(self):
+        def span(part):
+            heights = [z for _, z in part.profile]
+            return max(heights) - min(heights)
+
+        # A jar's lid is about a third of its height (the eval wants 25-35%).
+        for diameter, height in SIZES["jar"][:3]:
+            with self.subTest(jar=(diameter, height)):
+                lid = shapes.parts("jar", fields("jar", diameter, height))[1]
+                self.assertAlmostEqual(span(lid) / (height / 100), shapes.JAR_LID_HEIGHT)
+                self.assertTrue(0.25 <= shapes.JAR_LID_HEIGHT <= 0.35)
+        cap = shapes.parts("cylinder", fields("cylinder", 2, 8))[1]
+        self.assertAlmostEqual(span(cap) / 0.08, shapes.CYLINDER_CAP_HEIGHT)
+        # The base runs on up inside the cap, out of sight, so there is no gap.
+        base = shapes.parts("cylinder", fields("cylinder", 2, 8))[0]
+        self.assertGreater(max(z for _, z in base.profile), min(z for _, z in cap.profile))
 
     def test_a_bottle_has_a_neck(self):
         body, cap = (p.profile for p in shapes.parts("bottle", fields("bottle", 5.5, 11.5)))
@@ -76,15 +101,17 @@ class Profiles(unittest.TestCase):
         for shape, diameter, height, f in every_shape():
             with self.subTest(shape=shape, size=(diameter, height)):
                 front = shapes.hero(shape, f, "front")
-                # On the front of the body, half way up its straight wall.
+                # On the front of the body, half way up its straight wall, below any cap or lid.
                 self.assertEqual(front.colour, "colour")
                 self.assertAlmostEqual(front.centre[1], -diameter / 200)
                 self.assertGreater(front.centre[2], 0)
                 self.assertTrue(all(side > 0 for side in front.sides))
+                cap_bottom = min(z for _, z in shapes.parts(shape, f)[1].profile)
+                self.assertLessEqual(front.centre[2] + front.sides[1] / 2, cap_bottom + 1e-12)
                 top = shapes.hero(shape, f, "top")
-                # From above: the top of the topmost part, the cap or lid of a bottle or jar.
+                # From above: the top of the topmost part, the cap or lid.
                 self.assertAlmostEqual(top.centre[2], height / 100)
-                self.assertEqual(top.colour, {"bottle": "cap_colour", "jar": "lid_colour"}.get(shape, "colour"))
+                self.assertEqual(top.colour, "lid_colour" if shape == "jar" else "cap_colour")
                 self.assertTrue(all(side > 0 for side in top.sides))
 
 

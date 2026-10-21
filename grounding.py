@@ -24,8 +24,10 @@ Four values are set by code, not the model, after the model has answered:
 - The backdrop: neutral_backdrop() makes it a neutral light grey unless the
   sentence gives the backdrop a colour. The model's tinted backdrops could
   clash with the box.
-- The cap or lid of a bottle or jar: default_cap() makes it black on a light
-  body and silver-grey on a dark one, unless the sentence gives it a colour.
+- The cap or lid of a round shape: default_cap() makes it black on a light
+  body and silver-grey on a dark one, unless the sentence gives it a colour;
+  apply_metal() draws it in metal when the sentence names a metal for it
+  ("with a gold cap"). The model never decides the metal.
 The last three add nothing to the request.
 
 A sentence that names a box (box, carton, case, package) gets the box size
@@ -47,7 +49,7 @@ import json
 import os
 import re
 
-from spec import CAP_FIELDS, default_cap_colour
+from spec import CAP_FIELDS, METAL_FIELDS, METALS, default_cap_colour
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(PROJECT_DIR, "data")
@@ -381,10 +383,38 @@ def neutral_backdrop(sentence, spec, given=True):
     return {"from": before, "to": NEUTRAL_BACKDROP} if before != NEUTRAL_BACKDROP else None
 
 
+def cap_metal(sentence):
+    """The metal the sentence names for the cap or lid ("with a gold cap": "gold"), or None.
+
+    Read from the cap's own words (cap_colour_words), so a metal anywhere
+    else ("a gold logo", "a gold bottle with a black cap") doesn't count.
+    Longest name first: "rose gold" is rose gold, not gold.
+    """
+    words = " ".join(part for word in cap_colour_words(sentence) for part in word.split("-"))
+    for metal in sorted(METALS, key=len, reverse=True):
+        if re.search(r"(?<!\w)" + re.escape(metal) + r"(?!\w)", words):
+            return metal
+    return None
+
+
+def apply_metal(sentence, spec):
+    """Draw the cap or lid in the metal the sentence names for it, or in no metal.
+
+    Only for a round shape. The field is always set, so the model never
+    decides it. Returns {"field", "metal"} when a metal was set, else None.
+    """
+    field = METAL_FIELDS.get(spec["shape"])
+    if field is None:
+        return None
+    metal = cap_metal(sentence)
+    spec[spec["shape"]][field] = metal
+    return {"field": field, "metal": metal} if metal else None
+
+
 def default_cap(sentence, spec, given=True):
     """Unless the sentence gives the cap or lid a colour, set the default one for the body colour.
 
-    Only for a bottle or jar. The default (spec.default_cap_colour) is black
+    Only for a round shape. The default (spec.default_cap_colour) is black
     on a light body and silver-grey on a dark one. Run after the style
     shift, which may change the body colour. `given` is False when the model
     left the cap colour out. Returns {"field", "from", "to"} ("from" is None

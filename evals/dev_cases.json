@@ -1,5 +1,5 @@
 {
-  "about": "v2 added the cases marked \"added\": \"v2\", for the shapes, with other products than the eval: dev_jade_bottle now wants the cap drawn (gold), not listed as unsupported. Dev sentences for designing the grounding tables and prompt (Phase 3). They are deliberately different from the frozen eval sentences in cases.json, and use other products and colours where possible, so tuning on them doesn't tune on the eval. Same check types as cases.json.",
+  "about": "v2 step 2 added the cases marked \"added\": \"v2-step2\", for metal caps and lids and capped cylinders, with other products and metals than the eval; the eval's five out-of-table shape products are never used here (a test checks). v2 added the cases marked \"added\": \"v2\", for the shapes, with other products than the eval: dev_jade_bottle now wants the cap drawn (gold), not listed as unsupported. Dev sentences for designing the grounding tables and prompt (Phase 3). They are deliberately different from the frozen eval sentences in cases.json, and use other products and colours where possible, so tuning on them doesn't tune on the eval. Same check types as cases.json.",
   "cases": [
     {"id": "dev_rose_gold", "sentence": "a rose gold mascara box", "checks": [
       {"type": "hex", "equals": "#B76E79"},
@@ -101,6 +101,26 @@
       {"type": "model_unsupported_mentions", "any": ["spray", "nozzle", "mist"]}]},
     {"id": "dev_backdrop", "sentence": "a white serum box on a mint backdrop", "checks": [
       {"type": "hex", "equals": "#3EB489", "target": "background"},
-      {"type": "lightness", "min": 85}]}
+      {"type": "lightness", "min": 85}]},
+    {"id": "dev_concealer_gold", "added": "v2-step2", "sentence": "a beige concealer stick with a gold cap", "checks": [
+      {"type": "shape", "equals": "cylinder"},
+      {"type": "cap_part"},
+      {"type": "metal", "target": "cap", "equals": "gold"},
+      {"type": "model_unsupported_excludes", "any": ["lid", "cap"]}]},
+    {"id": "dev_chrome_lid", "added": "v2-step2", "sentence": "a lavender night cream jar with a chrome lid", "checks": [
+      {"type": "shape", "equals": "jar"},
+      {"type": "metal", "target": "cap", "equals": "chrome"},
+      {"type": "model_unsupported_excludes", "any": ["lid", "cap"]}]},
+    {"id": "dev_silver_toner", "added": "v2-step2", "sentence": "a white toner bottle with a silver cap", "checks": [
+      {"type": "shape", "equals": "bottle"},
+      {"type": "metal", "target": "cap", "equals": "silver"},
+      {"type": "model_unsupported_excludes", "any": ["lid", "cap"]}]},
+    {"id": "dev_deodorant", "added": "v2-step2", "sentence": "a teal deodorant stick", "checks": [
+      {"type": "shape", "equals": "cylinder"},
+      {"type": "cap_part"}]},
+    {"id": "dev_silver_logo_jar", "added": "v2-step2", "sentence": "a black jar with a silver logo", "checks": [
+      {"type": "shape", "equals": "jar"},
+      {"type": "metal", "target": "cap", "equals": null},
+      {"type": "model_unsupported_mentions", "any": ["logo"]}]}
   ]
 }

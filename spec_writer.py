@@ -13,7 +13,8 @@ Used by prompt.py and by the evals, so both run the same loop.
 
 import json
 
-from grounding import Grounding, apply_finish, default_cap, lookup, neutral_backdrop, style_box_colour
+from grounding import (Grounding, apply_finish, apply_metal, default_cap, lookup, neutral_backdrop,
+                       style_box_colour)
 from spec import CAP_FIELDS, SHAPES, SpecError, validate_spec
 
 MAX_ATTEMPTS = 2
@@ -46,7 +47,7 @@ class SpecResult:
     def __init__(self, attempts, spec=None, unsupported=None, model_unsupported=None,
                  is_box=None, shape=None, shape_added=False, grounding=None, style_changes=None,
                  backdrop_change=None, finish_change=None, backdrop_given=None, cap_change=None,
-                 cap_given=None):
+                 cap_given=None, metal_change=None):
         self.attempts = attempts
         self.grounding = grounding or Grounding([])  # the table rows the model was given
         self.style_changes = style_changes or []   # style-word colour shifts applied by code
@@ -55,6 +56,7 @@ class SpecResult:
         self.finish_change = finish_change         # {"finish", "from", "to"} if code clamped the roughness
         self.cap_change = cap_change               # {"field", "from", "to"} if code set the cap or lid colour
         self.cap_given = cap_given                 # False if the model left the cap or lid colour out
+        self.metal_change = metal_change           # {"field", "metal"} if code drew the cap or lid in metal
         self.spec = spec                    # full validated spec, or None
         self.unsupported = unsupported or []  # what the user is told was ignored
         self.model_unsupported = model_unsupported or []  # the model's own list, before the code added anything
@@ -169,8 +171,9 @@ def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, ground
 
     With grounding on, the rows of the data/ tables that match the
     sentence's words are added to the request, and code then applies the
-    style shift, the glossy finish, the neutral backdrop and the default cap
-    or lid colour (see grounding.py). With it off, the model decides everything on its own.
+    style shift, the glossy finish, the neutral backdrop, the default cap
+    or lid colour and the metal of a cap or lid (see grounding.py). With it
+    off, the model decides everything on its own.
     `tables` replaces the data/ tables (e.g. without the colour table).
 
     report(event, attempt) is called with "start" before each LLM call and
@@ -196,12 +199,13 @@ def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, ground
         if not errors:
             # Code sets what the model can't be relied on for (see grounding.py).
             changes = style_box_colour(sentence, parsed["spec"], found)
-            backdrop = finish = cap = None
+            backdrop = finish = cap = metal = None
             if grounding:
                 backdrop = neutral_backdrop(sentence, parsed["spec"], parsed["backdrop_given"])
                 finish = apply_finish(sentence, parsed["spec"], tables)
                 cap = default_cap(sentence, parsed["spec"], parsed["cap_given"])
-            return SpecResult(attempts, grounding=found, style_changes=changes,
-                              backdrop_change=backdrop, finish_change=finish, cap_change=cap, **parsed)
+                metal = apply_metal(sentence, parsed["spec"])
+            return SpecResult(attempts, grounding=found, style_changes=changes, backdrop_change=backdrop,
+                              finish_change=finish, cap_change=cap, metal_change=metal, **parsed)
         previous_output, previous_errors = reply.text, errors
     return SpecResult(attempts, grounding=found)

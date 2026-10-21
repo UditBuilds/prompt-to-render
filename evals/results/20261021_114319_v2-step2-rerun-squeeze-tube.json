@@ -1,0 +1,335 @@
+{
+  "created": "2026-10-21T11:43:27",
+  "label": "v2-step2-rerun-squeeze-tube",
+  "cases_file": "evals\\cases.json",
+  "grounding": true,
+  "without_tables": [],
+  "model": "qwen3:8b",
+  "backend": "ollama",
+  "llm_settings": {
+    "url": "http://127.0.0.1:11434",
+    "temperature": 0.2,
+    "think": false,
+    "num_ctx": 8192,
+    "num_predict": 512
+  },
+  "runs_per_case": 3,
+  "max_attempts": 2,
+  "eval_seconds": 7.9,
+  "stopped_early": null,
+  "summary": {
+    "colour_groups": {},
+    "shape_scores": {
+      "choice": {
+        "cases": 1,
+        "total_runs": 3,
+        "passed_runs": 0
+      }
+    },
+    "check_scores": {
+      "unsupported": {
+        "cases": 1,
+        "total_runs": 3,
+        "passed_runs": 3
+      }
+    },
+    "added_groups": {
+      "v2": {
+        "cases": 1,
+        "total_runs": 3,
+        "passed_runs": 0
+      }
+    },
+    "passed_runs": 0,
+    "total_runs": 3,
+    "pass_rate": 0.0,
+    "cases_passing_all_runs": 0,
+    "cases_with_identical_runs": 1,
+    "total_cases": 1,
+    "retry_runs": 0,
+    "retry_rate": 0.0,
+    "invalid_after_retries": 0,
+    "shape_added_by_code_runs": 0,
+    "avg_llm_seconds": 2.6,
+    "avg_prompt_tokens": 4740,
+    "max_prompt_tokens_per_call": 4740,
+    "avg_output_tokens": 110,
+    "peak_gpu_mib": 6480
+  },
+  "cases": [
+    {
+      "id": "unsup_squeeze_tube",
+      "sentence": "a sunscreen squeeze tube",
+      "covers": "unsupported: squeeze tube, drawn as the closest shape (cylinder)",
+      "colour_group": null,
+      "shape_group": null,
+      "added": "v2",
+      "checks": [
+        {
+          "type": "shape",
+          "equals": "cylinder"
+        },
+        {
+          "type": "model_unsupported_mentions",
+          "any": [
+            "tube",
+            "squeeze"
+          ]
+        },
+        {
+          "type": "neutral_backdrop",
+          "max_spread": 20,
+          "min_lightness": 80
+        }
+      ],
+      "passed_runs": 0,
+      "total_runs": 3,
+      "distinct_specs": 1,
+      "runs": [
+        {
+          "run": 1,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 3.8,
+          "prompt_tokens": 4740,
+          "output_tokens": 110,
+          "call_prompt_tokens": [
+            4740
+          ],
+          "checks": [
+            {
+              "check": "shape",
+              "passed": false,
+              "found": "spec shape jar (want cylinder)"
+            },
+            {
+              "check": "model_unsupported_mentions",
+              "passed": true,
+              "found": "model's own unsupported list [\"squeeze tube\"] (want a mention of tube or squeeze)"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": false,
+          "shape": "tube",
+          "unsupported": [
+            "squeeze tube"
+          ],
+          "model_unsupported": [
+            "squeeze tube"
+          ],
+          "shape_added_by_code": false,
+          "grounding_rows": [],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "cap_change": {
+            "field": "lid_colour",
+            "from": null,
+            "to": "#1A1A1A"
+          },
+          "cap_given": false,
+          "metal_change": null,
+          "spec": {
+            "description": "a sunscreen squeeze tube",
+            "shape": "jar",
+            "jar": {
+              "diameter_cm": 4.5,
+              "height_cm": 12.0,
+              "colour": "#f2f2f2",
+              "roughness": 0.45,
+              "lid_colour": "#1A1A1A",
+              "lid_metal": null
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": false,\n  \"shape\": \"tube\",\n  \"unsupported\": [\"squeeze tube\"],\n  \"spec\": {\n    \"description\": \"a sunscreen squeeze tube\",\n    \"shape\": \"jar\",\n    \"jar\": {\n      \"diameter_cm\": 4.5,\n      \"height_cm\": 12.0,\n      \"colour\": \"#f2f2f2\",\n      \"roughness\": 0.45\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 2,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 1.98,
+          "prompt_tokens": 4740,
+          "output_tokens": 110,
+          "call_prompt_tokens": [
+            4740
+          ],
+          "checks": [
+            {
+              "check": "shape",
+              "passed": false,
+              "found": "spec shape jar (want cylinder)"
+            },
+            {
+              "check": "model_unsupported_mentions",
+              "passed": true,
+              "found": "model's own unsupported list [\"squeeze tube\"] (want a mention of tube or squeeze)"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": false,
+          "shape": "tube",
+          "unsupported": [
+            "squeeze tube"
+          ],
+          "model_unsupported": [
+            "squeeze tube"
+          ],
+          "shape_added_by_code": false,
+          "grounding_rows": [],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "cap_change": {
+            "field": "lid_colour",
+            "from": null,
+            "to": "#1A1A1A"
+          },
+          "cap_given": false,
+          "metal_change": null,
+          "spec": {
+            "description": "a sunscreen squeeze tube",
+            "shape": "jar",
+            "jar": {
+              "diameter_cm": 4.5,
+              "height_cm": 12.0,
+              "colour": "#f2f2f2",
+              "roughness": 0.45,
+              "lid_colour": "#1A1A1A",
+              "lid_metal": null
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": false,\n  \"shape\": \"tube\",\n  \"unsupported\": [\"squeeze tube\"],\n  \"spec\": {\n    \"description\": \"a sunscreen squeeze tube\",\n    \"shape\": \"jar\",\n    \"jar\": {\n      \"diameter_cm\": 4.5,\n      \"height_cm\": 12.0,\n      \"colour\": \"#f2f2f2\",\n      \"roughness\": 0.45\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        },
+        {
+          "run": 3,
+          "passed": false,
+          "attempts": 1,
+          "retried": false,
+          "valid": true,
+          "llm_seconds": 2.01,
+          "prompt_tokens": 4740,
+          "output_tokens": 110,
+          "call_prompt_tokens": [
+            4740
+          ],
+          "checks": [
+            {
+              "check": "shape",
+              "passed": false,
+              "found": "spec shape jar (want cylinder)"
+            },
+            {
+              "check": "model_unsupported_mentions",
+              "passed": true,
+              "found": "model's own unsupported list [\"squeeze tube\"] (want a mention of tube or squeeze)"
+            },
+            {
+              "check": "neutral_backdrop",
+              "passed": true,
+              "found": "backdrop #F5F5F5: RGB spread 0, HSL lightness 96% (want spread <= 20, lightness >= 80%)"
+            }
+          ],
+          "is_box": false,
+          "shape": "tube",
+          "unsupported": [
+            "squeeze tube"
+          ],
+          "model_unsupported": [
+            "squeeze tube"
+          ],
+          "shape_added_by_code": false,
+          "grounding_rows": [],
+          "style_changes": [],
+          "finish_change": null,
+          "backdrop_change": {
+            "from": null,
+            "to": "#F5F5F5"
+          },
+          "backdrop_given": false,
+          "cap_change": {
+            "field": "lid_colour",
+            "from": null,
+            "to": "#1A1A1A"
+          },
+          "cap_given": false,
+          "metal_change": null,
+          "spec": {
+            "description": "a sunscreen squeeze tube",
+            "shape": "jar",
+            "jar": {
+              "diameter_cm": 4.5,
+              "height_cm": 12.0,
+              "colour": "#f2f2f2",
+              "roughness": 0.45,
+              "lid_colour": "#1A1A1A",
+              "lid_metal": null
+            },
+            "background_colour": "#F5F5F5",
+            "colour_mode": "accurate",
+            "camera": "three_quarter",
+            "lighting": "studio_soft",
+            "resolution": [
+              1080,
+              1080
+            ],
+            "samples": 128
+          },
+          "validation_errors": [
+            []
+          ],
+          "outputs": [
+            "{\n  \"is_box\": false,\n  \"shape\": \"tube\",\n  \"unsupported\": [\"squeeze tube\"],\n  \"spec\": {\n    \"description\": \"a sunscreen squeeze tube\",\n    \"shape\": \"jar\",\n    \"jar\": {\n      \"diameter_cm\": 4.5,\n      \"height_cm\": 12.0,\n      \"colour\": \"#f2f2f2\",\n      \"roughness\": 0.45\n    },\n    \"camera\": \"three_quarter\"\n  }\n}"
+          ]
+        }
+      ]
+    }
+  ]
+}

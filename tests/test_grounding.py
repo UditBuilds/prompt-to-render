@@ -173,13 +173,47 @@ class Lookup(unittest.TestCase):
                          "a jar with a matching lid", "a gold bottle cap"):  # the last: the bottle's colour
             self.assertEqual(cap_colour_words(sentence), [], sentence)
 
-    def test_default_cap_only_for_bottles_and_jars(self):
+    def test_default_cap_for_every_round_shape(self):
         from grounding import default_cap
-        spec = {"shape": "cylinder", "cylinder": {"colour": "#FFFFFF"}}
-        self.assertIsNone(default_cap("a white lipstick", spec))
+        # v2 step 2: a cylinder has a cap too.
+        spec = {"shape": "cylinder", "cylinder": {"colour": "#FFFFFF", "cap_colour": "#FFFFFF"}}
+        self.assertEqual(default_cap("a white lipstick", spec),
+                         {"field": "cap_colour", "from": "#FFFFFF", "to": "#1A1A1A"})
         spec = {"shape": "jar", "jar": {"colour": "#9CAF88", "lid_colour": "#9CAF88"}}
         self.assertEqual(default_cap("a sage green face cream jar", spec),
                          {"field": "lid_colour", "from": "#9CAF88", "to": "#1A1A1A"})
+        self.assertIsNone(default_cap("a white box", {"shape": "box", "box": {"colour": "#FFFFFF"}}))
+
+    def test_cap_metal(self):
+        from grounding import cap_metal
+        # Developed on the dev sentences' phrasing and these; the eval sentences are left alone.
+        self.assertEqual(cap_metal("a jade green perfume bottle with a gold cap"), "gold")
+        self.assertEqual(cap_metal("an ivory candle jar with a copper lid"), "copper")
+        self.assertEqual(cap_metal("a white jar with a lid in rose gold"), "rose gold")  # not plain gold
+        self.assertEqual(cap_metal("a black bottle with a rose-gold cap"), "rose gold")
+        self.assertEqual(cap_metal("a bottle with a polished chrome cap"), "chrome")
+        self.assertEqual(cap_metal("a cream jar with a metallic bronze lid"), "bronze")
+        self.assertEqual(cap_metal("a tall bottle, silver cap"), "silver")
+        for sentence in ("a black bottle with a white cap",       # a colour, not a metal
+                         "an ivory candle box with a silver logo",  # a metal, but not the cap's
+                         "a gold bottle with a black cap",          # the body's metal word
+                         "a gold bottle cap",                       # the bottle's colour
+                         "a bottle with a metallic cap",            # no metal named
+                         "a rose serum bottle with a golden cap"):  # only the six metal words count
+            self.assertIsNone(cap_metal(sentence), sentence)
+
+    def test_apply_metal_always_sets_the_field(self):
+        from grounding import apply_metal
+        spec = {"shape": "bottle", "bottle": {"cap_metal": "silver"}}  # whatever was there
+        self.assertIsNone(apply_metal("a black bottle with a white cap", spec))
+        self.assertIsNone(spec["bottle"]["cap_metal"])
+        self.assertEqual(apply_metal("a black bottle with a gold cap", spec), {"field": "cap_metal", "metal": "gold"})
+        self.assertEqual(spec["bottle"]["cap_metal"], "gold")
+        jar = {"shape": "jar", "jar": {}}
+        self.assertEqual(apply_metal("a jar with a copper lid", jar), {"field": "lid_metal", "metal": "copper"})
+        box = {"shape": "box", "box": {}}
+        self.assertIsNone(apply_metal("a box with a gold lid", box))
+        self.assertEqual(box, {"shape": "box", "box": {}})
 
     def test_finish_words_never_reach_the_model(self):
         # Code only: no row, so the request the model gets is unchanged.
