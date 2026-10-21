@@ -287,9 +287,15 @@ class SchemaMatchesValidator(unittest.TestCase):
                     yield node["description"]
                 for value in node.values():
                     yield from descriptions(value)
+            elif isinstance(node, list):  # the spec's four variants (anyOf)
+                for value in node:
+                    yield from descriptions(value)
 
-        numbers = {n for d in descriptions(llm_backend.output_schema()) for n in re.findall(r"\d+(?:\.\d+)?", d)}
+        found = list(descriptions(llm_backend.output_schema()))
+        numbers = {n for d in found for n in re.findall(r"\d+(?:\.\d+)?", d)}
         self.assertLessEqual(numbers, {"0", "1", "10"})
+        # Every shape's fields are read, not only the wrapper's: the spec is a list of variants.
+        self.assertIn('Lid colour as a hex code, "#RRGGBB". Only if the sentence names one.', found)
 
     def test_no_real_colour_in_what_the_model_reads(self):
         # An example hex in the schema was copied for a colour the model didn't know.
