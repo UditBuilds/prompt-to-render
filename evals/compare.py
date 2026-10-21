@@ -8,7 +8,7 @@ how its runs got their values: a box colour copied from a colour table row,
 a colour shifted by code for a style word, a box size equal to a product's
 typical size, a roughness clamped by code for "glossy", or a backdrop made
 neutral by code, or a cap or lid colour set by code, or a metal cap or lid
-set by code. Those are passes the
+set by code, or a tube or can redrawn as a cylinder by code. Those are passes the
 tables and code make easy, so they are counted, not hidden. A backdrop is counted whenever the code changed
 it, even from another neutral grey; one the model had already set to the
 code's #F5F5F5 isn't.
@@ -47,12 +47,13 @@ def max_prompt_tokens(report):
 
 def how_values_came(case, tables):
     """Counts, over a case's runs, of values taken straight from the tables or set by code."""
-    copied = shifted = typical = glossy = backdrop = cap = metal = 0
+    copied = shifted = typical = glossy = backdrop = cap = metal = redrawn = 0
     for run in case["runs"]:
         glossy += bool(run.get("finish_change"))
         backdrop += bool(run.get("backdrop_change"))
         cap += bool(run.get("cap_change"))
         metal += bool(run.get("metal_change"))
+        redrawn += bool(run.get("shape_fixed"))
         rows = run.get("grounding_rows", [])
         if not run["valid"]:
             continue
@@ -87,6 +88,8 @@ def how_values_came(case, tables):
         parts.append(f"default cap by code {cap}")
     if metal:
         parts.append(f"metal by code {metal}")
+    if redrawn:
+        parts.append(f"shape redrawn by code {redrawn}")
     return ", ".join(parts) or "-"
 
 

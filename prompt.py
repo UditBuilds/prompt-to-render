@@ -203,6 +203,10 @@ class AttemptPrinter:
 def show_spec(sentence, result):
     if not result.ok:
         return
+    if result.shape_fixed:
+        change = result.shape_fixed
+        print(f"[shape] the model named a {change['real']} but drew a {change['from']}; "
+              f"drawn as the closest shape, a {change['to']}")
     for change in result.style_changes:
         print(f"[grounding] style \"{change['style']}\" applied to the product colour: "
               f"{change['from']} -> {change['to']}")
@@ -316,6 +320,7 @@ def log_llm(log, result):
         cap_change=result.cap_change,
         cap_given=result.cap_given,
         metal_change=result.metal_change,
+        shape_fixed=result.shape_fixed,
         llm_calls=[a.to_log() for a in result.attempts],
     )
 

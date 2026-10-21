@@ -611,6 +611,8 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
             "cap_given": result.cap_given,
             # v2 step 2: the metal code gave a cap or lid ({"field", "metal"}), None if none.
             "metal_change": getattr(result, "metal_change", None),
+            # v2 step 2: a tube or can code redrew as a cylinder ({"real", "from", "to"}), None if none.
+            "shape_fixed": getattr(result, "shape_fixed", None),
             "spec": result.spec,
             "validation_errors": [a.errors for a in result.attempts],
             "outputs": [a.reply.text for a in result.attempts],

@@ -271,6 +271,34 @@ class Shapes(unittest.TestCase):
                                                      diameter_cm=7, height_cm=5)]))
         self.assertEqual(result.spec["jar"]["lid_colour"], "#B76E79")
 
+    def test_a_tube_or_can_is_drawn_as_a_cylinder(self):
+        # The prompt's own closest shape. The model named it but drew a jar (v2 step 2, dev sentences).
+        reply = round_reply("jar", "tube", ["squeeze tube"], diameter_cm=4.5, height_cm=12, colour="#FFFFFF")
+        parsed = parse_reply(json.dumps(reply))
+        self.assertEqual(parsed["spec"]["shape"], "cylinder")
+        self.assertNotIn("jar", parsed["spec"])
+        cylinder = parsed["spec"]["cylinder"]
+        self.assertEqual((cylinder["diameter_cm"], cylinder["height_cm"], cylinder["colour"], cylinder["roughness"]),
+                         (4.5, 12, "#FFFFFF", 0.4))
+        self.assertEqual(cylinder["cap_colour"], "#1A1A1A")  # the default cap, as for any cylinder
+        self.assertFalse(parsed["cap_given"])
+        self.assertEqual(parsed["shape_fixed"], {"real": "tube", "from": "jar", "to": "cylinder"})
+        self.assertEqual(parsed["unsupported"], ["squeeze tube"])  # already listed: no "tube shape" added
+        # A cap colour the model gave goes on the cylinder's cap.
+        reply = round_reply("bottle", "aerosol can", diameter_cm=5, height_cm=15, cap_colour="#FFFFFF")
+        parsed = parse_reply(json.dumps(reply))
+        self.assertEqual((parsed["spec"]["shape"], parsed["spec"]["cylinder"]["cap_colour"]), ("cylinder", "#FFFFFF"))
+        self.assertTrue(parsed["cap_given"])
+        self.assertEqual(parsed["unsupported"], ["aerosol can shape"])
+        # Left alone: drawn as a cylinder already, another real shape, a box.
+        for shape, real in (("cylinder", "tube"), ("bottle", "perfume bottle"), ("jar", "pot")):
+            with self.subTest(real=real):
+                parsed = parse_reply(json.dumps(round_reply(shape, real, diameter_cm=5, height_cm=6)))
+                self.assertEqual(parsed["spec"]["shape"], shape)
+                self.assertIsNone(parsed["shape_fixed"])
+        box = dict(GOOD, shape="tube")
+        self.assertEqual(parse_reply(json.dumps(box))["spec"]["shape"], "box")  # is_box true: a box
+
     def test_code_draws_a_named_metal_cap(self):
         # The model gives the colour; code alone decides the metal.
         result = write_spec("a black perfume bottle with a gold cap",

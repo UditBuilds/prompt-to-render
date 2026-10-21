@@ -12,12 +12,20 @@ Used by prompt.py and by the evals, so both run the same loop.
 """
 
 import json
+import re
 
 from grounding import (Grounding, apply_finish, apply_metal, default_cap, lookup, neutral_backdrop,
                        style_box_colour)
 from spec import CAP_FIELDS, SHAPES, SpecError, validate_spec
 
 MAX_ATTEMPTS = 2
+
+# The closest drawn shape for a real shape the renderer can't draw, as the
+# prompt itself gives it: "a squeeze tube or a can as a cylinder". The model
+# names such a shape right in its "shape" field, but once cylinders had a cap
+# (v2 step 2) it often drew a squeeze tube as a jar, so code draws it as the
+# prompt says.
+CLOSEST_SHAPES = {"tube": "cylinder", "tubes": "cylinder", "can": "cylinder", "cans": "cylinder"}
 
 
 class Attempt:
@@ -47,7 +55,7 @@ class SpecResult:
     def __init__(self, attempts, spec=None, unsupported=None, model_unsupported=None,
                  is_box=None, shape=None, shape_added=False, grounding=None, style_changes=None,
                  backdrop_change=None, finish_change=None, backdrop_given=None, cap_change=None,
-                 cap_given=None, metal_change=None):
+                 cap_given=None, metal_change=None, shape_fixed=None):
         self.attempts = attempts
         self.grounding = grounding or Grounding([])  # the table rows the model was given
         self.style_changes = style_changes or []   # style-word colour shifts applied by code
@@ -63,6 +71,7 @@ class SpecResult:
         self.is_box = is_box
         self.shape = shape                  # the model's word for the real shape; spec["shape"] is what is drawn
         self.shape_added = shape_added      # True if the code added the shape to `unsupported`
+        self.shape_fixed = shape_fixed      # {"real", "from", "to"} if code redrew it in the closest shape
 
     @property
     def ok(self):
@@ -82,18 +91,39 @@ class SpecResult:
         return sum(v for v in values if v is not None)
 
 
+def closest_shape(shape):
+    """The shape code draws for the model's word for the real shape (CLOSEST_SHAPES), or None."""
+    return next((CLOSEST_SHAPES[word] for word in re.findall(r"[a-z]+", shape) if word in CLOSEST_SHAPES), None)
+
+
+def redraw(raw_spec, spec, shape):
+    """raw_spec with its product drawn as `shape` instead: the same size, colour and
+    finish, and the cap or lid colour if the model gave one."""
+    old = spec["shape"]
+    fields = spec[old]
+    product = {"diameter_cm": fields.get("diameter_cm", fields.get("width_cm")), "height_cm": fields["height_cm"],
+               "colour": fields["colour"], "roughness": fields["roughness"]}
+    cap = CAP_FIELDS.get(old)
+    if cap and cap in raw_spec[old]:
+        product[CAP_FIELDS[shape]] = fields[cap]
+    redrawn = {key: value for key, value in raw_spec.items() if key not in SHAPES}
+    redrawn.update({"shape": shape, shape: product})
+    return redrawn
+
+
 def parse_reply(text):
     """Turn the model's reply into a dict: spec, unsupported, model_unsupported,
-    is_box, shape, shape_added, backdrop_given, cap_given.
+    is_box, shape, shape_added, backdrop_given, cap_given, shape_fixed.
 
     The spec is validated by spec.validate_spec, with defaults filled in. The
     rest is kept apart from it: it is reported to the user and never reaches
     the renderer. Raises SpecError listing every problem found.
 
-    Two rules apply to the model's reply only, not to a spec file: the spec
+    Three rules apply to the model's reply only, not to a spec file: the spec
     must give the object of its own shape (a spec file may leave it out and
-    get the defaults; the model must choose the sizes), and a box (is_box
-    true) is drawn as a box.
+    get the defaults; the model must choose the sizes), a box (is_box true)
+    is drawn as a box, and a real shape the prompt gives a closest shape for
+    (a tube or a can: a cylinder) is drawn in that shape (shape_fixed).
 
     When the real shape isn't the one drawn (a squeeze tube drawn as a
     cylinder), it always goes first in the unsupported list. The model names
@@ -142,6 +172,13 @@ def parse_reply(text):
     if problems:
         raise SpecError(problems)
 
+    shape_fixed = None
+    closest = closest_shape(shape)
+    if not is_box and closest and spec["shape"] != closest:
+        shape_fixed = {"real": shape, "from": spec["shape"], "to": closest}
+        raw_spec = redraw(raw_spec, spec, closest)
+        spec = validate_spec(raw_spec)
+
     # Tidy the list: no blanks, no repeats.
     cleaned = []
     for item in unsupported:
@@ -163,7 +200,7 @@ def parse_reply(text):
     cap_given = cap in raw_spec[spec["shape"]] if cap else None
     return {"spec": spec, "unsupported": final, "model_unsupported": cleaned, "is_box": is_box,
             "shape": shape, "shape_added": shape_added, "backdrop_given": backdrop_given,
-            "cap_given": cap_given}
+            "cap_given": cap_given, "shape_fixed": shape_fixed}
 
 
 def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, grounding=True, tables=None):
