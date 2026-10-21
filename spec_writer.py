@@ -14,9 +14,9 @@ Used by prompt.py and by the evals, so both run the same loop.
 import json
 import re
 
-from grounding import (Grounding, apply_finish, apply_metal, default_cap, exact_hex, lookup, neutral_backdrop,
+from grounding import (Grounding, apply_finish, apply_metal, default_cap, lookup, neutral_backdrop,
                        style_box_colour)
-from spec import CAP_FIELDS, SHAPES, SpecError, clamp_proportions, hsl_colours_to_hex, validate_spec
+from spec import CAP_FIELDS, SHAPES, SpecError, clamp_proportions, validate_spec
 
 MAX_ATTEMPTS = 2
 
@@ -55,8 +55,7 @@ class SpecResult:
     def __init__(self, attempts, spec=None, unsupported=None, model_unsupported=None,
                  is_box=None, shape=None, shape_added=False, grounding=None, style_changes=None,
                  backdrop_change=None, finish_change=None, backdrop_given=None, cap_change=None,
-                 cap_given=None, metal_change=None, shape_fixed=None, proportion_changes=None,
-                 model_colours=None, hex_changes=None):
+                 cap_given=None, metal_change=None, shape_fixed=None, proportion_changes=None):
         self.attempts = attempts
         self.grounding = grounding or Grounding([])  # the table rows the model was given
         self.style_changes = style_changes or []   # style-word colour shifts applied by code
@@ -68,8 +67,6 @@ class SpecResult:
         self.metal_change = metal_change           # {"field", "metal"} if code drew the cap or lid in metal
         # {"rule", "field", "from", "to"} per size code clamped (spec.PROPORTION_LIMITS), [] if none
         self.proportion_changes = proportion_changes or []
-        self.model_colours = model_colours or {}  # the model's own colours, {"box.colour": [h, s, l]}
-        self.hex_changes = hex_changes or []      # {"field", "from", "to"} per exact hex code copied from the sentence
         self.spec = spec                    # full validated spec, or None
         self.unsupported = unsupported or []  # what the user is told was ignored
         self.model_unsupported = model_unsupported or []  # the model's own list, before the code added anything
@@ -118,11 +115,7 @@ def redraw(raw_spec, spec, shape):
 
 def parse_reply(text):
     """Turn the model's reply into a dict: spec, unsupported, model_unsupported,
-    is_box, shape, shape_added, backdrop_given, cap_given, shape_fixed, model_colours.
-
-    The model writes every colour as hue, saturation and lightness (v2 step
-    3); they are turned into the spec's "#RRGGBB" before validation, and
-    model_colours keeps what the model wrote ({"box.colour": [h, s, l]}).
+    is_box, shape, shape_added, backdrop_given, cap_given, shape_fixed.
 
     The spec is validated by spec.validate_spec, with defaults filled in. The
     rest is kept apart from it: it is reported to the user and never reaches
@@ -166,10 +159,7 @@ def parse_reply(text):
         raw_spec = None
 
     spec = None
-    model_colours = {}
     if raw_spec is not None:
-        model_colours, colour_problems = hsl_colours_to_hex(raw_spec)
-        problems += colour_problems
         drawn = raw_spec.get("shape", "box")
         if drawn in SHAPES and drawn not in raw_spec:
             problems.append(f'{drawn}: missing. The shape is "{drawn}", so its size, colour and finish '
@@ -212,7 +202,7 @@ def parse_reply(text):
     cap_given = cap in raw_spec[spec["shape"]] if cap else None
     return {"spec": spec, "unsupported": final, "model_unsupported": cleaned, "is_box": is_box,
             "shape": shape, "shape_added": shape_added, "backdrop_given": backdrop_given,
-            "cap_given": cap_given, "shape_fixed": shape_fixed, "model_colours": model_colours}
+            "cap_given": cap_given, "shape_fixed": shape_fixed}
 
 
 def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, grounding=True, tables=None):
@@ -221,9 +211,8 @@ def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, ground
     With grounding on, the rows of the data/ tables that match the
     sentence's words are added to the request, and code then applies the
     style shift, the glossy finish, the neutral backdrop, the default cap
-    or lid colour, the metal of a cap or lid and an exact hex the sentence
-    gives (see grounding.py), and holds a round shape's proportions to
-    spec.PROPORTION_LIMITS. With it
+    or lid colour and the metal of a cap or lid (see grounding.py), and
+    holds a round shape's proportions to spec.PROPORTION_LIMITS. With it
     off, the model decides everything but parse_reply's rules on its own.
     `tables` replaces the data/ tables (e.g. without the colour table).
 
@@ -250,16 +239,15 @@ def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, ground
         if not errors:
             # Code sets what the model can't be relied on for (see grounding.py).
             changes = style_box_colour(sentence, parsed["spec"], found)
-            backdrop = finish = cap = metal = clamps = hexes = None
+            backdrop = finish = cap = metal = clamps = None
             if grounding:
                 clamps = clamp_proportions(parsed["spec"])
-                hexes = exact_hex(sentence, parsed["spec"])
                 backdrop = neutral_backdrop(sentence, parsed["spec"], parsed["backdrop_given"])
                 finish = apply_finish(sentence, parsed["spec"], tables)
                 cap = default_cap(sentence, parsed["spec"], parsed["cap_given"])
                 metal = apply_metal(sentence, parsed["spec"])
             return SpecResult(attempts, grounding=found, style_changes=changes, backdrop_change=backdrop,
                               finish_change=finish, cap_change=cap, metal_change=metal,
-                              proportion_changes=clamps, hex_changes=hexes, **parsed)
+                              proportion_changes=clamps, **parsed)
         previous_output, previous_errors = reply.text, errors
     return SpecResult(attempts, grounding=found)

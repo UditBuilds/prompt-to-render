@@ -100,13 +100,11 @@ def spec_schema():
     Each requires its own shape's object and has no other shape's. With the
     four objects merely optional in one schema, Ollama's grammar let the
     model close the spec after "camera" without any (7 of 30 dev runs).
-    Every colour is written as hue, saturation and lightness (v2 step 3);
-    spec_writer.parse_reply turns them into the spec's hex.
     """
     variants = []
     for shape in spec.SHAPES:
         fields = [f for f in LLM_FIELDS if f not in spec.SHAPES or f == shape]
-        variant = spec.json_schema(only=fields, optional=LLM_OPTIONAL, colours="hsl")
+        variant = spec.json_schema(only=fields, optional=LLM_OPTIONAL)
         variant["properties"]["shape"] = dict(variant["properties"]["shape"], enum=[shape])
         variants.append(variant)
     return {"anyOf": variants}

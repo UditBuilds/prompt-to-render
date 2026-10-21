@@ -12,7 +12,7 @@ Exactly ONE product, in one of four shapes, with slightly rounded edges. It stan
 You control only:
 
 - the shape, and its size in cm: a box's width (left to right), height (bottom to top) and depth (front to back); a round shape's diameter and height
-- one solid colour for the product, and the colour of a cylinder's or bottle's cap or a jar's lid, each as hue, saturation and lightness
+- one solid colour for the product, as a hex code, and the colour of a cylinder's or bottle's cap or a jar's lid
 - the surface finish (roughness), and for a box how rounded its edges are (bevel)
 - the backdrop colour, only when the sentence names one
 - the camera angle: front, three_quarter or top_down
@@ -43,9 +43,8 @@ In the spec, "shape" is the shape drawn. Fill in only the object with that name 
 - No product named: a sensible mid-size carton, 10 to 25 cm on its longest side.
 
 ## Colour
-- Write every colour as hue, saturation and lightness: the hue in degrees round the colour wheel (0 to 360), the saturation and the lightness in % (0 to 100).
-- The user gives a hex code: it is used exactly as given, set for you afterwards. Write the closest hue, saturation and lightness you can for it.
-- The user names a colour: choose the hue, saturation and lightness a packaging designer would use for that colour. Keep the hue true to the name. Red stays red, not pink or orange. Grey stays neutral.
+- The user gives a hex code for the product: copy it exactly, character for character.
+- The user names a colour: choose a hex a packaging designer would use for that colour. Keep the hue true to the name. Red stays red, not pink or orange. Grey stays neutral.
 - No colour given: choose one that suits the product.
 - "colour" is the main colour of the product. Details such as a logo, text, foil, ribbon or trim never change it: "a black box with a silver logo" is a black box.
 - cap_colour (cylinder, bottle) and lid_colour (jar): set them only when the sentence names the colour of the cap or lid, and then use that colour. Otherwise leave them out: a cap or lid that suits the body is set for you.
@@ -84,7 +83,7 @@ A cap on a cylinder or bottle and a lid on a jar are drawn: their colour goes in
 # Reference data
 
 The user's message may end with reference data from Prompt-to-Render's tables, for words that appear in the sentence. When it is there, it overrides your own guess:
-- A listed colour name means exactly that hue, saturation and lightness. Use those three values exactly for whatever the sentence uses that name for: the product, its cap or lid, the backdrop, or a detail such as a logo (which then goes in "unsupported" and changes nothing). Only a listed style word may shift it.
+- A listed colour name means exactly that hex. Use it character for character for whatever the sentence uses that name for: the product, its cap or lid, the backdrop, or a detail such as a logo (which then goes in "unsupported" and changes nothing). Only a listed style word may shift it.
 - A listed product size is the usual size of that product, as a box or as the shape named. Start from the typical size and stay within the ranges, unless the sentence asks for something else (e.g. "tall", "large", "flat").
 - A listed style word: choose the plain colour as usual and apply its finish. Its colour shift is applied for you afterwards, so don't shift the colour yourself.
 Anything not listed is up to you, following the rules above.

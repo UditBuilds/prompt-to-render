@@ -652,10 +652,6 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
             "shape_fixed": getattr(result, "shape_fixed", None),
             # v2 step 3: proportion clamps, and whether the run passes without them (None: no clamp fired).
             "proportion_changes": clamps,
-            # v2 step 3: the model's own colours (hue, saturation, lightness), and the
-            # exact hex codes code copied from the sentence ({"field", "from", "to"}).
-            "model_colours": getattr(result, "model_colours", None),
-            "hex_changes": getattr(result, "hex_changes", None) or [],
             "checks_without_clamps": unclamped,
             "passed_without_clamps": None if unclamped is None else all(o["passed"] for o in unclamped),
             "spec": result.spec,

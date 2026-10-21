@@ -10,9 +10,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from grounding import (NEUTRAL_BACKDROP, TABLES, apply_finish, backdrop_colour_words, exact_hex,  # noqa: E402
-                       load_finishes, load_tables, lookup, neutral_backdrop)
-from spec import hex_to_hsl, hsl_to_hex  # noqa: E402
+from grounding import (NEUTRAL_BACKDROP, TABLES, apply_finish, backdrop_colour_words, load_finishes,  # noqa: E402
+                       load_tables, lookup, neutral_backdrop)
 
 
 def names(sentence):
@@ -58,7 +57,7 @@ class Lookup(unittest.TestCase):
 
     def test_text_lists_the_values(self):
         text = lookup("a luxury emerald perfume box").text
-        self.assertIn('"emerald" = hue 167, saturation 100%, lightness 29%', text)  # HSL since v2 step 3
+        self.assertIn('"emerald" = #009473', text)
         self.assertIn("perfume: typically 7 x 12 x 4.5", text)
         self.assertIn('"luxury": colour becomes deeper and richer (30% darker, 10% less saturated', text)
 
@@ -164,37 +163,6 @@ class Lookup(unittest.TestCase):
             self.assertTrue(names_a_box(sentence), sentence)
         for sentence in ("a boxy bottle", "a red lipstick", "a jar"):
             self.assertFalse(names_a_box(sentence), sentence)
-
-    def test_exact_hex_goes_where_the_sentence_puts_it(self):
-        # v2 step 3: the model writes HSL, which can't hold every hex, so code copies the sentence's.
-        def placed(sentence, shape="box", **colours):
-            spec = {"shape": shape, shape: {"colour": "#808080"}, "background_colour": "#F5F5F5"}
-            spec[shape].update(colours)
-            return [(c["field"], c["to"]) for c in exact_hex(sentence, spec)], spec
-
-        self.assertEqual(placed("a perfume box in #1B4D3E")[0], [("box.colour", "#1B4D3E")])
-        self.assertEqual(placed("a glossy box in #f4b6c2")[0], [("box.colour", "#F4B6C2")])
-        self.assertEqual(placed("a navy box on a #F4B6C2 backdrop")[0], [("background_colour", "#F4B6C2")])
-        self.assertEqual(placed("a white bottle with a #000 cap", "bottle", cap_colour="#111111")[0],
-                         [("bottle.cap_colour", "#000000")])
-        self.assertEqual(placed("a #FFFFFF jar with a lid in #D4AF37", "jar", lid_colour="#111111")[0],
-                         [("jar.colour", "#FFFFFF"), ("jar.lid_colour", "#D4AF37")])
-        # Two for one part: the model's choice stands. None, or a box's "cap": nothing changes.
-        self.assertEqual(placed("a box in #FFFFFF or #000000")[0], [])
-        self.assertEqual(placed("a red box")[0], [])
-        self.assertEqual(placed("a box with a #000000 lid")[0], [])
-        # Already exact: nothing to report, nothing changed.
-        changes, spec = placed("a box in #808080")
-        self.assertEqual((changes, spec["box"]["colour"]), ([], "#808080"))
-
-    def test_table_colours_are_shown_in_hsl(self):
-        # The model reads a table colour as whole-number HSL and writes it back; code turns it
-        # into hex. That must stay within a step of the table's own hex on every channel.
-        for name, row in load_tables()["colours"].items():
-            with self.subTest(colour=name):
-                back = hsl_to_hex(*hex_to_hsl(row["hex"]))
-                channels = [abs(int(back[i:i + 2], 16) - int(row["hex"][i:i + 2], 16)) for i in (1, 3, 5)]
-                self.assertLessEqual(max(channels), 3, back)
 
     def test_cap_colour_words(self):
         from grounding import cap_colour_words

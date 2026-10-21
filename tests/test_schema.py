@@ -55,21 +55,6 @@ def with_value(path, value):
     return raw
 
 
-def nodes(node):
-    """Every object in a JSON schema, nested objects and lists (anyOf) included."""
-    if isinstance(node, dict):
-        yield node
-        for value in node.values():
-            yield from nodes(value)
-    elif isinstance(node, list):
-        for value in node:
-            yield from nodes(value)
-
-
-def descriptions(schema):
-    return [node["description"] for node in nodes(schema) if isinstance(node.get("description"), str)]
-
-
 def is_valid(raw):
     try:
         spec.validate_spec(raw)
@@ -283,48 +268,37 @@ class SchemaMatchesValidator(unittest.TestCase):
         for shape, variant in zip(spec.SHAPES, variants):
             with self.subTest(shape=shape):
                 fields = [f for f in llm_backend.LLM_FIELDS if f not in spec.SHAPES or f == shape]
-                # The spec schema, with every colour as hue, saturation and lightness (v2 step 3).
-                expected = spec.json_schema(only=fields, optional=llm_backend.LLM_OPTIONAL, colours="hsl")
+                expected = spec.json_schema(only=fields, optional=llm_backend.LLM_OPTIONAL)
                 self.assertEqual(variant["properties"]["shape"]["enum"], [shape])
                 expected["properties"]["shape"]["enum"] = [shape]
                 self.assertEqual(variant, expected)
                 # The model may leave the backdrop out; the rest, its own shape's
                 # object included, it must fill in.
                 self.assertEqual(variant["required"], ["description", "shape", shape, "camera"])
-                self.assertEqual(variant["properties"][shape], spec.json_schema(colours="hsl")["properties"][shape])
+                self.assertEqual(variant["properties"][shape], spec.json_schema()["properties"][shape])
 
     def test_no_real_size_in_the_schema(self):
         # Like the example hex, an example size in a description would be
         # copied. The only numbers allowed are the roughness scale (0 and 1)
         # and the bevel rule (10%).
+        def descriptions(node):
+            if isinstance(node, dict):
+                if isinstance(node.get("description"), str):
+                    yield node["description"]
+                for value in node.values():
+                    yield from descriptions(value)
+
         numbers = {n for d in descriptions(llm_backend.output_schema()) for n in re.findall(r"\d+(?:\.\d+)?", d)}
         self.assertLessEqual(numbers, {"0", "1", "10"})
-        # Every shape's fields are looked at: the spec is a list of variants (anyOf).
-        self.assertIn("Lid colour as hue, saturation and lightness. Only if the sentence names one.",
-                      list(descriptions(llm_backend.output_schema())))
 
     def test_no_real_colour_in_what_the_model_reads(self):
         # An example hex in the schema was copied for a colour the model didn't know.
-        # Since v2 step 3 the model writes hue, saturation and lightness: still no
-        # real colour anywhere it reads, as hex or as HSL, only the scales.
         prompt = llm_backend.system_prompt()
         self.assertEqual(re.findall(r"#[0-9A-Fa-f]{6}\b", prompt), [])
-        self.assertEqual(re.findall(r"\b(?:hue|saturation|lightness)\W{0,4}\d", prompt, re.IGNORECASE), [])
-        colours = [node for node in nodes(llm_backend.output_schema()) if "hue" in node.get("properties", {})]
-        self.assertEqual(len(colours), 11)  # per variant: the backdrop, the product, and a round shape's cap or lid
-        for colour in colours:
-            self.assertEqual({k: (v["minimum"], v["maximum"]) for k, v in colour["properties"].items()},
-                             {"hue": (0, 360), "saturation": (0, 100), "lightness": (0, 100)})
-            self.assertFalse({"default", "examples", "enum", "const"} & {k for n in nodes(colour) for k in n})
-        self.assertFalse(any("pattern" in node for node in nodes(llm_backend.output_schema())))  # no hex left
-        # The retry messages name the format, never a colour.
+        self.assertIn("#RRGGBB", prompt)
         problems = []
         spec.Colour("#000000", "").check("pinkish", "box.colour", problems)
         self.assertEqual(re.findall(r"#[0-9A-Fa-f]{6}\b", problems[0]), [])
-        _, problems = spec.hsl_colours_to_hex({"box": {"colour": "pinkish"}})
-        self.assertEqual(re.findall(r"#[0-9A-Fa-f]{6}\b|\d", problems[0]), [])
-        _, problems = spec.hsl_colours_to_hex({"box": {"colour": {"hue": 400, "saturation": 50, "lightness": 50}}})
-        self.assertEqual(problems, ["box.colour.hue: must be between 0 and 360, got 400"])
 
     def test_system_prompt_contains_schema(self):
         prompt = llm_backend.system_prompt()
