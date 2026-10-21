@@ -92,6 +92,15 @@ PROPORTION_LIMITS = {
 # stays exactly as it was. The model's own "glossy" is 0.1-0.3, code's 0.05.
 GLOSSY_ROUGHNESS = 0.2
 
+# A text label (v2 step 4): one line of at most this many characters, read by
+# code from the sentence's quoted text (labels.py), never written by the model.
+# The renderer prints it on every shape: flat on a box, wrapped round the side
+# of a round one.
+MAX_LABEL_CHARS = 20
+# The label colour when the sentence names none, as for a cap: black on a
+# light surface, white on a dark one (CAP_LIGHTNESS_SPLIT).
+LABEL_ON_LIGHT, LABEL_ON_DARK = "#1A1A1A", "#FFFFFF"
+
 
 class SpecError(Exception):
     """Raised when a spec is invalid. Holds a list of human-readable problems."""
@@ -193,6 +202,42 @@ class Metal(Field):
         return True
 
 
+class Label(Field):
+    """The text label on the product: {"text", "colour", "metal"}, or null for none.
+
+    Set by code from the sentence's quoted text, never by the model
+    (labels.py): it is left out of the JSON schema the model reads. A spec
+    file may set it. text is one line of 1 to MAX_LABEL_CHARS characters,
+    colour a hex, metal null or a METALS name (then the label is drawn in
+    that metal).
+    """
+    optional = True
+    code_only = True
+    KEYS = {"text": None, "colour": None, "metal": None}
+
+    def __init__(self, doc):
+        super().__init__(None, doc)
+
+    def check(self, value, name, problems):
+        if value is None:
+            return True
+        if not isinstance(value, dict):
+            problems.append(f'{name}: must be null or an object like '
+                            f'{{"text": "NOIR", "colour": "#FFFFFF", "metal": null}}, got {_show(value)}')
+            return False
+        before = len(problems)
+        _check_unknown_keys(value, self.KEYS, f"{name}.", problems)
+        text = value.get("text")
+        if not (isinstance(text, str) and text.strip()):
+            problems.append(f"{name}.text: must be text of 1 to {MAX_LABEL_CHARS} characters, got {_show(text)}")
+        elif len(text) > MAX_LABEL_CHARS or "\n" in text or text != text.strip():
+            problems.append(f"{name}.text: must be one line of at most {MAX_LABEL_CHARS} characters, with no "
+                            f"spaces at its ends, got {_show(text)} ({len(text)} characters)")
+        Colour(None, "").check(value.get("colour"), f"{name}.colour", problems)
+        Metal("").check(value.get("metal"), f"{name}.metal", problems)
+        return len(problems) == before
+
+
 class Choice(Field):
     def __init__(self, default, choices, doc):
         super().__init__(default, doc)
@@ -279,6 +324,7 @@ FIELDS = {
         "lid_colour": CapColour('Lid colour as a hex code, "#RRGGBB". Only if the sentence names one.'),
         "lid_metal": Metal("The metal the lid is drawn in, or null. Set by code from the sentence."),
     },
+    "label": Label("The text on the product, or null. Set by code from the sentence's quoted text."),
     "background_colour": Colour("#EDEDED", 'Studio backdrop colour as a hex code, "#RRGGBB".'),
     "colour_mode": Choice("accurate", COLOUR_MODES,
                           "accurate: the box colour matches the hex closely. realistic: filmic look, paler colours."),
@@ -528,13 +574,22 @@ def product(spec):
 
 
 def has_shine(spec):
-    """True if anything in a full spec is glossy (roughness <= GLOSSY_ROUGHNESS) or metal.
+    """True if anything in a full spec is glossy (roughness <= GLOSSY_ROUGHNESS) or metal:
+    a metal cap or lid, or a metal label.
 
     The renderer adds its strip lights only then.
     """
     fields = product(spec)
     metal = METAL_FIELDS.get(spec["shape"])
-    return fields["roughness"] <= GLOSSY_ROUGHNESS or bool(metal and fields[metal])
+    label = spec.get("label")
+    return (fields["roughness"] <= GLOSSY_ROUGHNESS or bool(metal and fields[metal])
+            or bool(label and label["metal"]))
+
+
+def default_label_colour(surface_colour):
+    """The label colour for the colour it is printed on, when the sentence names none:
+    LABEL_ON_LIGHT on a light surface, LABEL_ON_DARK on a dark one."""
+    return LABEL_ON_LIGHT if lightness(surface_colour) >= CAP_LIGHTNESS_SPLIT else LABEL_ON_DARK
 
 
 def lightness(hex_colour):

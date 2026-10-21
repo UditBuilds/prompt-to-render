@@ -16,6 +16,7 @@ import re
 
 from grounding import (Grounding, apply_finish, apply_metal, default_cap, lookup, neutral_backdrop,
                        style_box_colour)
+from labels import apply_label, read_label
 from spec import CAP_FIELDS, SHAPES, SpecError, clamp_proportions, validate_spec
 
 MAX_ATTEMPTS = 2
@@ -55,7 +56,8 @@ class SpecResult:
     def __init__(self, attempts, spec=None, unsupported=None, model_unsupported=None,
                  is_box=None, shape=None, shape_added=False, grounding=None, style_changes=None,
                  backdrop_change=None, finish_change=None, backdrop_given=None, cap_change=None,
-                 cap_given=None, metal_change=None, shape_fixed=None, proportion_changes=None):
+                 cap_given=None, metal_change=None, shape_fixed=None, proportion_changes=None,
+                 label_change=None, model_sentence=None):
         self.attempts = attempts
         self.grounding = grounding or Grounding([])  # the table rows the model was given
         self.style_changes = style_changes or []   # style-word colour shifts applied by code
@@ -67,6 +69,9 @@ class SpecResult:
         self.metal_change = metal_change           # {"field", "metal"} if code drew the cap or lid in metal
         # {"rule", "field", "from", "to"} per size code clamped (spec.PROPORTION_LIMITS), [] if none
         self.proportion_changes = proportion_changes or []
+        # {"text", "colour", "metal", "colour_from"} if code drew a label (labels.py), else None
+        self.label_change = label_change
+        self.model_sentence = model_sentence  # what the model and the tables got: no quoted text
         self.spec = spec                    # full validated spec, or None
         self.unsupported = unsupported or []  # what the user is told was ignored
         self.model_unsupported = model_unsupported or []  # the model's own list, before the code added anything
@@ -211,15 +216,21 @@ def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, ground
     With grounding on, the rows of the data/ tables that match the
     sentence's words are added to the request, and code then applies the
     style shift, the glossy finish, the neutral backdrop, the default cap
-    or lid colour and the metal of a cap or lid (see grounding.py), and
-    holds a round shape's proportions to spec.PROPORTION_LIMITS. With it
-    off, the model decides everything but parse_reply's rules on its own.
-    `tables` replaces the data/ tables (e.g. without the colour table).
+    or lid colour and the metal of a cap or lid (see grounding.py), holds a
+    round shape's proportions to spec.PROPORTION_LIMITS, and draws the
+    sentence's quoted text as a label (labels.py). The model and the tables
+    get the sentence without its quoted text and that text's colour
+    (labels.read_label: a sentence without quotes is sent as it is). With
+    grounding off, the model gets the whole sentence and decides everything
+    but parse_reply's rules on its own: no label is drawn. `tables`
+    replaces the data/ tables (e.g. without the colour table).
 
     report(event, attempt) is called with "start" before each LLM call and
     "done" after it, so the caller can show progress. Backend errors
     (BackendUnavailable, RuntimeError) are not caught here.
     """
+    label = read_label(sentence) if grounding else None
+    sentence = label.model_sentence if label else sentence
     found = lookup(sentence, tables) if grounding else Grounding([])
     attempts = []
     previous_output = previous_errors = None
@@ -239,15 +250,19 @@ def write_spec(sentence, backend, max_attempts=MAX_ATTEMPTS, report=None, ground
         if not errors:
             # Code sets what the model can't be relied on for (see grounding.py).
             changes = style_box_colour(sentence, parsed["spec"], found)
-            backdrop = finish = cap = metal = clamps = None
+            backdrop = finish = cap = metal = clamps = label_change = None
             if grounding:
                 clamps = clamp_proportions(parsed["spec"])
                 backdrop = neutral_backdrop(sentence, parsed["spec"], parsed["backdrop_given"])
                 finish = apply_finish(sentence, parsed["spec"], tables)
                 cap = default_cap(sentence, parsed["spec"], parsed["cap_given"])
                 metal = apply_metal(sentence, parsed["spec"])
+                # Last: a label's default colour depends on the product's final colour.
+                label_change, listed = apply_label(label, parsed["spec"])
+                parsed["unsupported"] += listed
             return SpecResult(attempts, grounding=found, style_changes=changes, backdrop_change=backdrop,
                               finish_change=finish, cap_change=cap, metal_change=metal,
-                              proportion_changes=clamps, **parsed)
+                              proportion_changes=clamps, label_change=label_change, model_sentence=sentence,
+                              **parsed)
         previous_output, previous_errors = reply.text, errors
-    return SpecResult(attempts, grounding=found)
+    return SpecResult(attempts, grounding=found, model_sentence=sentence)

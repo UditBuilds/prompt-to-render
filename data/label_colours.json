@@ -1,0 +1,16 @@
+{
+  "about": "Plain colour names for a label's text (v2 step 4), for code only: never shown to the model and never part of grounding. They are not in colours.json on purpose: a row there would add reference data to every sentence with that word (\"a white box\") and change the model's request. A colour named right after a label's text (\"NOIR\" in white) is looked up in spec.METALS first (drawn as that metal), then here and in colours.json (names and aliases), longest phrase first. The hexes are ordinary print colours, picked for legible text; black and white are the default label colours (spec.LABEL_ON_LIGHT, spec.LABEL_ON_DARK).",
+  "colours": {
+    "white": {"hex": "#FFFFFF"},
+    "black": {"hex": "#1A1A1A"},
+    "grey": {"hex": "#808080", "aliases": ["gray"]},
+    "red": {"hex": "#C8102E"},
+    "pink": {"hex": "#E75480"},
+    "orange": {"hex": "#F28C28"},
+    "yellow": {"hex": "#FFD100"},
+    "green": {"hex": "#2E8B57"},
+    "blue": {"hex": "#1F4E9E"},
+    "purple": {"hex": "#6A3D9A"},
+    "brown": {"hex": "#6B4423"}
+  }
+}

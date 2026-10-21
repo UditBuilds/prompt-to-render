@@ -152,6 +152,21 @@ COLOUR_MODES = {
 PATCH_FRACTION = 0.2
 METER_SAMPLES = 64
 
+# A text label (v2 step 4), in Blender's built-in font, centred on the face
+# the camera sees (the hero face): this share of the face's width, and never
+# taller than LABEL_MAX_HEIGHT of the face's height (a flat scarf box's front
+# is wide but low).
+LABEL_WIDTH = 0.6
+LABEL_MAX_HEIGHT = 0.5
+# Printed, a hair raised: its thickness is this share of its height, and
+# LABEL_INSET of that thickness sits inside the surface, so it never floats
+# and is never sunk in.
+LABEL_THICKNESS = 0.03
+LABEL_INSET = 1 / 3
+# Wrapped round a round body, the letters are cut into upright strips this
+# many degrees of the curve wide, so no straight edge cuts into the body.
+LABEL_SLICE_DEGREES = 1.5
+
 
 def log(message):
     """Print a line that run.py will show to the user."""
@@ -574,11 +589,128 @@ def build_camera(scene, objects, shape, preset_name, resolution):
     return cam, target, radius
 
 
+def text_mesh(scene, text):
+    """The text as a flat mesh in Blender's built-in font, in font units: (mesh, bounds).
+
+    Reads left to right along +x, up along +y, facing +z. bounds is
+    (min_x, max_x, min_y, max_y) of the letters themselves.
+    """
+    curve = bpy.data.curves.new("LabelText", "FONT")
+    curve.body = text
+    obj = add_object(scene, "LabelText", curve)
+    mesh = bpy.data.meshes.new_from_object(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()))
+    bpy.data.objects.remove(obj, do_unlink=True)
+    bpy.data.curves.remove(curve)
+    xs, ys = [v.co.x for v in mesh.vertices], [v.co.y for v in mesh.vertices]
+    return mesh, (min(xs), max(xs), min(ys), max(ys))
+
+
+def build_label(scene, spec):
+    """The spec's label, printed on the face the camera sees (hero_face), or None if it has none.
+
+    Centred on the face, LABEL_WIDTH of its width (at most LABEL_MAX_HEIGHT
+    of its height), reading left to right and upright as the camera sees it:
+    the face's u runs to the camera's right and v upwards (from straight
+    above, towards the back of the product). On the side of a round body it
+    is wrapped round the curve, centred where the camera looks from. Tagged
+    "product_part", so the strip lights reach it (the light meter hides
+    it). Its height on the face is kept in obj["label_height"], for the
+    colour check (colour_check_patch).
+    """
+    label = spec.get("label")
+    if not label:
+        return None
+    centre, u, v, (face_w, face_h), _ = hero_face(spec)
+    # The side of a round body (not its top) is curved: the label is wrapped
+    # round it, centred where the camera looks from, and its width is measured
+    # along the curve: the arc whose chord is LABEL_WIDTH of the diameter.
+    wrapped = spec["shape"] != "box" and CAMERA_PRESETS[spec["camera"]]["hero_face"] == "front"
+    radius = face_w / 2
+    width = 2 * radius * math.asin(LABEL_WIDTH) if wrapped else LABEL_WIDTH * face_w
+    flat, (x0, x1, y0, y1) = text_mesh(scene, label["text"])
+    scale = min(width / (x1 - x0), LABEL_MAX_HEIGHT * face_h / (y1 - y0))
+    width, height = scale * (x1 - x0), scale * (y1 - y0)
+    thickness = LABEL_THICKNESS * height
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+
+    bm = bmesh.new()
+    bm.from_mesh(flat)
+    bpy.data.meshes.remove(flat)
+    if wrapped:
+        # Cut the letters into thin upright strips first, so no straight edge
+        # spans enough of the curve to cut into the body once wrapped.
+        step = radius * math.radians(LABEL_SLICE_DEGREES) / scale
+        for i in range(1, math.ceil((x1 - x0) / step)):
+            bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:],
+                                   plane_co=(x0 + i * step, 0, 0), plane_no=(1, 0, 0))
+    # Thicken the flat letters outwards (+z).
+    faces = list(bm.faces)
+    grown = bmesh.ops.extrude_face_region(bm, geom=faces, use_keep_orig=True)
+    lifted = [g for g in grown["geom"] if isinstance(g, bmesh.types.BMVert)]
+    bmesh.ops.translate(bm, vec=(0, 0, thickness / scale), verts=lifted)
+
+    # Then onto the face: x along u (the camera's right), y along v (up), z out of it.
+    normal = u.cross(v)
+    azimuth = math.radians(CAMERA_PRESETS[spec["camera"]]["azimuth"])
+    for vert in bm.verts:
+        x, y, z = scale * (vert.co.x - cx), scale * (vert.co.y - cy), scale * vert.co.z - LABEL_INSET * thickness
+        if wrapped:
+            # x runs along the curve: round the axis from the camera's side, to its right.
+            angle, r = azimuth + x / radius, radius + z
+            vert.co = Vector((r * math.sin(angle), -r * math.cos(angle), centre.z + y))
+        else:
+            vert.co = centre + x * u + y * v + z * normal
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new("Label")
+    bm.to_mesh(mesh)
+    bm.free()
+
+    obj = add_object(scene, "Label", mesh)
+    metal = label["metal"]
+    roughness = spec[spec["shape"]]["roughness"]
+    mesh.materials.append(new_metal_material("LabelMaterial", metal) if metal else
+                          new_principled_material("LabelMaterial", label["colour"], roughness))
+    obj["product_part"] = True
+    obj["label_height"] = height
+
+    if wrapped:
+        half = width / 2 / radius
+        ends = [Vector((radius * math.sin(azimuth + a), -radius * math.cos(azimuth + a), centre.z))
+                for a in (-half, half)]
+        middle = Vector((radius * math.sin(azimuth), -radius * math.cos(azimuth), centre.z))
+        normal = Vector((math.sin(azimuth), -math.cos(azimuth), 0))
+    else:
+        ends = [centre - width / 2 * u, centre + width / 2 * u]
+        middle = centre
+    check_label_reads(scene, label["text"], ends, middle, v, normal, width, height)
+    return obj
+
+
+def check_label_reads(scene, text, ends, middle, up, normal, width, height):
+    """Stop the render if the camera would see the label mirrored, upside down or from behind.
+
+    ends: the label's left and right ends, middle its centre, up its upward
+    direction and normal the way its middle faces, all in world space.
+    """
+    camera = scene.camera
+    left, right = (world_to_camera_view(scene, camera, end) for end in ends)
+    bottom, top = (world_to_camera_view(scene, camera, middle + side * height / 2 * up) for side in (-1, 1))
+    facing = normal.dot(camera.matrix_world.translation - middle) > 0
+    if not (left.x < right.x and bottom.y < top.y and facing):
+        raise RuntimeError(f'label "{text}" would not read correctly from the camera: left-right '
+                           f"{left.x:.2f} -> {right.x:.2f}, bottom-top {bottom.y:.2f} -> {top.y:.2f}, "
+                           f"facing the camera: {facing}")
+    log(f'label: "{text}", {width * 100:.1f} x {height * 100:.1f} cm, reads left to right and upright '
+        f"from the camera")
+
+
 def build_scene(spec):
     """Build the whole set from the spec. Returns the scene, ready to render."""
     scene = clear_scene()
     objects = build_product(scene, spec)
     _, target, radius = build_camera(scene, objects, spec["shape"], spec["camera"], spec["resolution"])
+    # After the camera, so a label never changes the framing.
+    build_label(scene, spec)
     build_backdrop(scene, spec["background_colour"], radius, CAMERA_PRESETS[spec["camera"]]["azimuth"])
     build_world(scene, spec["background_colour"])
     build_lights(scene, target, radius, spec["lighting"], CAMERA_PRESETS[spec["camera"]])
@@ -611,20 +743,36 @@ def hero_face(spec):
     return Vector(hero.centre), Vector((1, 0, 0)), v, hero.sides, fields[hero.colour]
 
 
-def hero_patch(scene, spec):
+def hero_patch(scene, spec, below=None):
     """Where the centre of the product's main lit face lands in the image.
 
     Returns (min_x, max_x, min_y, max_y) in 0-1 image coordinates, origin at
     the bottom-left. The patch is a square on the face, PATCH_FRACTION of the
-    face's shorter side.
+    face's shorter side. With `below` (the height of a label centred on the
+    face), it is moved off the label: half way between the label's lower edge
+    and the face's, and made smaller if it wouldn't fit there.
     """
     centre, u, v, face_sides, _ = hero_face(spec)
 
     half = PATCH_FRACTION * min(face_sides) / 2
+    if below:
+        room = (face_sides[1] - below) / 2  # the face below the label
+        centre = centre - (below + room) / 2 * v
+        half = min(half, 0.3 * room)
     points = [world_to_camera_view(scene, scene.camera, centre + su * half * u + sv * half * v)
               for su in (-1, 1) for sv in (-1, 1)]
     return (min(p.x for p in points), max(p.x for p in points),
             min(p.y for p in points), max(p.y for p in points))
+
+
+def colour_check_patch(scene, spec):
+    """The colour check's patch: the hero patch, or below the label if there is one.
+
+    The light meter keeps the hero patch, and hides the label while it
+    meters, so a label changes neither the exposure nor the white balance.
+    """
+    label = bpy.data.objects.get("Label")
+    return hero_patch(scene, spec, below=label["label_height"] if label else None)
 
 
 def white_card_material():
@@ -655,8 +803,13 @@ def meter_exposure(scene, spec):
     card also sets the white balance.
     """
     render = scene.render
-    parts = product_parts()
+    # A label is hidden while metering, so the exposure is exactly the one
+    # without it: a hair raised, its letter edges would shade the card.
+    label = bpy.data.objects.get("Label")
+    parts = [obj for obj in product_parts() if obj is not label]
     real_materials = [obj.data.materials[0] for obj in parts]
+    if label:
+        label.hide_render = True
     saved = {name: getattr(render, name) for name in (
         "use_border", "use_crop_to_border", "border_min_x", "border_max_x",
         "border_min_y", "border_max_y", "filepath")}
@@ -687,6 +840,8 @@ def meter_exposure(scene, spec):
         set_png_output(scene, saved["filepath"])
         for obj, material in zip(parts, real_materials):
             obj.data.materials[0] = material
+        if label:
+            label.hide_render = False
 
     card = pixels.mean(axis=0)
     brightness = 0.2126 * card[0] + 0.7152 * card[1] + 0.0722 * card[2]
@@ -758,7 +913,7 @@ def main():
     log(f"render time: {seconds:.1f} s")
     log(f"saved: {output_path}")
 
-    measured, _ = measure_patch(output_path, hero_patch(scene, spec))
+    measured, _ = measure_patch(output_path, colour_check_patch(scene, spec))
     target = hero_face(spec)[4].upper()
     delta_e = delta_e76(target, measured)
     log(f"colour check: spec {target}, measured {measured}, "

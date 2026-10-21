@@ -66,7 +66,8 @@ def is_valid(raw):
 class SchemaMatchesValidator(unittest.TestCase):
     def test_schema_covers_every_field(self):
         full = spec.json_schema()
-        self.assertEqual(list(full["properties"]), list(spec.DEFAULTS))
+        # Every field but the label (v2 step 4), which code alone sets.
+        self.assertEqual(list(full["properties"]), [k for k in spec.DEFAULTS if k != "label"])
         for shape in spec.SHAPES:
             # Every field but the metal of a cap or lid, which code alone sets.
             self.assertEqual(list(full["properties"][shape]["properties"]),
@@ -76,7 +77,7 @@ class SchemaMatchesValidator(unittest.TestCase):
                              [k for k in spec.DEFAULTS[shape] if k not in (spec.CAP_FIELDS.get(shape),
                                                                            spec.METAL_FIELDS.get(shape))])
         # Only the spec's own shape is given, so no shape's object is required.
-        self.assertEqual(full["required"], [k for k in spec.DEFAULTS if k not in spec.SHAPES])
+        self.assertEqual(full["required"], [k for k in spec.DEFAULTS if k not in spec.SHAPES and k != "label"])
         self.assertFalse(full["additionalProperties"])
 
     def test_defaults_are_valid(self):
@@ -189,6 +190,45 @@ class SchemaMatchesValidator(unittest.TestCase):
         for field in set(spec.METAL_FIELDS.values()):
             self.assertNotIn(f'"{field}"', text)
         self.assertNotIn("metal", text.lower())
+
+    def test_the_model_never_sees_the_label(self):
+        # v2 step 4: code sets it from the sentence's quoted text; no schema the model reads has it.
+        for schema in (llm_backend.output_schema(), spec.json_schema()):
+            self.assertNotIn('"label"', json.dumps(schema))
+
+    def test_label_field(self):
+        box = {"box": {"colour": "#111111"}}
+        self.assertTrue(is_valid(box))
+        self.assertIsNone(spec.validate_spec(box)["label"])
+        for good in ({"text": "NOIR", "colour": "#FFFFFF", "metal": None},
+                     {"text": "maison Lumière", "colour": "#1A1A1A", "metal": None},
+                     {"text": "x" * spec.MAX_LABEL_CHARS, "colour": "#FFE39D", "metal": "gold"}):
+            self.assertTrue(is_valid(dict(box, label=good)), good)
+        for bad in ({"text": "", "colour": "#FFFFFF", "metal": None},
+                    {"text": "x" * (spec.MAX_LABEL_CHARS + 1), "colour": "#FFFFFF", "metal": None},
+                    {"text": "TWO\nLINES", "colour": "#FFFFFF", "metal": None},
+                    {"text": " NOIR", "colour": "#FFFFFF", "metal": None},
+                    {"text": "NOIR", "colour": "white", "metal": None},
+                    {"text": "NOIR", "colour": "#FFFFFF", "metal": "platinum"},
+                    {"text": "NOIR", "colour": "#FFFFFF", "metal": None, "font": "serif"},
+                    {"text": "NOIR"}, "NOIR", ["NOIR"]):
+            self.assertFalse(is_valid(dict(box, label=bad)), bad)
+        # On every shape: flat on a box, wrapped round a round one.
+        for shape in spec.SHAPES:
+            label = {"text": "NOIR", "colour": "#FFFFFF", "metal": None}
+            self.assertTrue(is_valid({"shape": shape, "label": label}), shape)
+
+    def test_default_label_colour(self):
+        self.assertEqual(spec.default_label_colour("#111111"), spec.LABEL_ON_DARK)   # black body: white text
+        self.assertEqual(spec.default_label_colour("#FFFFFF"), spec.LABEL_ON_LIGHT)  # white body: black text
+        self.assertEqual(spec.default_label_colour("#9CAF88"), spec.LABEL_ON_LIGHT)  # sage
+        self.assertEqual(spec.default_label_colour("#000080"), spec.LABEL_ON_DARK)   # navy
+
+    def test_a_metal_label_brings_the_strip_lights(self):
+        matte = spec.validate_spec({"box": {"roughness": 0.8}})
+        self.assertFalse(spec.has_shine(matte))
+        self.assertFalse(spec.has_shine(dict(matte, label={"text": "GLOW", "colour": "#1A1A1A", "metal": None})))
+        self.assertTrue(spec.has_shine(dict(matte, label={"text": "GLOW", "colour": "#FFE39D", "metal": "gold"})))
 
     def test_strip_lights_only_for_glossy_or_metal(self):
         def full(shape, **fields):

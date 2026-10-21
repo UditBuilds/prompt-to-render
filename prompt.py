@@ -33,9 +33,10 @@ from datetime import datetime
 
 import gpu
 from grounding import lookup
+from labels import read_label
 from llm_backend import DEFAULT_MODEL, BackendUnavailable, BrokenFirstReply, OllamaBackend
 from run import PROJECT_DIR, find_blender, print_blender_not_found, print_cpu_warning, print_render_failed, render
-from spec import METAL_FIELDS
+from spec import LABEL_ON_LIGHT, METAL_FIELDS
 from spec_writer import MAX_ATTEMPTS, write_spec
 
 RUNS_DIR = os.path.join(PROJECT_DIR, "runs")
@@ -230,6 +231,13 @@ def show_spec(sentence, result):
     for change in result.proportion_changes:
         print(f"[proportions] clamped by code, {change['rule']}: "
               f"{change['field']} {change['from']:g} -> {change['to']:g}")
+    if result.label_change:
+        change = result.label_change
+        surface = "black on a light" if change["colour"] == LABEL_ON_LIGHT else "white on a dark"
+        how = {"metal": f"in {change['metal']} (the metal named after it)",
+               "named": f"in {change['colour']} (the colour named after it)",
+               "default": f"in {change['colour']} ({surface} surface)"}[change["colour_from"]]
+        print(f"[label] the quoted text is drawn by code: \"{change['text']}\" {how}")
     shape = result.spec["shape"]
     product = result.spec[shape]
     print()
@@ -245,9 +253,18 @@ def show_spec(sentence, result):
         metal = product.get(METAL_FIELDS[shape])
         cap = cap.format(**product) + (f" ({metal})" if metal else "")
         print(f"  finish     colour {product['colour']}{cap}, roughness {product['roughness']:g}")
+    label = result.spec["label"]
+    if label:
+        print(f"  label      \"{label['text']}\" in {label['metal'] or label['colour']}")
     print(f"  backdrop   {result.spec['background_colour']}")
     print(f"  camera     {result.spec['camera']}")
     print(f"  about      {result.spec['description']}")
+    not_drawn = [item for item in result.unsupported if item.startswith("label text")]
+    if not_drawn:
+        print()
+        print("WARNING: quoted text that is not drawn:")
+        for item in not_drawn:
+            print(f"  - {item}")
 
     if result.shape_added:
         print()
@@ -290,7 +307,11 @@ def show_grounding(sentence, enabled, verbose):
     if not enabled:
         print("[grounding] off (--no-grounding): the model decides everything on its own")
         return
-    found = lookup(sentence)
+    # The model and the tables get the sentence without its quoted text (labels.py).
+    sent = read_label(sentence).model_sentence
+    if sent != sentence:
+        print(f"[label] the model and the tables get the sentence without the quoted text: \"{sent}\"")
+    found = lookup(sent)
     if found:
         print(f"[grounding] table rows for this sentence: {found.summary()}")
         if verbose:
@@ -325,6 +346,8 @@ def log_llm(log, result):
         metal_change=result.metal_change,
         shape_fixed=result.shape_fixed,
         proportion_changes=result.proportion_changes,
+        label_change=result.label_change,
+        model_sentence=result.model_sentence,
         llm_calls=[a.to_log() for a in result.attempts],
     )
 
