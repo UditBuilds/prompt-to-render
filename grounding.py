@@ -14,7 +14,7 @@ The tables live in data/:
     style_words.json    style word -> how it shifts colour and finish
     finishes.json       finish word -> roughness range (code only, never shown to the model)
 
-Four values are set by code, not the model, after the model has answered:
+Five values are set by code, not the model, after the model has answered:
 - Style words: the model picks the plain colour and the finish, then
   apply_style() shifts the box colour by the table's numbers. qwen3:8b
   couldn't do that hex arithmetic reliably itself (tested on the dev
@@ -28,7 +28,11 @@ Four values are set by code, not the model, after the model has answered:
   body and silver-grey on a dark one, unless the sentence gives it a colour;
   apply_metal() draws it in metal when the sentence names a metal for it
   ("with a gold cap"). The model never decides the metal.
-The last three add nothing to the request.
+- An exact hex in the sentence: exact_hex() sets it on what it describes.
+  Since v2 step 3 the model writes colours as hue, saturation and
+  lightness, which can't hold every hex exactly.
+The last four add nothing to the request. The table's colours are shown
+to the model in HSL, the form it writes (v2 step 3).
 
 A sentence that names a box (box, carton, case, package) gets the box size
 of a product, in exactly the words of v1.3. Any other sentence gets the
@@ -49,7 +53,7 @@ import json
 import os
 import re
 
-from spec import CAP_FIELDS, METAL_FIELDS, METALS, default_cap_colour
+from spec import CAP_FIELDS, METAL_FIELDS, METALS, default_cap_colour, hex_to_hsl
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(PROJECT_DIR, "data")
@@ -114,7 +118,7 @@ class Grounding:
             uses = "the box" if self.boxed else "the product, its cap or lid"
             lines.append("Colour names: what each name means. Use it for whatever the sentence uses that "
                          f"name for: {uses}, the backdrop, or a detail the renderer can't draw.")
-            lines += [f'- "{r["matched"]}" = {r["hex"]}' for r in colours]
+            lines += [f'- "{r["matched"]}" = {describe_hsl(r["hex"])}' for r in colours]
         round_rows = [r for r in products if not self.boxed and _round_shape(r)]
         box_rows = [r for r in products if r not in round_rows]
         if box_rows:
@@ -139,6 +143,12 @@ class Grounding:
                       f'Finish: {r["finish"]}.' for r in styles]
         lines.append("Use these values. Anything not listed here is up to you.")
         return "\n".join(lines)
+
+
+def describe_hsl(hex_colour):
+    """A table colour as the model reads it, e.g. "hue 167, saturation 100%, lightness 29%"."""
+    hue, saturation, lightness = hex_to_hsl(hex_colour)
+    return f"hue {hue}, saturation {saturation}%, lightness {lightness}%"
 
 
 def _span(pair):
@@ -428,3 +438,47 @@ def default_cap(sentence, spec, given=True):
     after = default_cap_colour(product["colour"])
     product[field] = after
     return {"field": field, "from": before, "to": after} if before != after else None
+
+
+# A hex code in a sentence: "#1B4D3E" or "#FFF".
+HEX_CODE = re.compile(r"#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?![0-9a-zA-Z])")
+
+
+def exact_hex(sentence, spec):
+    """Set each hex code the sentence gives on what it describes, exactly as given.
+
+    The model writes colours as hue, saturation and lightness (v2 step 3),
+    which can't hold every hex: #1B4D3E comes back as #1B4B3D. A hex goes
+    on the backdrop or the cap or lid when it is one of their colour words
+    (backdrop_colour_words, cap_colour_words), otherwise on the product.
+    Only one hex per part: with two ("in #FFFFFF or #000000") the model's
+    choice stands. Returns [{"field", "from", "to"}] for each colour it changed.
+    """
+    shape = spec.get("shape", "box")
+    backdrop, cap = set(backdrop_colour_words(sentence)), set(cap_colour_words(sentence))
+    parts = {}
+    for code in HEX_CODE.findall(sentence):
+        if code.lower() in backdrop:
+            part = "background_colour"
+        elif code.lower() in cap:
+            part = CAP_FIELDS.get(shape)  # a box has no cap: the model's colour stands
+        else:
+            part = "colour"
+        if part:
+            parts.setdefault(part, set()).add(_full_hex(code))
+    changes = []
+    for part, codes in parts.items():
+        if len(codes) != 1:
+            continue
+        holder, name = (spec, part) if part == "background_colour" else (spec[shape], f"{shape}.{part}")
+        before, after = (holder.get(part) or "").upper() or None, codes.pop()
+        if before != after:
+            holder[part] = after
+            changes.append({"field": name, "from": before, "to": after})
+    return changes
+
+
+def _full_hex(code):
+    """"#1b4d3e" or "#fff" -> "#1B4D3E" or "#FFFFFF"."""
+    h = code.lstrip("#").upper()
+    return "#" + ("".join(c * 2 for c in h) if len(h) == 3 else h)

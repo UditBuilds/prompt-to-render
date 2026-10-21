@@ -12,6 +12,7 @@ turns FIELDS into the JSON schema the LLM is held to. Both come from the same
 table, so they can't drift apart.
 """
 
+import colorsys
 import copy
 import difflib
 import json
@@ -154,6 +155,11 @@ class Integer(Number):
 
 
 class Colour(Field):
+    """A colour. A spec holds it as "#RRGGBB"; the model writes it as hue, saturation
+    and lightness (hsl_schema), and code turns that into hex (hsl_colours_to_hex)."""
+
+    HEX_WORDS = ' as a hex code, "#RRGGBB"'
+
     def check(self, value, name, problems):
         if not (isinstance(value, str) and HEX_COLOUR.match(value)):
             # The format, never a real colour: the LLM reads this message on a retry.
@@ -163,6 +169,19 @@ class Colour(Field):
 
     def schema(self):
         return {"type": "string", "pattern": HEX_COLOUR.pattern, "description": self.doc}
+
+    def hsl_schema(self):
+        """The colour as the model writes it (v2 step 3). Like the hex's "#RRGGBB",
+        it holds no real colour: only the scales, as minimum and maximum."""
+        assert self.HEX_WORDS in self.doc, self.doc
+        return {
+            "type": "object",
+            "properties": {key: {"type": "number", "minimum": low, "maximum": high, "description": doc}
+                           for key, (low, high, doc) in HSL_SCALES.items()},
+            "required": list(HSL_SCALES),
+            "additionalProperties": False,
+            "description": self.doc.replace(self.HEX_WORDS, " as hue, saturation and lightness"),
+        }
 
 
 class CapColour(Colour):
@@ -304,8 +323,11 @@ CAP_FIELDS = {"cylinder": "cap_colour", "bottle": "cap_colour", "jar": "lid_colo
 METAL_FIELDS = {"cylinder": "cap_metal", "bottle": "cap_metal", "jar": "lid_metal"}
 
 
-def json_schema(fields=FIELDS, only=None, optional=SHAPES):
+def json_schema(fields=FIELDS, only=None, optional=SHAPES, colours="hex"):
     """The JSON schema for a spec, built from FIELDS.
+
+    With colours="hsl", every colour is an object of hue, saturation and
+    lightness (Colour.hsl_schema): the form the model writes (v2 step 3).
 
     `only` limits it to some top-level fields. Every field in the schema is
     required, so whoever fills it in has to choose each value, except the
@@ -321,7 +343,12 @@ def json_schema(fields=FIELDS, only=None, optional=SHAPES):
         if getattr(field, "code_only", False):
             continue
         if only is None or key in only:
-            properties[key] = json_schema(field, optional=()) if isinstance(field, dict) else field.schema()
+            if isinstance(field, dict):
+                properties[key] = json_schema(field, optional=(), colours=colours)
+            elif colours == "hsl" and isinstance(field, Colour):
+                properties[key] = field.hsl_schema()
+            else:
+                properties[key] = field.schema()
     return {
         "type": "object",
         "properties": properties,
@@ -535,6 +562,64 @@ def has_shine(spec):
     fields = product(spec)
     metal = METAL_FIELDS.get(spec["shape"])
     return fields["roughness"] <= GLOSSY_ROUGHNESS or bool(metal and fields[metal])
+
+
+# How the model writes a colour (v2 step 3): hue in degrees, saturation and
+# lightness in %. Each scale's (lowest, highest, description).
+HSL_SCALES = {
+    "hue": (0, 360, "Hue, in degrees round the colour wheel."),
+    "saturation": (0, 100, "Saturation, in %."),
+    "lightness": (0, 100, "Lightness, in %."),
+}
+
+
+def hsl_to_hex(hue, saturation, lightness):
+    """Hue in degrees, saturation and lightness in % -> "#RRGGBB"."""
+    r, g, b = colorsys.hls_to_rgb(hue % 360 / 360, lightness / 100, saturation / 100)
+    return "#" + "".join(f"{round(c * 255):02X}" for c in (r, g, b))
+
+
+def hex_to_hsl(hex_colour):
+    """"#RRGGBB" -> (hue in degrees, saturation in %, lightness in %), as whole numbers:
+    a colour as the model reads it in the reference data."""
+    h = hex_colour.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    hue, light, saturation = colorsys.rgb_to_hls(*(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)))
+    return round(hue * 360) % 360, round(saturation * 100), round(light * 100)
+
+
+def hsl_colours_to_hex(raw):
+    """Turn the model's colours in a raw spec ({"hue", "saturation", "lightness"}) into "#RRGGBB", in place.
+
+    Returns (given, problems). given maps each colour converted ("box.colour")
+    to the model's [hue, saturation, lightness], for the log. A colour that
+    isn't a valid HSL object is removed from `raw` and reported in problems,
+    so validate_spec doesn't report it a second time.
+    """
+    given, problems = {}, []
+    places = [(raw, "background_colour", "background_colour")]
+    for shape in SHAPES:
+        if isinstance(raw.get(shape), dict):
+            places += [(raw[shape], key, f"{shape}.{key}") for key in ("colour", CAP_FIELDS.get(shape)) if key]
+    for holder, key, name in places:
+        value = holder.get(key)
+        if value is None:
+            continue
+        if not (isinstance(value, dict) and set(value) == set(HSL_SCALES)):
+            problems.append(f'{name}: must be an object {{"hue": ..., "saturation": ..., "lightness": ...}}, '
+                            f'got {_show(value)}')
+            del holder[key]
+            continue
+        found = []
+        ok = all(_check_number(value[k], f"{name}.{k}", low, high, found) for k, (low, high, _) in HSL_SCALES.items())
+        problems += found
+        if not ok:
+            del holder[key]
+            continue
+        given[name] = [value[k] for k in HSL_SCALES]
+        holder[key] = hsl_to_hex(*given[name])
+    return given, problems
 
 
 def lightness(hex_colour):

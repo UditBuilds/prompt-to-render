@@ -442,6 +442,20 @@ class Cases(unittest.TestCase):
             self.assertIn(name, load_tables()["colours"], case["id"])
             self.assertIn(("colours", name), [(r["table"], r["name"]) for r in lookup(case["sentence"]).rows])
 
+    def test_table_colours_pass_their_checks_as_the_model_reads_them(self):
+        # v2 step 3: the model reads a table colour as whole-number HSL and writes it
+        # back; code turns that into hex. Copied exactly, it must still pass the check.
+        from spec import hex_to_hsl, hsl_to_hex
+        table = load_tables()["colours"]
+        names = {c["name"] for case in run_evals.load_cases() for c in case["checks"]
+                 if c["type"] == "named_colour" and c["name"] in table}
+        self.assertGreaterEqual(names, {box_colour_name(c) for c in run_evals.load_cases()
+                                        if c.get("colour_group") == "in_table"})
+        for name in sorted(names):
+            with self.subTest(colour=name):
+                back = hsl_to_hex(*hex_to_hsl(table[name]["hex"]))
+                self.assertTrue(passes({"type": "named_colour", "name": name}, FakeResult({"colour": back})), back)
+
     def test_out_of_table_colours_stay_out_of_the_table(self):
         # They measure the model on its own. Never add these names to data/colours.json.
         cases = [c for c in run_evals.load_cases() if c.get("colour_group") == "out_of_table"]

@@ -4,6 +4,7 @@ The LLM + validation loop, with a scripted fake backend (no Ollama needed).
 Run all tests with:  python -m unittest discover tests
 """
 
+import colorsys
 import json
 import os
 import sys
@@ -14,15 +15,22 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from llm_backend import BrokenFirstReply, LLMBackend, Reply  # noqa: E402
 from spec_writer import parse_reply, write_spec  # noqa: E402
 
+def hsl(hex_colour):
+    """A colour as the model writes it since v2 step 3: hue, saturation and lightness.
+    Unrounded, so it comes back as exactly the same hex."""
+    hue, lightness, saturation = colorsys.rgb_to_hls(*(int(hex_colour[i:i + 2], 16) / 255 for i in (1, 3, 5)))
+    return {"hue": hue * 360, "saturation": saturation * 100, "lightness": lightness * 100}
+
+
 GOOD = {
     "is_box": True,
     "shape": "box",
     "unsupported": ["gold logo"],
     "spec": {
         "description": "A matte red carton.",
-        "box": {"width_cm": 2.5, "height_cm": 8.5, "depth_cm": 2.5, "colour": "#9E1B32",
+        "box": {"width_cm": 2.5, "height_cm": 8.5, "depth_cm": 2.5, "colour": hsl("#9E1B32"),
                 "roughness": 0.8, "bevel_cm": 0.1},
-        "background_colour": "#F2E6E6",
+        "background_colour": hsl("#F2E6E6"),
         "camera": "three_quarter",
     },
 }
@@ -57,8 +65,8 @@ class Grounded(unittest.TestCase):
         result = write_spec("a luxury emerald green lipstick box", backend)
         names = [r["name"] for r in result.grounding.rows]
         self.assertEqual(names, ["luxury", "emerald", "lipstick"])
-        for call in backend.calls:  # the retry gets the same reference data
-            self.assertIn('"emerald green" = #009473', call["reference"])
+        for call in backend.calls:  # the retry gets the same reference data, in HSL (v2 step 3)
+            self.assertIn('"emerald green" = hue 167, saturation 100%, lightness 29%', call["reference"])
 
     def test_a_table_can_be_left_out(self):
         from grounding import load_tables
@@ -77,8 +85,8 @@ class Grounded(unittest.TestCase):
     def test_break_first_reply_keeps_the_reference(self):
         inner = FakeBackend([GOOD, GOOD])
         write_spec("an emerald serum box", BrokenFirstReply(inner))
-        self.assertIn("#009473", inner.calls[0]["reference"])
-        self.assertIn("#009473", inner.calls[1]["reference"])
+        self.assertIn("hue 167, saturation 100%, lightness 29%", inner.calls[0]["reference"])
+        self.assertIn("hue 167, saturation 100%, lightness 29%", inner.calls[1]["reference"])
 
     def test_code_sets_gloss_and_backdrop_after_the_model(self):
         glossy = json.loads(json.dumps(GOOD))
@@ -204,6 +212,9 @@ class ParseReply(unittest.TestCase):
 def round_reply(shape, real_shape=None, unsupported=(), **fields):
     """A valid reply for a round shape."""
     product = dict({"diameter_cm": 3, "height_cm": 10, "colour": "#F4C2C2", "roughness": 0.4}, **fields)
+    for key in ("colour", "cap_colour", "lid_colour"):
+        if isinstance(product.get(key), str):
+            product[key] = hsl(product[key])  # the model writes HSL (v2 step 3)
     return {"is_box": False, "shape": real_shape or shape, "unsupported": list(unsupported),
             "spec": {"description": "A round product.", "shape": shape, shape: product, "camera": "three_quarter"}}
 
@@ -319,6 +330,38 @@ class Shapes(unittest.TestCase):
                             FakeBackend([round_reply("bottle", colour="#111111", cap_colour="#D4AF37")]),
                             grounding=False)
         self.assertIsNone(result.spec["bottle"]["cap_metal"])
+
+    def test_the_model_writes_colours_as_hsl(self):
+        # v2 step 3: hue, saturation and lightness in the reply, hex in the spec.
+        reply = round_reply("jar", diameter_cm=7, height_cm=5,
+                            colour={"hue": 167, "saturation": 100, "lightness": 29},
+                            lid_colour={"hue": 0, "saturation": 0, "lightness": 10})
+        parsed = parse_reply(json.dumps(reply))
+        self.assertEqual((parsed["spec"]["jar"]["colour"], parsed["spec"]["jar"]["lid_colour"]), ("#009474", "#1A1A1A"))
+        self.assertEqual(parsed["model_colours"], {"jar.colour": [167, 100, 29], "jar.lid_colour": [0, 0, 10]})
+        # A hex, or HSL out of range, is an error the model sees on a retry.
+        reply["spec"]["jar"]["colour"] = "#009473"
+        reply["spec"]["jar"]["lid_colour"] = {"hue": 0, "saturation": 120, "lightness": 10}
+        with self.assertRaises(Exception) as ctx:
+            parse_reply(json.dumps(reply))
+        self.assertEqual(ctx.exception.problems, [
+            'jar.colour: must be an object {"hue": ..., "saturation": ..., "lightness": ...}, got "#009473"',
+            "jar.lid_colour.saturation: must be between 0 and 100, got 120"])
+
+    def test_code_copies_an_exact_hex(self):
+        # HSL can't hold every hex (#1B4D3E comes back as #1B4B3D), so code sets the sentence's own.
+        reply = json.loads(json.dumps(GOOD))
+        reply["spec"]["box"]["colour"] = {"hue": 162, "saturation": 48, "lightness": 20}
+        result = write_spec("a perfume box in #1B4D3E", FakeBackend([reply]))
+        self.assertEqual(result.spec["box"]["colour"], "#1B4D3E")
+        self.assertEqual(result.hex_changes, [{"field": "box.colour", "from": "#1B4B3D", "to": "#1B4D3E"}])
+        self.assertEqual(result.model_colours["box.colour"], [162, 48, 20])
+        # No hex in the sentence: the model's colour stands.
+        result = write_spec("a red lipstick box", FakeBackend([GOOD]))
+        self.assertEqual((result.spec["box"]["colour"], result.hex_changes), ("#9E1B32", []))
+        # Without grounding, code sets nothing.
+        result = write_spec("a perfume box in #1B4D3E", FakeBackend([reply]), grounding=False)
+        self.assertEqual(result.spec["box"]["colour"], "#1B4B3D")
 
     def test_code_clamps_impossible_proportions(self):
         # v2 step 3: a jar taller than it is wide is clamped, and the clamp is recorded.

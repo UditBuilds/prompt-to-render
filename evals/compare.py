@@ -9,7 +9,10 @@ a colour shifted by code for a style word, a box size equal to a product's
 typical size, a roughness clamped by code for "glossy", or a backdrop made
 neutral by code, or a cap or lid colour set by code, or a metal cap or lid
 set by code, or a tube or can redrawn as a cylinder by code, or a size clamped
-by code (v2 step 3). Those are passes the tables and code make easy, so they
+by code, or an exact hex copied by code (v2 step 3). Since v2 step 3 the
+model writes colours as hue, saturation and lightness and reads the colour
+table that way, so a colour counts as copied when the model's HSL equals the
+row's as shown to it. Those are passes the tables and code make easy, so they
 are counted, not hidden. A pass that holds only because code clamped a size
 is not counted as the model's: those rows give the model's passes, then the
 clamp-only passes apart ("+ 2 clamp-only"). A backdrop is counted whenever the code changed
@@ -29,6 +32,7 @@ EVALS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(EVALS_DIR))
 
 from grounding import load_tables  # noqa: E402
+from spec import hex_to_hsl  # noqa: E402
 from run_evals import (ADDED_GROUPS, CHECK_SCORE_NAMES, COLOUR_GROUPS, SHAPE_SCORE_NAMES,  # noqa: E402
                        clamp_only, load_cases, percent, product_of, shape_of, summarise_checks,
                        summarise_shapes)
@@ -51,9 +55,10 @@ def max_prompt_tokens(report):
 
 def how_values_came(case, tables):
     """Counts, over a case's runs, of values taken straight from the tables or set by code."""
-    copied = shifted = typical = glossy = backdrop = cap = metal = redrawn = clamped = 0
+    copied = shifted = typical = glossy = backdrop = cap = metal = redrawn = clamped = hexes = 0
     for run in case["runs"]:
         clamped += bool(run.get("proportion_changes"))
+        hexes += bool(run.get("hex_changes"))
         glossy += bool(run.get("finish_change"))
         backdrop += bool(run.get("backdrop_change"))
         cap += bool(run.get("cap_change"))
@@ -65,7 +70,12 @@ def how_values_came(case, tables):
         shape, product = shape_of(run["spec"]), product_of(run["spec"])
         colour = product["colour"].upper()
         before_shift = run["style_changes"][0]["from"] if run.get("style_changes") else colour
-        if any(r["table"] == "colours" and tables["colours"][r["name"]]["hex"] == before_shift for r in rows):
+        given = (run.get("model_colours") or {}).get(f"{shape}.colour")
+        table_hexes = [tables["colours"][r["name"]]["hex"] for r in rows if r["table"] == "colours"]
+        if given is not None:  # HSL (v2 step 3): as the model read the row
+            if any(list(hex_to_hsl(h)) == [round(v) for v in given] for h in table_hexes):
+                copied += 1
+        elif before_shift in table_hexes:
             copied += 1
         if run.get("style_changes"):
             shifted += 1
@@ -95,6 +105,8 @@ def how_values_came(case, tables):
         parts.append(f"metal by code {metal}")
     if redrawn:
         parts.append(f"shape redrawn by code {redrawn}")
+    if hexes:
+        parts.append(f"exact hex by code {hexes}")
     if clamped:
         only = sum(clamp_only(r) for r in case["runs"])
         parts.append(f"size clamped by code {clamped}" + (f" ({only} pass only because of it)" if only else ""))
