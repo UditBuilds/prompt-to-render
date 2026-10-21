@@ -49,9 +49,13 @@ from spec import METAL_ROUGHNESS, METALS, SpecError, has_shine, hex_to_linear_rg
 # hero_face: the face the key light hits; used by the light meter and the
 #            colour check. "front" on a round shape: the front of its body.
 # light_overrides: per-camera changes to the lighting preset (see below).
+# shape_overrides: per-shape changes to the camera itself. A jar seen from
+# three-quarter is looked at a little lower (v2 step 3), so the top of its lid
+# takes less of the picture; every other shape and camera is as before.
 CAMERA_PRESETS = {
     "front":         {"azimuth": 0,  "elevation": 8,  "lens_mm": 85, "hero_face": "front"},
-    "three_quarter": {"azimuth": 35, "elevation": 22, "lens_mm": 85, "hero_face": "front"},
+    "three_quarter": {"azimuth": 35, "elevation": 22, "lens_mm": 85, "hero_face": "front",
+                      "shape_overrides": {"jar": {"elevation": 15}}},
     "top_down":      {
         "azimuth": 0, "elevation": 90, "lens_mm": 85, "hero_face": "top",
         # Seen from straight above, a rim light only adds a second shadow that
@@ -484,9 +488,15 @@ def build_strip_lights(scene, target, radius, camera_preset):
         obj.light_linking.receiver_collection = receivers
 
 
+def camera_preset(preset_name, shape):
+    """The camera preset, with its changes for this shape (shape_overrides) applied."""
+    preset = CAMERA_PRESETS[preset_name]
+    return dict(preset, **preset.get("shape_overrides", {}).get(shape, {}))
+
+
 def build_camera(scene, objects, shape, preset_name, resolution):
     """Place the camera for a preset and auto-frame it tightly on the product."""
-    preset = CAMERA_PRESETS[preset_name]
+    preset = camera_preset(preset_name, shape)
     scene.render.resolution_x, scene.render.resolution_y = resolution
     scene.render.resolution_percentage = 100
 

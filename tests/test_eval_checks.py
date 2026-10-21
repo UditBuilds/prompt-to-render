@@ -262,7 +262,7 @@ class StepTwoChecks(unittest.TestCase):
         jar = shaped("jar", diameter_cm=6.5, height_cm=4.5, lid_colour="#1A1A1A")
         lid = next(p for p in run_evals.shapes.parts("jar", jar.spec["jar"]) if p.name == "Lid")
         heights = [z for _, z in lid.profile]
-        share = (max(heights) - min(heights)) / 0.045
+        share = round((max(heights) - min(heights)) / 0.045, 6)  # as the check measures it (v2 step 3)
         self.assertEqual(passes(check, jar), 0.25 <= share <= 0.35)
         self.assertIn(f"lid {share:.3f}", run_evals.CHECKS["lid_share"](check, jar, {})[1])
         self.assertFalse(passes(check, shaped("bottle", diameter_cm=3, height_cm=10, cap_colour="#1A1A1A")))

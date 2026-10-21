@@ -4,12 +4,14 @@ The round shapes' profiles (shapes.py), checked without Blender.
 Run all tests with:  python -m unittest discover tests
 """
 
+import ast
 import math
 import os
 import sys
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
 
 import shapes  # noqa: E402
 from spec import validate_spec  # noqa: E402
@@ -78,12 +80,12 @@ class Profiles(unittest.TestCase):
             heights = [z for _, z in part.profile]
             return max(heights) - min(heights)
 
-        # A jar's lid is about a third of its height (the eval wants 25-35%).
+        # A jar's lid is a quarter of its height (v2 step 3; the evals want 20-30%, and step 2's 25-35%).
         for diameter, height in SIZES["jar"][:3]:
             with self.subTest(jar=(diameter, height)):
                 lid = shapes.parts("jar", fields("jar", diameter, height))[1]
                 self.assertAlmostEqual(span(lid) / (height / 100), shapes.JAR_LID_HEIGHT)
-                self.assertTrue(0.25 <= shapes.JAR_LID_HEIGHT <= 0.35)
+                self.assertTrue(0.25 <= shapes.JAR_LID_HEIGHT <= 0.30)
         cap = shapes.parts("cylinder", fields("cylinder", 2, 8))[1]
         self.assertAlmostEqual(span(cap) / 0.08, shapes.CYLINDER_CAP_HEIGHT)
         # The base runs on up inside the cap, out of sight, so there is no gap.
@@ -113,6 +115,23 @@ class Profiles(unittest.TestCase):
                 self.assertAlmostEqual(top.centre[2], height / 100)
                 self.assertEqual(top.colour, "lid_colour" if shape == "jar" else "cap_colour")
                 self.assertTrue(all(side > 0 for side in top.sides))
+
+
+class Cameras(unittest.TestCase):
+    """render_scene.py runs inside Blender (it imports bpy), so its camera presets are read from its source."""
+
+    def test_only_a_jar_seen_from_three_quarter_is_lower(self):
+        with open(os.path.join(ROOT, "render_scene.py"), encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+        node = next(n for n in tree.body if isinstance(n, ast.Assign)
+                    and any(getattr(t, "id", None) == "CAMERA_PRESETS" for t in n.targets))
+        presets = ast.literal_eval(node.value)
+        # v2 step 3: a jar from three-quarter is seen from 15 degrees up, not 22.
+        self.assertEqual({name: preset.get("shape_overrides") for name, preset in presets.items()},
+                         {"front": None, "three_quarter": {"jar": {"elevation": 15}}, "top_down": None})
+        # Every other shape keeps step 2's cameras.
+        self.assertEqual([(p["azimuth"], p["elevation"], p["lens_mm"]) for p in presets.values()],
+                         [(0, 8, 85), (35, 22, 85), (0, 90, 85)])
 
 
 if __name__ == "__main__":

@@ -40,10 +40,12 @@ SHOULDER_CURVE = 1.5
 CYLINDER_CAP_HEIGHT = 0.42
 CYLINDER_CAP_OVERHANG = 1.04
 
-# Jar: the lid is about a third of the height (at most 0.4 of the diameter),
-# and a little wider than the body, so the seam between them shows. (v2 step
-# 1 had 0.36, which looked nearly half: from above, the lid's top shows too.)
-JAR_LID_HEIGHT = 0.30
+# Jar: the lid is a quarter of the height (at most 0.4 of the diameter), and a
+# little wider than the body, so the seam between them shows. (v2 step 1 had
+# 0.36 and step 2 0.30; both read as nearly half the jar from the three-quarter
+# camera, which also sees the lid's top. Since step 3 that camera is also a
+# little lower for a jar: render_scene.CAMERA_PRESETS.)
+JAR_LID_HEIGHT = 0.25
 JAR_LID_OVERHANG = 1.02
 
 
