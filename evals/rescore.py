@@ -35,12 +35,13 @@ def rescore(report, cases):
     for case in report["cases"]:
         current = by_id[case["id"]]
         case["checks"] = current["checks"]
+        case["shape_group"] = current.get("shape_group")
         for run in case["runs"]:
             run["checks"] = run_checks(current, saved_result(run), done)
             run["passed"] = all(o["passed"] for o in run["checks"])
         case["passed_runs"] = sum(r["passed"] for r in case["runs"])
         done[case["id"]] = case
-    report["summary"] = summarise(report["cases"])
+    report["summary"] = summarise(report["cases"], report.get("summary", {}).get("peak_gpu_mib"))
     return report
 
 

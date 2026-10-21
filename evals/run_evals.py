@@ -15,9 +15,11 @@ A run passes when it produced a valid spec within 2 attempts AND every check
 passes.
 
 Reports the pass rate per case and overall, the named-colour score of the
-in-table and out-of-table colour cases separately, how often the retry loop
-fired, and the average LLM time. Results are saved to
-evals/results/<timestamp>_<label>.json, with a Markdown summary next to it.
+in-table and out-of-table colour cases separately, the shape scores (the
+out-of-table products apart), the unsupported lists, the rules code decides,
+how often the retry loop fired, the average LLM time and the peak GPU memory.
+Results are saved to evals/results/<timestamp>_<label>.json, with a Markdown
+summary next to it.
 """
 
 import argparse
@@ -32,6 +34,8 @@ from datetime import datetime
 EVALS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(EVALS_DIR))
 
+import gpu  # noqa: E402
+import shapes  # noqa: E402
 from check_colour import hex_to_lab  # noqa: E402
 from grounding import TABLES, load_tables  # noqa: E402
 from llm_backend import DEFAULT_MODEL, BackendUnavailable, OllamaBackend  # noqa: E402
@@ -115,7 +119,10 @@ def not_a_box(result):
 
 
 # The field holding the cap or lid colour, per shape. Other shapes have none.
-CAP_FIELDS = {"bottle": "cap_colour", "jar": "lid_colour"}
+CAP_FIELDS = {"cylinder": "cap_colour", "bottle": "cap_colour", "jar": "lid_colour"}
+# The field naming the metal a cap or lid is drawn in (v2 step 2). Code sets
+# it from the sentence; a spec without it has no metal part.
+METAL_FIELDS = {"cylinder": "cap_metal", "bottle": "cap_metal", "jar": "lid_metal"}
 
 
 def colour_of(check, result):
@@ -313,6 +320,47 @@ def check_shape_ratio(check, result, done):
                                     f"{fields[check['den']]:g} = {ratio:.2f} (want {describe_range(check)})")
 
 
+def round_parts(result):
+    """(shape, the names of the parts the renderer draws), from shapes.py. A box is one part."""
+    shape = shape_of(result.spec)
+    if shape == "box":
+        return shape, ["Box"]
+    return shape, [part.name for part in shapes.parts(shape, product_of(result.spec))]
+
+
+def check_cap_part(check, result, done):
+    """The product is drawn with a separate cap or lid (e.g. a lipstick: base + cap). Decided by code."""
+    shape, names = round_parts(result)
+    return (any(name in ("Cap", "Lid") for name in names),
+            f"{shape} drawn as {' + '.join(names)} (want a cap or lid part)")
+
+
+def check_lid_share(check, result, done):
+    """The lid's height as a share of the whole jar's, measured on the profile the renderer draws. Decided by code."""
+    shape = shape_of(result.spec)
+    lid = None
+    if shape != "box":
+        lid = next((p for p in shapes.parts(shape, product_of(result.spec)) if p.name == "Lid"), None)
+    if lid is None:
+        return False, f"shape {shape} has no lid (want lid share {describe_range(check)})"
+    heights = [z for _, z in lid.profile]
+    share = (max(heights) - min(heights)) / (product_of(result.spec)["height_cm"] / 100)
+    return in_range(share, check), f"lid {share:.3f} of the jar's height (want {describe_range(check)})"
+
+
+def check_metal(check, result, done):
+    """The metal the cap or lid is drawn in, null for none. Set by code from the sentence, never by the model.
+
+    A spec without the field (v2 step 1 and earlier) has no metal part.
+    """
+    shape = shape_of(result.spec)
+    field = METAL_FIELDS.get(shape)
+    if field is None:
+        return False, f"shape {shape} has no cap or lid (want metal {json.dumps(check['equals'])})"
+    metal = product_of(result.spec).get(field)
+    return metal == check["equals"], f"{shape} {field} {json.dumps(metal)} (want {json.dumps(check['equals'])})"
+
+
 def check_unsupported_empty(check, result, done):
     return not result.unsupported, f"unsupported {json.dumps(result.unsupported)} (want [])"
 
@@ -367,6 +415,9 @@ CHECKS = {
     "shape_size": check_shape_size,
     "shape_ratio": check_shape_ratio,
     "style_shift": check_style_shift,
+    "cap_part": check_cap_part,
+    "lid_share": check_lid_share,
+    "metal": check_metal,
 }
 
 
@@ -435,10 +486,12 @@ def main():
     done = {}
     stopped_early = None
     started = time.perf_counter()
+    memory = gpu.PeakMemory()
     try:
-        for case in cases:
-            results.append(run_case(case, backend, args.runs, done, not args.no_grounding, tables))
-            done[case["id"]] = results[-1]
+        with memory:
+            for case in cases:
+                results.append(run_case(case, backend, args.runs, done, not args.no_grounding, tables))
+                done[case["id"]] = results[-1]
     except (BackendUnavailable, RuntimeError, KeyboardInterrupt) as e:
         # Keep what was collected so far rather than losing it all.
         stopped_early = str(e) or type(e).__name__
@@ -453,7 +506,7 @@ def main():
         print("No case finished, so there are no results to save.")
         return 1
 
-    summary = summarise(results)
+    summary = summarise(results, memory.peak)
     report = {
         "created": datetime.now().isoformat(timespec="seconds"),
         "label": args.label,
@@ -556,6 +609,8 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
             "backdrop_given": result.backdrop_given,
             "cap_change": result.cap_change,
             "cap_given": result.cap_given,
+            # v2 step 2: the metal code gave a cap or lid ({"field", "metal"}), None if none.
+            "metal_change": getattr(result, "metal_change", None),
             "spec": result.spec,
             "validation_errors": [a.errors for a in result.attempts],
             "outputs": [a.reply.text for a in result.attempts],
@@ -565,7 +620,8 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
     # distinct specs shows how much the runs actually varied.
     distinct = len({json.dumps(r["spec"], sort_keys=True) for r in case_runs if r["valid"]})
     return {"id": case["id"], "sentence": case["sentence"], "covers": case.get("covers", ""),
-            "colour_group": case.get("colour_group"), "added": case.get("added"),
+            "colour_group": case.get("colour_group"), "shape_group": case.get("shape_group"),
+            "added": case.get("added"),
             "checks": case["checks"], "passed_runs": passes,
             "total_runs": len(case_runs), "distinct_specs": distinct, "runs": case_runs}
 
@@ -609,9 +665,23 @@ def summarise_groups(results):
     return groups
 
 
-# The check types behind the shape scores: the shape chosen, and the sizes of that shape.
+# The check types behind the shape scores: the shape chosen, and the sizes of
+# that shape. The products in no table and no prompt example (shape_group
+# "out_of_table", v2 step 2) are scored apart: only they measure the model's
+# own knowledge of shapes.
 SHAPE_SCORES = {"choice": ("shape",), "sizes": ("shape_size", "shape_ratio")}
-SHAPE_SCORE_NAMES = {"choice": "Shape choice", "sizes": "Shape sizes"}
+SHAPE_SCORE_NAMES = {"choice": "Shape choice", "sizes": "Shape sizes",
+                     "oot_choice": "Out-of-table products: shape choice",
+                     "oot_sizes": "Out-of-table products: shape sizes"}
+# Other checks scored on their own, over every case that has them. The rules
+# code decides measure the code, not the model.
+CHECK_SCORES = {"unsupported": ("model_unsupported_mentions", "model_unsupported_excludes"),
+                "code_rules": ("cap_part", "lid_share", "metal")}
+CHECK_SCORE_NAMES = {"unsupported": "Unsupported lists (the model's own)",
+                     "code_rules": "Rules decided by code (metal cap or lid, cylinder cap, lid share)"}
+# "added" in cases.json -> the summary's group, and how it is named.
+ADDED_GROUPS = {"before_v2": (None, "Cases from before v2"), "v2": ("v2", "Cases added in v2"),
+                "v2_step2": ("v2-step2", "Cases added in v2 step 2")}
 
 
 def checks_passed(case, run, types):
@@ -625,28 +695,46 @@ def checks_passed(case, run, types):
     return run["valid"] and all(run["checks"][i]["passed"] for i in indexes)
 
 
+def score(results, types):
+    """Runs passing every check of these types, over the cases that have any. None if no case has one."""
+    runs = [(c, r) for c in results for r in c["runs"] if checks_passed(c, r, types) is not None]
+    if not runs:
+        return None
+    return {"cases": len({c["id"] for c, _ in runs}), "total_runs": len(runs),
+            "passed_runs": sum(bool(checks_passed(c, r, types)) for c, r in runs)}
+
+
 def summarise_shapes(results):
-    """The shape checks alone, and the size checks alone, over the cases that have them.
+    """The shape checks alone, and the size checks alone, over the cases that have them;
+    the out-of-table products ("oot_choice", "oot_sizes") apart from the others.
 
     Counted like the named-colour check of the colour groups: the other
     checks of these cases (e.g. the neutral backdrop) are set by code.
     """
+    groups = {"": [c for c in results if c.get("shape_group") != "out_of_table"],
+              "oot_": [c for c in results if c.get("shape_group") == "out_of_table"]}
     scores = {}
-    for name, types in SHAPE_SCORES.items():
-        runs = [(c, r) for c in results for r in c["runs"] if checks_passed(c, r, types) is not None]
-        if runs:
-            scores[name] = {"cases": len({c["id"] for c, _ in runs}), "total_runs": len(runs),
-                            "passed_runs": sum(bool(checks_passed(c, r, types)) for c, r in runs)}
+    for prefix, cases in groups.items():
+        for name, types in SHAPE_SCORES.items():
+            found = score(cases, types)
+            if found:
+                scores[prefix + name] = found
     return scores
 
 
-def summarise_added(results):
-    """Every check, for the cases from before v2 and for the cases v2 added, separately.
+def summarise_checks(results):
+    """CHECK_SCORES: each set of check types alone, over every case that has them."""
+    scores = {name: score(results, types) for name, types in CHECK_SCORES.items()}
+    return {name: found for name, found in scores.items() if found}
 
-    The cases from before v2 are the regression gate: they must not get worse.
+
+def summarise_added(results):
+    """Every check, for the cases from before v2, those v2 added and those v2 step 2 added, separately.
+
+    The cases from before v2 and the ones v2 added are the regression gate: they must not get worse.
     """
     groups = {}
-    for name, added in (("before_v2", None), ("v2", "v2")):
+    for name, (added, _) in ADDED_GROUPS.items():
         cases = [c for c in results if c.get("added") == added]
         if cases:
             groups[name] = {"cases": len(cases), "total_runs": sum(c["total_runs"] for c in cases),
@@ -654,12 +742,13 @@ def summarise_added(results):
     return groups
 
 
-def summarise(results):
+def summarise(results, peak_gpu_mib=None):
     runs = [r for case in results for r in case["runs"]]
     total = len(runs)
     return {
         "colour_groups": summarise_groups(results),
         "shape_scores": summarise_shapes(results),
+        "check_scores": summarise_checks(results),
         "added_groups": summarise_added(results),
         "passed_runs": sum(r["passed"] for r in runs),
         "total_runs": total,
@@ -680,6 +769,9 @@ def summarise(results):
         "max_prompt_tokens_per_call": max(
             (max(r["call_prompt_tokens"]) for r in runs if r.get("call_prompt_tokens")), default=None),
         "avg_output_tokens": round(sum(r["output_tokens"] for r in runs) / total) if total else None,
+        # Whole card (nvidia-smi), sampled while the cases ran: the model plus
+        # the desktop's few hundred MiB. None if it wasn't measured.
+        "peak_gpu_mib": peak_gpu_mib,
     }
 
 
@@ -722,18 +814,21 @@ def markdown_table(report):
         f"{s['cases_passing_all_runs']}/{s['total_cases']} cases passed every run.",
     ]
     added = s.get("added_groups", {})
-    if "v2" in added:
-        for name, title in (("before_v2", "Cases from before v2"), ("v2", "Cases added in v2")):
-            g = added[name]
-            lines.append(f"- **{title}** ({g['cases']} cases): {g['passed_runs']}/{g['total_runs']} runs passed "
-                         f"({percent(g['passed_runs'], g['total_runs'])}).")
+    if len(added) > 1:
+        for name, (_, title) in ADDED_GROUPS.items():
+            g = added.get(name)
+            if g:
+                lines.append(f"- **{title}** ({g['cases']} cases): {g['passed_runs']}/{g['total_runs']} runs "
+                             f"passed ({percent(g['passed_runs'], g['total_runs'])}).")
     for group, g in s.get("colour_groups", {}).items():
         lines.append(f"- **{COLOUR_GROUPS[group]}** ({g['cases']} cases): the named-colour check passed in "
                      f"{g['colour_passed_runs']}/{g['total_runs']} runs; every check in "
                      f"{g['passed_runs']}/{g['total_runs']}.")
-    for name, g in s.get("shape_scores", {}).items():
-        lines.append(f"- **{SHAPE_SCORE_NAMES[name]}** ({g['cases']} cases): passed in "
-                     f"{g['passed_runs']}/{g['total_runs']} runs ({percent(g['passed_runs'], g['total_runs'])}).")
+    for names, scores in ((SHAPE_SCORE_NAMES, s.get("shape_scores", {})),
+                          (CHECK_SCORE_NAMES, s.get("check_scores", {}))):
+        for name, g in scores.items():
+            lines.append(f"- **{names[name]}** ({g['cases']} cases): passed in {g['passed_runs']}/"
+                         f"{g['total_runs']} runs ({percent(g['passed_runs'], g['total_runs'])}).")
     lines += [
         f"- **Retry loop fired:** {s['retry_runs']}/{s['total_runs']} runs "
         f"({percent(s['retry_runs'], s['total_runs'])}); "
@@ -745,8 +840,11 @@ def markdown_table(report):
         f"- **Average LLM time per run:** {s['avg_llm_seconds']:.1f} s "
         f"({s['avg_prompt_tokens']} prompt + {s['avg_output_tokens']} output tokens), model already loaded. "
         f"Largest prompt of any single call: {s['max_prompt_tokens_per_call']} tokens.",
-        "",
     ]
+    if s.get("peak_gpu_mib") is not None:
+        lines.append(f"- **Peak GPU memory while the cases ran:** {s['peak_gpu_mib']} MiB "
+                     f"(whole card, nvidia-smi, model loaded).")
+    lines.append("")
     return "\n".join(lines)
 
 

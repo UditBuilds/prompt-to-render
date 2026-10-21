@@ -235,6 +235,72 @@ class ShapeChecks(unittest.TestCase):
         self.assertEqual(run_evals.summarise_added(results),
                          {"before_v2": {"cases": 1, "total_runs": 3, "passed_runs": 3},
                           "v2": {"cases": 1, "total_runs": 3, "passed_runs": 1}})
+        results.append({"id": "newer", "added": "v2-step2", "total_runs": 3, "passed_runs": 2})
+        self.assertEqual(run_evals.summarise_added(results)["v2_step2"],
+                         {"cases": 1, "total_runs": 3, "passed_runs": 2})
+
+
+class StepTwoChecks(unittest.TestCase):
+    """The v2 step 2 checks: what code decides (metal, cylinder cap, lid share). They read
+    fields and parts that step 1 specs don't have, and must then fail, never raise."""
+
+    def test_cap_part(self):
+        check = {"type": "cap_part"}
+        self.assertTrue(passes(check, shaped("bottle", diameter_cm=3, height_cm=10, cap_colour="#1A1A1A")))
+        self.assertTrue(passes(check, shaped("jar", diameter_cm=7, height_cm=5, lid_colour="#1A1A1A")))
+        self.assertFalse(passes(check, FakeResult()))  # a box
+
+    def test_lid_share_is_measured_on_the_drawn_lid(self):
+        check = {"type": "lid_share", "min": 0.25, "max": 0.35}
+        jar = shaped("jar", diameter_cm=6.5, height_cm=4.5, lid_colour="#1A1A1A")
+        lid = next(p for p in run_evals.shapes.parts("jar", jar.spec["jar"]) if p.name == "Lid")
+        heights = [z for _, z in lid.profile]
+        share = (max(heights) - min(heights)) / 0.045
+        self.assertEqual(passes(check, jar), 0.25 <= share <= 0.35)
+        self.assertIn(f"lid {share:.3f}", run_evals.CHECKS["lid_share"](check, jar, {})[1])
+        self.assertFalse(passes(check, shaped("bottle", diameter_cm=3, height_cm=10, cap_colour="#1A1A1A")))
+        self.assertFalse(passes(check, FakeResult()))
+
+    def test_metal(self):
+        gold = {"type": "metal", "target": "cap", "equals": "gold"}
+        none = {"type": "metal", "target": "cap", "equals": None}
+        metal_cap = shaped("bottle", diameter_cm=3, height_cm=10, cap_colour="#D4AF37", cap_metal="gold")
+        self.assertTrue(passes(gold, metal_cap))
+        self.assertFalse(passes(none, metal_cap))
+        self.assertFalse(passes({"type": "metal", "target": "cap", "equals": "rose gold"}, metal_cap))
+        lid = shaped("jar", diameter_cm=7, height_cm=5, lid_colour="#B87333", lid_metal="copper")
+        self.assertTrue(passes({"type": "metal", "target": "cap", "equals": "copper"}, lid))
+        # A step 1 spec has no metal field: its cap is a plain colour.
+        plain = shaped("bottle", diameter_cm=3, height_cm=10, cap_colour="#D4AF37")
+        self.assertFalse(passes(gold, plain))
+        self.assertTrue(passes(none, plain))
+        # No cap at all: fails either way.
+        self.assertFalse(passes(none, FakeResult()))
+
+    def test_cap_colour_of_a_cylinder(self):
+        cap = {"type": "hex", "target": "cap", "equals": "#1A1A1A"}
+        self.assertTrue(passes(cap, shaped("cylinder", diameter_cm=2, height_cm=8, cap_colour="#1a1a1a")))
+        self.assertFalse(passes(cap, shaped("cylinder", diameter_cm=2, height_cm=8)))  # step 1: no cap
+
+    def test_scores_of_their_own(self):
+        def case(id, checks, outcomes, shape_group=None):
+            runs = [{"valid": True, "passed": all(o), "checks": [{"passed": p} for p in o]} for o in outcomes]
+            return {"id": id, "checks": checks, "shape_group": shape_group, "runs": runs}
+
+        shape = [{"type": "shape", "equals": "jar"}, {"type": "shape_size", "field": "height_cm", "max": 9}]
+        results = [case("in", shape, [(True, True), (True, False)]),
+                   case("oot", shape, [(False, True), (True, True), (True, True)], "out_of_table"),
+                   case("metal", [{"type": "metal", "target": "cap", "equals": "gold"},
+                                  {"type": "model_unsupported_excludes", "any": ["cap"]}],
+                        [(True, False), (True, True)])]
+        self.assertEqual(run_evals.summarise_shapes(results),
+                         {"choice": {"cases": 1, "total_runs": 2, "passed_runs": 2},
+                          "sizes": {"cases": 1, "total_runs": 2, "passed_runs": 1},
+                          "oot_choice": {"cases": 1, "total_runs": 3, "passed_runs": 2},
+                          "oot_sizes": {"cases": 1, "total_runs": 3, "passed_runs": 3}})
+        self.assertEqual(run_evals.summarise_checks(results),
+                         {"unsupported": {"cases": 1, "total_runs": 2, "passed_runs": 1},
+                          "code_rules": {"cases": 1, "total_runs": 2, "passed_runs": 2}})
 
 
 class ColourDefinitions(unittest.TestCase):
@@ -276,14 +342,15 @@ class ColourDefinitions(unittest.TestCase):
 class Cases(unittest.TestCase):
     def test_cases_use_known_checks_and_colours(self):
         cases = run_evals.load_cases()
-        self.assertEqual(len(cases), 52)  # 30 from v1.1, 7 added in v1.2, 15 in v2
+        self.assertEqual(len(cases), 69)  # 30 from v1.1, 7 added in v1.2, 15 in v2, 17 in v2 step 2
         self.assertEqual(sum(c.get("added") == "v2" for c in cases), 15)
-        self.assertEqual(len({c["id"] for c in cases}), 52)
+        self.assertEqual(sum(c.get("added") == "v2-step2" for c in cases), 17)
+        self.assertEqual(len({c["id"] for c in cases}), 69)
         # One sentence on purpose twice: shape_lipstick_box checks only the shape of red_lipstick's.
         sentences = [c["sentence"] for c in cases]
         repeated = {s for s in sentences if sentences.count(s) > 1}
         self.assertEqual(repeated, {"a red lipstick box"})
-        self.assertEqual(len(set(sentences)), 51)
+        self.assertEqual(len(set(sentences)), 68)
         for case in cases:
             for check in case["checks"]:
                 self.assertIn(check["type"], run_evals.CHECKS, case["id"])
@@ -318,6 +385,28 @@ class Cases(unittest.TestCase):
                 rows = lookup(case["sentence"]).rows
                 self.assertEqual([r["name"] for r in rows if r["table"] in ("colours", "styles")], [])
                 self.assertNotRegex(case["sentence"], r"\b(?:backdrop|background)\b")
+
+    def test_out_of_table_shape_products_stay_out_of_the_tables_prompt_and_dev_set(self):
+        # They measure the model's own knowledge of shapes and sizes. Never add these
+        # products to data/product_sizes.json, to the prompt's examples, or to the dev set.
+        cases = [c for c in run_evals.load_cases() if c.get("shape_group") == "out_of_table"]
+        products = [re.sub(r"^(?:a|an) ", "", c["sentence"]) for c in cases]
+        self.assertEqual(products, ["micellar water", "beard oil", "eyebrow pencil", "marker pen", "body butter"])
+        table_phrases = {phrase for name, row in load_tables()["products"].items()
+                         for phrase in [name] + row.get("aliases", [])}
+        with open(os.path.join(ROOT, "prompts", "spec_writer.md"), encoding="utf-8") as f:
+            prompt = f.read().lower()
+        with open(os.path.join(ROOT, "evals", "dev_cases.json"), encoding="utf-8") as f:
+            dev = " | ".join(c["sentence"].lower() for c in json.load(f)["cases"])
+        for case, product in zip(cases, products):
+            with self.subTest(case=case["id"]):
+                self.assertNotIn(product, table_phrases)
+                # No product row reaches the model: no size, no shape.
+                self.assertEqual([r["name"] for r in lookup(case["sentence"]).rows if r["table"] == "products"], [])
+                self.assertNotRegex(prompt, r"\b" + re.escape(product) + r"\b")
+                self.assertNotRegex(dev, r"\b" + re.escape(product) + r"\b")
+                # The sentence names the product only, never a shape.
+                self.assertNotRegex(case["sentence"], r"\b(?:box|carton|case|package|cylinder|bottle|jar|tube|stick)\b")
 
     def test_colour_group_summary_counts_the_box_colour_only(self):
         checks = [{"type": "named_colour", "name": "blush", "target": "background"},

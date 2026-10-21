@@ -7,10 +7,15 @@ Columns follow the order of the files. The last file is also checked for
 how its runs got their values: a box colour copied from a colour table row,
 a colour shifted by code for a style word, a box size equal to a product's
 typical size, a roughness clamped by code for "glossy", or a backdrop made
-neutral by code, or a cap or lid colour set by code. Those are passes the
+neutral by code, or a cap or lid colour set by code, or a metal cap or lid
+set by code. Those are passes the
 tables and code make easy, so they are counted, not hidden. A backdrop is counted whenever the code changed
 it, even from another neutral grey; one the model had already set to the
 code's #F5F5F5 isn't.
+
+The summary rows are counted from each file's runs, with the case groups of
+the current evals/cases.json, so files from before a group existed are
+counted the same way.
 """
 
 import json
@@ -21,7 +26,8 @@ EVALS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(EVALS_DIR))
 
 from grounding import load_tables  # noqa: E402
-from run_evals import COLOUR_GROUPS, SHAPE_SCORE_NAMES, load_cases, percent, product_of, shape_of  # noqa: E402
+from run_evals import (ADDED_GROUPS, CHECK_SCORE_NAMES, COLOUR_GROUPS, SHAPE_SCORE_NAMES,  # noqa: E402
+                       load_cases, percent, product_of, shape_of, summarise_checks, summarise_shapes)
 
 
 def load(path):
@@ -41,11 +47,12 @@ def max_prompt_tokens(report):
 
 def how_values_came(case, tables):
     """Counts, over a case's runs, of values taken straight from the tables or set by code."""
-    copied = shifted = typical = glossy = backdrop = cap = 0
+    copied = shifted = typical = glossy = backdrop = cap = metal = 0
     for run in case["runs"]:
         glossy += bool(run.get("finish_change"))
         backdrop += bool(run.get("backdrop_change"))
         cap += bool(run.get("cap_change"))
+        metal += bool(run.get("metal_change"))
         rows = run.get("grounding_rows", [])
         if not run["valid"]:
             continue
@@ -78,6 +85,8 @@ def how_values_came(case, tables):
         parts.append(f"neutral backdrop by code {backdrop}")
     if cap:
         parts.append(f"default cap by code {cap}")
+    if metal:
+        parts.append(f"metal by code {metal}")
     return ", ".join(parts) or "-"
 
 
@@ -105,14 +114,18 @@ def main(paths):
                         f"({percent(r['summary']['passed_runs'], r['summary']['total_runs'])})" for r in reports])
     # Split by the current cases.json, so a report from before v2 (all of
     # whose cases are from before v2) is counted the same way.
-    added = {c["id"]: c.get("added") for c in load_cases()}
-    for title, which in (("Runs passed, cases from before v2", None), ("Runs passed, cases added in v2", "v2")):
+    current = {c["id"]: c for c in load_cases()}
+    for _, (which, title) in ADDED_GROUPS.items():
         cells = []
         for r in reports:
-            cases = [c for c in r["cases"] if added.get(c["id"]) == which]
+            cases = [c for c in r["cases"] if current.get(c["id"], {}).get("added") == which]
             passed, total = sum(c["passed_runs"] for c in cases), sum(c["total_runs"] for c in cases)
             cells.append(f"{passed}/{total} ({percent(passed, total)})" if total else "n/a")
-        row(title, cells)
+        row(f"Runs passed, {title[0].lower()}{title[1:]}", cells)
+    for r in reports:
+        for c in r["cases"]:
+            c["shape_group"] = current.get(c["id"], {}).get("shape_group")
+    scores = [dict(summarise_shapes(r["cases"]), **summarise_checks(r["cases"])) for r in reports]
     for group, title in COLOUR_GROUPS.items():
         cells = []
         for r in reports:
@@ -120,10 +133,10 @@ def main(paths):
             cells.append(f"{g['colour_passed_runs']}/{g['total_runs']} "
                          f"({percent(g['colour_passed_runs'], g['total_runs'])})" if g else "n/a")
         row(f"{title}: named colour right", cells)
-    for name, title in SHAPE_SCORE_NAMES.items():
+    for name, title in {**SHAPE_SCORE_NAMES, **CHECK_SCORE_NAMES}.items():
         cells = []
-        for r in reports:
-            g = r["summary"].get("shape_scores", {}).get(name)
+        for s in scores:
+            g = s.get(name)
             cells.append(f"{g['passed_runs']}/{g['total_runs']} ({percent(g['passed_runs'], g['total_runs'])})"
                          if g else "n/a")
         row(f"{title} right", cells)
@@ -133,6 +146,8 @@ def main(paths):
     row("Avg prompt tokens per run", [str(r["summary"]["avg_prompt_tokens"]) for r in reports])
     row("Largest prompt (one call)", [str(max_prompt_tokens(r)) for r in reports])
     row("Avg LLM time per run", [f"{r['summary']['avg_llm_seconds']:.2f} s" for r in reports])
+    row("Peak GPU memory (whole card)", [f"{r['summary']['peak_gpu_mib']} MiB" if r["summary"].get("peak_gpu_mib")
+                                         else "not recorded" for r in reports])
     print("\n".join(lines))
 
 
