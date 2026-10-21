@@ -245,6 +245,9 @@ class ShapeChecks(unittest.TestCase):
         results.append({"id": "newest", "added": "v2-step3", "total_runs": 3, "passed_runs": 3})
         self.assertEqual(run_evals.summarise_added(results)["v2_step3"],
                          {"cases": 1, "total_runs": 3, "passed_runs": 3, "clamp_only_runs": 0})
+        results.append({"id": "label", "added": "v2-step4", "total_runs": 3, "passed_runs": 0})
+        self.assertEqual(run_evals.summarise_added(results)["v2_step4"],
+                         {"cases": 1, "total_runs": 3, "passed_runs": 0, "clamp_only_runs": 0})
 
 
 class StepTwoChecks(unittest.TestCase):
@@ -323,6 +326,93 @@ class StepTwoChecks(unittest.TestCase):
         self.assertEqual(run_evals.summarise_checks(results),
                          {"unsupported": {"cases": 1, "total_runs": 2, "passed_runs": 1, "clamp_only_runs": 0},
                           "code_rules": {"cases": 1, "total_runs": 2, "passed_runs": 2, "clamp_only_runs": 0}})
+
+
+def labelled(label, **box):
+    """A box result with a label as v2 step 4 sets it: {"text", "colour", "metal"}. Built by
+    hand, not validated, so these tests don't depend on spec.py's label field."""
+    result = FakeResult(box)
+    result.spec = dict(result.spec, label=label)
+    return result
+
+
+class StepFourChecks(unittest.TestCase):
+    """The v2 step 4 checks: the label code sets from the quoted text. A spec from before
+    step 4 has no label field: the checks must then fail (or find no text), never raise."""
+
+    def test_label_text(self):
+        noir = {"type": "label_text", "equals": "NOIR"}
+        none = {"type": "label_text", "equals": None}
+        self.assertTrue(passes(noir, labelled({"text": "NOIR", "colour": "#FFFFFF", "metal": None})))
+        self.assertFalse(passes(noir, labelled({"text": "Noir", "colour": "#FFFFFF", "metal": None})))  # case kept
+        self.assertFalse(passes(noir, labelled({"text": "NOIR ", "colour": "#FFFFFF", "metal": None})))
+        self.assertFalse(passes(noir, FakeResult()))  # before step 4: no label
+        self.assertTrue(passes(none, FakeResult()))
+        self.assertTrue(passes(none, labelled(None)))
+        self.assertFalse(passes(none, labelled({"text": "NOIR", "colour": "#FFFFFF", "metal": None})))
+        accent = {"type": "label_text", "equals": "maison Lumière"}
+        self.assertTrue(passes(accent, labelled({"text": "maison Lumière", "colour": "#1A1A1A", "metal": None})))
+
+    def test_label_metal_needs_a_label(self):
+        gold = {"type": "label_metal", "equals": "gold"}
+        plain = {"type": "label_metal", "equals": None}
+        metal = labelled({"text": "NOIR", "colour": "#FFE39D", "metal": "gold"})
+        self.assertTrue(passes(gold, metal))
+        self.assertFalse(passes(plain, metal))
+        white = labelled({"text": "LASH", "colour": "#FFFFFF", "metal": None})
+        self.assertTrue(passes(plain, white))
+        self.assertFalse(passes(gold, white))
+        # No label at all fails either way.
+        self.assertFalse(passes(plain, FakeResult()))
+        self.assertFalse(passes(gold, FakeResult()))
+
+    def test_label_colour_reads_the_label_not_the_body(self):
+        light = {"type": "label_lightness", "min": 90}
+        dark = {"type": "label_lightness", "max": 20}
+        white_on_black = labelled({"text": "NOIR", "colour": "#FFFFFF", "metal": None}, colour="#111111")
+        self.assertTrue(passes(light, white_on_black))
+        self.assertFalse(passes(dark, white_on_black))
+        self.assertTrue(passes({"type": "lightness", "max": 20}, white_on_black))  # the body is still black
+        self.assertFalse(passes(light, FakeResult({"colour": "#FFFFFF"})))  # a white box, but no label
+        navy = {"type": "label_named_colour", "name": "navy"}
+        self.assertTrue(passes(navy, labelled({"text": "ATLAS", "colour": "#000080", "metal": None},
+                                              colour="#FFFFFF")))
+        self.assertFalse(passes(navy, labelled({"text": "ATLAS", "colour": "#1A1A1A", "metal": None},
+                                               colour="#000080")))  # the body is navy, the label isn't
+        self.assertFalse(passes(navy, FakeResult({"colour": "#000080"})))
+        self.assertIn("no label", run_evals.CHECKS["label_lightness"](light, FakeResult(), {})[1])
+
+    def test_unsupported_lists_as_the_user_sees_them(self):
+        mentions = {"type": "unsupported_mentions", "any": ["no. 5"]}
+        excludes = {"type": "unsupported_excludes", "any": ["ember"]}
+        # Unlike the model_unsupported_ checks, the items the code added count.
+        code_added = FakeResult(unsupported=['second label text "NO. 5"'], model_unsupported=[])
+        self.assertTrue(passes(mentions, code_added))
+        self.assertTrue(passes(excludes, code_added))
+        self.assertFalse(passes(excludes, FakeResult(unsupported=['"EMBER" text'], model_unsupported=[])))
+        self.assertFalse(passes(mentions, FakeResult()))
+        self.assertTrue(passes(excludes, FakeResult()))
+
+    def test_label_scores_count_their_checks_alone(self):
+        checks = [{"type": "label_text", "equals": "NOIR"}, {"type": "label_metal", "equals": "gold"},
+                  {"type": "unsupported_excludes", "any": ["noir"]}, {"type": "shape", "equals": "bottle"}]
+        runs = [{"valid": True, "passed": False, "checks": [{"passed": p} for p in outcome]}
+                for outcome in ((True, False, True, True), (False, False, False, True))]
+        scores = run_evals.summarise_checks([{"id": "noir", "checks": checks, "runs": runs}])
+        self.assertEqual(scores["label_text"], {"cases": 1, "total_runs": 2, "passed_runs": 1, "clamp_only_runs": 0})
+        self.assertEqual(scores["label_colour"], {"cases": 1, "total_runs": 2, "passed_runs": 0, "clamp_only_runs": 0})
+        self.assertEqual(scores["label_lists"], {"cases": 1, "total_runs": 2, "passed_runs": 1, "clamp_only_runs": 0})
+
+    def test_label_cases_quote_their_expected_text(self):
+        # Every expected label is in double quotes in its sentence, exactly as typed.
+        for case in run_evals.load_cases():
+            for check in case["checks"]:
+                if check["type"] == "label_text" and check["equals"] is not None:
+                    with self.subTest(case=case["id"]):
+                        self.assertRegex(case["sentence"], "[\"“]" + re.escape(check["equals"]) + "[\"”]")
+                if check["type"] == "label_text" and check["equals"] is None and case["id"] != "label_too_long":
+                    with self.subTest(case=case["id"]):
+                        self.assertNotRegex(case["sentence"], "[\"“”]")
 
 
 class ClampedSizes(unittest.TestCase):
@@ -412,16 +502,18 @@ class ColourDefinitions(unittest.TestCase):
 class Cases(unittest.TestCase):
     def test_cases_use_known_checks_and_colours(self):
         cases = run_evals.load_cases()
-        self.assertEqual(len(cases), 75)  # 30 from v1.1, 7 added in v1.2, 15 in v2, 17 in v2 step 2, 6 in step 3
+        # 30 from v1.1, 7 added in v1.2, 15 in v2, 17 in v2 step 2, 6 in step 3, 19 in step 4
+        self.assertEqual(len(cases), 94)
         self.assertEqual(sum(c.get("added") == "v2" for c in cases), 15)
         self.assertEqual(sum(c.get("added") == "v2-step2" for c in cases), 17)
         self.assertEqual(sum(c.get("added") == "v2-step3" for c in cases), 6)
-        self.assertEqual(len({c["id"] for c in cases}), 75)
+        self.assertEqual(sum(c.get("added") == "v2-step4" for c in cases), 19)
+        self.assertEqual(len({c["id"] for c in cases}), 94)
         # One sentence on purpose twice: shape_lipstick_box checks only the shape of red_lipstick's.
         sentences = [c["sentence"] for c in cases]
         repeated = {s for s in sentences if sentences.count(s) > 1}
         self.assertEqual(repeated, {"a red lipstick box"})
-        self.assertEqual(len(set(sentences)), 74)
+        self.assertEqual(len(set(sentences)), 93)
         for case in cases:
             for check in case["checks"]:
                 self.assertIn(check["type"], run_evals.CHECKS, case["id"])

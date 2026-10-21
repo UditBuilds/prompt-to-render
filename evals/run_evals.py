@@ -17,7 +17,8 @@ passes.
 Reports the pass rate per case and overall, the named-colour score of the
 in-table and out-of-table colour cases separately, the shape scores (the
 out-of-table products apart), the unsupported lists, the rules code decides,
-how often the retry loop fired, the average LLM time and the peak GPU memory.
+the labels (v2 step 4: code's alone, from the sentence's quoted text), how
+often the retry loop fired, the average LLM time and the peak GPU memory.
 Results are saved to evals/results/<timestamp>_<label>.json, with a Markdown
 summary next to it.
 """
@@ -126,11 +127,21 @@ CAP_FIELDS = {"cylinder": "cap_colour", "bottle": "cap_colour", "jar": "lid_colo
 METAL_FIELDS = {"cylinder": "cap_metal", "bottle": "cap_metal", "jar": "lid_metal"}
 
 
+def label_of(spec):
+    """The spec's text label ({"text", "colour", "metal"}), or None. Set by code from the
+    sentence (v2 step 4); a spec from before step 4 has none."""
+    return spec.get("label")
+
+
 def colour_of(check, result):
     """(where, colour): the product's colour, the backdrop's with "target": "background",
-    or the cap's or lid's with "target": "cap" (colour None if the shape has no cap)."""
+    the cap's or lid's with "target": "cap" (colour None if the shape has no cap), or
+    the label's with "target": "label" (None if there is no label)."""
     if check.get("target") == "background":
         return "backdrop", result.spec["background_colour"]
+    if check.get("target") == "label":
+        label = label_of(result.spec)
+        return "label", label["colour"] if label else None
     shape = shape_of(result.spec)
     if check.get("target") == "cap":
         field = CAP_FIELDS.get(shape)
@@ -139,6 +150,8 @@ def colour_of(check, result):
 
 
 def no_colour(where):
+    if where == "label":
+        return False, "no label"
     return False, f"no {where}: this shape has none"
 
 
@@ -371,6 +384,51 @@ def check_unsupported_empty(check, result, done):
     return not result.unsupported, f"unsupported {json.dumps(result.unsupported)} (want [])"
 
 
+def check_unsupported_mentions(check, result, done):
+    """The unsupported list the user sees: the model's items and the code's (a second
+    quoted text, a label over 20 characters), unlike model_unsupported_mentions."""
+    text = " | ".join(result.unsupported).lower()
+    ok = any(word in text for word in check["any"])
+    return ok, (f"unsupported {json.dumps(result.unsupported, ensure_ascii=False)} "
+                f"(want a mention of {' or '.join(check['any'])})")
+
+
+def check_unsupported_excludes(check, result, done):
+    """The unsupported list the user sees must not name these, e.g. the label text code drew."""
+    text = " | ".join(result.unsupported).lower()
+    found = [word for word in check["any"] if word in text]
+    return not found, (f"unsupported {json.dumps(result.unsupported, ensure_ascii=False)} "
+                       f"(want no mention of {' or '.join(check['any'])})")
+
+
+def check_label_text(check, result, done):
+    """The label's text, exactly, or null for no label. Set by code from the sentence's
+    quoted text, never by the model. A spec without a label has none."""
+    label = label_of(result.spec)
+    text = label["text"] if label else None
+    return text == check["equals"], (f"label {json.dumps(text, ensure_ascii=False)} "
+                                     f"(want {json.dumps(check['equals'], ensure_ascii=False)})")
+
+
+def check_label_metal(check, result, done):
+    """The metal the label is drawn in, null for a plain colour. No label at all fails either way."""
+    label = label_of(result.spec)
+    if not label:
+        return False, f"no label (want label metal {json.dumps(check['equals'])})"
+    metal = label.get("metal")
+    return metal == check["equals"], f"label metal {json.dumps(metal)} (want {json.dumps(check['equals'])})"
+
+
+def check_label_lightness(check, result, done):
+    """check_lightness on the label's colour. No label fails."""
+    return check_lightness(dict(check, target="label"), result, done)
+
+
+def check_label_named_colour(check, result, done):
+    """check_named_colour on the label's colour. No label fails."""
+    return check_named_colour(dict(check, target="label"), result, done)
+
+
 def check_style_shift(check, result, done):
     """Compare the box colour with another case's (e.g. "a luxury red box" vs "a red box").
 
@@ -424,6 +482,12 @@ CHECKS = {
     "cap_part": check_cap_part,
     "lid_share": check_lid_share,
     "metal": check_metal,
+    "unsupported_mentions": check_unsupported_mentions,
+    "unsupported_excludes": check_unsupported_excludes,
+    "label_text": check_label_text,
+    "label_metal": check_label_metal,
+    "label_lightness": check_label_lightness,
+    "label_named_colour": check_label_named_colour,
 }
 
 
@@ -654,6 +718,10 @@ def run_case(case, backend, runs, done=None, grounding=True, tables=None):
             "proportion_changes": clamps,
             "checks_without_clamps": unclamped,
             "passed_without_clamps": None if unclamped is None else all(o["passed"] for o in unclamped),
+            # v2 step 4: the label code set from the sentence's quoted text, None if none,
+            # and the sentence the model and the tables saw (the quoted text left out).
+            "label_change": getattr(result, "label_change", None),
+            "model_sentence": getattr(result, "model_sentence", None),
             "spec": result.spec,
             "validation_errors": [a.errors for a in result.attempts],
             "outputs": [a.reply.text for a in result.attempts],
@@ -727,13 +795,21 @@ SHAPE_SCORE_NAMES = {"choice": "Shape choice", "sizes": "Shape sizes",
 # Other checks scored on their own, over every case that has them. The rules
 # code decides measure the code, not the model.
 CHECK_SCORES = {"unsupported": ("model_unsupported_mentions", "model_unsupported_excludes"),
-                "code_rules": ("cap_part", "lid_share", "metal")}
+                "code_rules": ("cap_part", "lid_share", "metal"),
+                # v2 step 4: labels are code's alone, from the sentence's quoted text.
+                "label_text": ("label_text",),
+                "label_colour": ("label_metal", "label_lightness", "label_named_colour"),
+                "label_lists": ("unsupported_mentions", "unsupported_excludes")}
 CHECK_SCORE_NAMES = {"unsupported": "Unsupported lists (the model's own)",
-                     "code_rules": "Rules decided by code (metal cap or lid, cylinder cap, lid share)"}
+                     "code_rules": "Rules decided by code (metal cap or lid, cylinder cap, lid share)",
+                     "label_text": "Label text (code; none when nothing is quoted)",
+                     "label_colour": "Label colour (code: named, metal, or black/white for the body)",
+                     "label_lists": "Unsupported lists as the user sees them (label cases)"}
 # "added" in cases.json -> the summary's group, and how it is named.
 ADDED_GROUPS = {"before_v2": (None, "Cases from before v2"), "v2": ("v2", "Cases added in v2"),
                 "v2_step2": ("v2-step2", "Cases added in v2 step 2"),
-                "v2_step3": ("v2-step3", "Cases added in v2 step 3")}
+                "v2_step3": ("v2-step3", "Cases added in v2 step 3"),
+                "v2_step4": ("v2-step4", "Cases added in v2 step 4")}
 
 
 def checks_passed(case, run, types, unclamped=False):
