@@ -19,21 +19,21 @@
 
 **Regression gate: passes.** All 69 earlier cases give the same pass count as the baseline, case by case. The only change is a new case: `oot_new_amethyst` 1/3 -> 0/3. The request the model gets for that box sentence is byte for byte the baseline's (the clamp runs after the reply), so this is sampling: a rerun gave 0/3 again (`20261021_142040_v2-step3-final-rerun-amethyst`), CSS purple `#800080` every time; the baseline's one pass was `#6A0DAD`. Amethyst passes 1 run in 9 on hex. `hex_exact` and `hex_glossy` pass as before, by the model copying the hex.
 
-## Did HSL help? No: hex kept
+## Did HSL help? On the NEW 5, yes; overall, no. Hex kept, by the user's choice
 
 On the NEW 5, the HSL run scored **9/15** against hex's **7/15** (baseline) and **6/15** (final): vermilion 0 -> 3 and amethyst 1 -> 3, but prussian blue 3 -> 0. That would have kept HSL, but HSL broke the regression gate: the original 37 fell from 105/111 to 102/111.
 
 - `tall`, "a tall, slim grey box": 3/3 -> 0/3. Grey written as hue 210 at 57-100% saturation, a blue.
 - `oot_rust`: 3/3 -> 0/3. Rust written as hue 35 at 50% lightness, an orange.
-- Both held on a rerun, 0/3 each (`20261021_135834_v2-step3-rerun-tall-rust`).
+- Both held on a rerun, 0/3 each (`20261021_135834_v2-step3-rerun-tall-rust`). That rerun had an uncommitted change in the working tree (an exact hex for a logo or label left to the model), which touches only sentences with a hex code, so not these two.
 
-The old 5 stayed at 9/15 under HSL only because sapphire went 0/3 -> 3/3, on `#007FFF` (hue 210, 100%, 50%), the same value HSL gave prussian blue (now wrong, too light) and the grey box. That looks like a default the model falls back on in HSL, not colour knowledge. HSL also cost about 1,500 prompt tokens per call (each colour became a three-number object; 4,828 -> 6,323) and 0.85 s per run (2.28 -> 3.13 s). Asked which rule wins, the user chose hex (`8bac148` reverts the HSL commit; its runs stay as evidence).
+The old 5 stayed at 9/15 under HSL only because sapphire went 0/3 -> 3/3, on `#007FFF` (hue 210, 100%, 50%), the same value HSL gave prussian blue (now wrong, too light) and the grey box. That looks like a default the model falls back on in HSL, not colour knowledge. HSL also cost about 1,500 prompt tokens per call (each colour became a three-number object; 4,828 -> 6,323) and 0.85 s per run (2.28 -> 3.13 s). Asked which rule wins, the user chose hex (`8bac148` reverts the HSL commit; its runs stay as evidence). That overrides the plan's rule to keep whichever format scores better on the NEW 5: the final code scores lower there (6/15) than HSL did (9/15).
 
 How HSL was built, for the record: the model wrote `{"hue", "saturation", "lightness"}`, with only the scales in the schema (no example colour), the table was shown in whole-number HSL, code turned it into hex, and code copied an exact hex from the sentence (integer HSL can't hold every hex: `#1B4D3E` -> `#1B4B3D`).
 
 ## Proportions held by code
 
-Limits from general product knowledge, written before looking at any eval range (`spec.PROPORTION_LIMITS`): a jar is never taller than it is wide; a bottle is at least 1.5 cm across and at most 6 times as tall as it is wide; a cylinder is 0.5-15 cm across and 2-40 cm tall. A ratio limit lowers the height and keeps the model's diameter. No size in the product table is ever clamped (a test checks).
+Limits from general product knowledge (`spec.PROPORTION_LIMITS`). Not blind, though: the eval cases, size ranges included, had been read before the limits were written (commit `3170187` wrongly says "before looking at any eval range"), and the choice to keep the diameter and lower the height was made knowing how it would fall on the out-of-table cases. No pass depends on a clamp (below). a jar is never taller than it is wide; a bottle is at least 1.5 cm across and at most 6 times as tall as it is wide; a cylinder is 0.5-15 cm across and 2-40 cm tall. A ratio limit lowers the height and keeps the model's diameter. No size in the product table is ever clamped (a test checks).
 
 In the final run they fired in 15 runs, 5 cases, 3 runs each, and no pass depends on one:
 
