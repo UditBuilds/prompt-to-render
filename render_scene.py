@@ -602,6 +602,8 @@ def text_mesh(scene, text):
     bpy.data.objects.remove(obj, do_unlink=True)
     bpy.data.curves.remove(curve)
     xs, ys = [v.co.x for v in mesh.vertices], [v.co.y for v in mesh.vertices]
+    if not xs:  # no letter of it is in the font (e.g. only emoji)
+        return mesh, None
     return mesh, (min(xs), max(xs), min(ys), max(ys))
 
 
@@ -627,7 +629,12 @@ def build_label(scene, spec):
     wrapped = spec["shape"] != "box" and CAMERA_PRESETS[spec["camera"]]["hero_face"] == "front"
     radius = face_w / 2
     width = 2 * radius * math.asin(LABEL_WIDTH) if wrapped else LABEL_WIDTH * face_w
-    flat, (x0, x1, y0, y1) = text_mesh(scene, label["text"])
+    flat, bounds = text_mesh(scene, label["text"])
+    if bounds is None:
+        log(f'WARNING: label "{label["text"]}" has no letter in Blender\'s built-in font; not drawn')
+        bpy.data.meshes.remove(flat)
+        return None
+    x0, x1, y0, y1 = bounds
     scale = min(width / (x1 - x0), LABEL_MAX_HEIGHT * face_h / (y1 - y0))
     width, height = scale * (x1 - x0), scale * (y1 - y0)
     thickness = LABEL_THICKNESS * height
